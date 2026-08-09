@@ -56,17 +56,28 @@ export interface BackgroundMeshOptions {
 }
 
 /**
+ * Vorgabefaktor Tile-`z` → Sichtdistanz.
+ *
+ * Hergeleitet aus der Ordnungsbedingung (S11-Eichung K7 über alle 702 Fields):
+ * Layer 0 trägt ausnahmslos z = 4095 und ist die hinterste Ebene, also muss
+ * `4095 · zScale` größer sein als die Sichtdistanz JEDES begehbaren Punktes.
+ * Der dafür nötige Faktor liegt im Median bei 0,66, im 99. Perzentil bei 3,31
+ * und maximal bei 3,77 — **4 ist der kleinste Wert, der alle Fields
+ * abdeckt** (bei 1 wären es nur 476 von 702).
+ */
+export const DEFAULT_TILE_Z_SCALE = 4;
+
+/**
  * Tile-Tiefenschlüssel → Sichtdistanz.
  *
- * 🟡 Realdaten-Befund (S9): Zwischen dem 12-Bit-Feld `z` und der
- * kameraseitigen Sichtdistanz ist KEIN konstanter Faktor nachweisbar
- * (Verhältnisstreuung über drei Größenordnungen) — `z` ist ein
- * Sortierschlüssel, keine Metrik. Belegt ist nur die Ordnung: Layer 0 trägt
- * ausnahmslos 4095 (hinterste Ebene), Layer 1–3 tragen kleinere Werte.
- * Diese Abbildung ist deshalb bewusst als kalibrierbarer Parameter geführt
- * und wird mit der Field-Integration gegen echte Figurenverdeckung geeicht.
+ * 🟡 Realdaten-Befund (S9): Zwischen `z` und der kameraseitigen Sichtdistanz
+ * ist KEIN konstanter Faktor nachweisbar (Verhältnisstreuung über drei
+ * Größenordnungen) — `z` ist ein Sortierschlüssel, keine Metrik. Die
+ * Ordnungsbedingung oben liefert nur eine untere Schranke, keinen Beweis;
+ * dass ausgerechnet 4 aufgeht, ist ein starkes Indiz, aber erst die
+ * Sichtprüfung der Figurenverdeckung entscheidet endgültig.
  */
-export function tileZToViewDistance(z: number, zScale = 1): number {
+export function tileZToViewDistance(z: number, zScale = DEFAULT_TILE_Z_SCALE): number {
   return Math.max(1, z * zScale);
 }
 

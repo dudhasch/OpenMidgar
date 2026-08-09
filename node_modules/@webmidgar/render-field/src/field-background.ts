@@ -2,6 +2,7 @@ import type { Mesh } from 'three';
 import type { FieldBackground, FieldPalette } from '@webmidgar/formats-field';
 import {
   buildBackgroundMesh,
+  DEFAULT_TILE_Z_SCALE,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   tileZToViewDistance,
@@ -59,7 +60,7 @@ export function buildFieldBackground(
       y: item.tile.dstY + offsetY,
       width: item.size,
       height: item.size,
-      viewDistance: tileZToViewDistance(item.tile.z, opts.zScale ?? 1),
+      viewDistance: tileZToViewDistance(item.tile.z, opts.zScale ?? DEFAULT_TILE_Z_SCALE),
       color: [1, 1, 1],
       uv: [item.entry.u0, item.entry.v0, item.entry.u1, item.entry.v1],
     });

@@ -7,7 +7,9 @@ Fixtures immer selbst erzeugt, Originaldaten nur lokal beim Nutzer
 Session auflösen oder als Restrisiko dokumentieren. **Methodik-Standard seit
 S7: Realdaten-Strukturproben VOR Parserbau** (Formatfakten statt Annahmen).
 
-**Stand 2026-08-09:** S8 ✅ · S9 ✅ · S10–S12 offen.
+**Stand 2026-08-09:** S8 ✅ · S9 ✅ · S10 ✅ (Parserteil; R4-Sichtvalidierung
+zieht nach S11 um, weil sie das gerenderte Modell im Field voraussetzt) ·
+S11–S12 offen.
 
 ## Abhängigkeitsbild
 
@@ -43,7 +45,7 @@ flowchart LR
 | Prompt | „Atlas-Packer + Tile-Mesh gegen die S4-Depth-Pipeline; Kalibrierszene mit echtem Field; R2 per Deckungsmessung entscheiden und in CALIBRATION.md fixieren." |
 | Ergebnis | Tile-Semantik über 3 Probeniterationen erschlossen (Palette u8@24 **korrigiert**, Textur u8@34, UV-Regel `src2 vor src`, `z` als reiner Sortierschlüssel entlarvt); Abnahme per **Bildkohärenztest** statt Golden-Bild (1,097 gegen 1,189/1,124 der Gegenhypothesen); 1 Atlas je Field statt der erlaubten 4; **R2 = 240** über die bemalte Bildfläche entschieden. Offen geblieben: `layerControl`-Zweck, `flags`-Bits, metrische Eichung von `z` (→ S11) |
 
-### S10 — Model-Loader-Sektion + R4-Sichtvalidierung
+### S10 — Model-Loader-Sektion + R4-Sichtvalidierung ✅ (Parserteil)
 
 | Feld | Inhalt |
 |---|---|
@@ -53,6 +55,7 @@ flowchart LR
 | Akzeptanzkriterien | 702/702 Manifeste geparst, Referenzen in char.lgp auflösbar; ein Referenzmodell steht aufrecht in Idle-Pose (Sichtprüfung + Screenshot); R4-Tabelle vollständig 🟢/korrigiert |
 | Nicht-Ziele | Battle-Modelle, Gesichts-/Sonderanimationen (unverändert Post-MVP) |
 | Prompt | „Probe Sektion 3, dann Parser + Manifest-NAM; Actor-Viewer lädt lokales Realmodell; B1–B8 einzeln validieren und R4-Notiz fortschreiben." |
+| Ergebnis | Grammatik über fünf Probeniterationen erschlossen (702/702 byteexakt); **Referenzen zu 100 % auflösbar** (5454 Modelle, 26.212 Animationen) nach der Korrektur „Animationsname = Stamm + Kennung, Datei = `<stamm>.a`"; Model-Loader-Parser, NAM, codegetrennter Composer und Demoseite stehen. **Nicht erledigt:** die eigentliche Sichtvalidierung von B1–B8 — sie braucht das Modell im gerenderten Field und wandert nach S11. Offen geblieben: Flag hinter dem Modellnamen, `tail`-Restwerte, Aufteilung des 30-B-Blocks |
 
 ### S11 — Field-Integration (vertikaler Durchstich)
 

@@ -39,6 +39,25 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | Tile-Feld u16@20 als paletteId-Kandidat: nur 54 % < Seitenzahl | 🟡 Offset falsch oder zusammengesetzt — bei S9-Rendering kalibrieren (Record roh konserviert) |
 | Sektion 6: variabel 1,2–30 kB, kein Tile-Bezug erkennbar | 🟡 Zweck offen (nicht MVP-blockierend) |
 
+## S10 — Model-Loader-Sektion 3 (2026-08-09)
+
+Über die Sektion war nichts belegt. Fünf Probeniterationen: Längen-/Kopfprofil →
+ASCII-Laufanalyse → Grammatikraster (fand **keine** passende Auslegung) →
+Zwischenraum-Vermessung → **maskierter Bytestrom-Dump** (Buchstaben als `L`,
+Ziffern als `D`), der zeigte, dass die Modelldatei kein längenpräfixiertes,
+sondern ein Festfeld ist. Danach lief das Accounting-Raster sofort auf.
+
+| Befund | Status |
+|---|---|
+| Grammatik: `u16 0 · u16 modelCount · u16 scaleGlobal`, je Modell `u16 nameLen · name · u16 Flag · byte file[12] · u16 animCount · byte block[30]`, je Animation `u16 nameLen · name · u16 tail` — **702/702 Fields byteexakt, 0 Brüche** | ✅ Formatfakt |
+| Modelldatei steckt im 12-B-Festfeld als `xxxx.hrc` + **Skala als ASCII-Ziffern**; Endung ausnahmslos `hrc`, Ziffern in 100 % vorhanden; stimmt in 93,6 % mit `scaleGlobal` überein (also kein bloßes Duplikat) | ✅ Formatfakt |
+| **Animationsnamen sind keine Dateinamen**: der Rohname `xxxx.aki` löst 0-mal auf, `<stamm>.a` dagegen **26.212/26.212**. Die 3 Zeichen hinter dem Punkt sind eine Kennung (aki/yos/chi/tak/tor/hei/kei/anm) | ✅ **Formatkorrektur** (🟡 Zweck der Kennung offen) |
+| Referenzauflösung gegen `char.lgp`: **5454/5454 Modelle und 26.212/26.212 Animationen**; 3209 verschiedene Animationsdateien = exakt der `.a`-Bestand des Archivs | ✅ Kette geschlossen |
+| `modelCount` reicht bis **16** (Modus 9), `animCount` Modus 3; Modellnamen 15…30 Zeichen, Animationsnamen ausnahmslos 8 | ℹ️ Bestand |
+| u16 hinter dem Modellnamen ist ein **binäres Flag**: nur 0 (47,6 %) und 1 (52,4 %) | 🟡 Bedeutung offen |
+| `tail` hinter Animationsnamen: 1 in 97,1 %, Rest breit gestreut (0, 2…254) | 🟡 kein Konstantenfeld |
+| 30-B-Block: letzte 3 Bytes sind sehr plausibel eine graue Umgebungsfarbe (Mittel 88,8/87,4/87,9, praktisch nie 0) — Gegenhypothese „Zähler" widerlegt. Die Deutung als 3 × (i16-Richtung + RGB) trägt teilweise: Richtungen sind **unnormiert** (\|v\| p5…p95 = 14167…50067), und je 9-B-Einheit tragen 3 Bytes auffällig wenige verschiedene Werte | 🟡 `decodeModelLightBlock` ist ausdrücklich Deutungsvorschlag; `blockRaw` bleibt maßgeblich |
+
 ## S9 — Tile-Semantik, R2-Entscheid, Hintergrund-Komposition (2026-08-09)
 
 Drei Probeniterationen über **647.531 Tiles** haben die Feldbelegung des

@@ -14,6 +14,7 @@ export default defineConfig({
       '@webmidgar/convert': r('../../packages/convert/src/index.ts'),
       '@webmidgar/render-field': r('../../packages/render-field/src/index.ts'),
       '@webmidgar/walkmesh': r('../../packages/walkmesh/src/index.ts'),
+      '@webmidgar/field-runtime': r('../../packages/field-runtime/src/index.ts'),
       '@webmidgar/interpreter': r('../../packages/interpreter/src/index.ts'),
       '@webmidgar/formats-model': r('../../packages/formats-model/src/index.ts'),
       '@webmidgar/render-actor': r('../../packages/render-actor/src/index.ts'),

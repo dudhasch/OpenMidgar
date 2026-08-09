@@ -188,17 +188,32 @@ export interface FieldModelEntry {
   scale: number | null;
   /** 12-B-Dateifeld roh — enthält Name + Skalatext. */
   fileFieldRaw: Uint8Array;
-  /** u16 direkt hinter dem Namen; in den Originaldaten durchgehend 0 (🟡). */
+  /**
+   * 🟡 u16 direkt hinter dem Namen — ein binäres Flag: über 5454 Modelle
+   * kommen ausschließlich die Werte 0 (47,6 %) und 1 (52,4 %) vor.
+   * Bedeutung offen.
+   */
   unknownAfterName: number;
-  /** 30-B-Block hinter dem Animationszähler — roh konserviert (🟡 Zweck). */
+  /**
+   * 30-B-Block hinter dem Animationszähler — roh konserviert.
+   * Deutung als Beleuchtung siehe `decodeModelLightBlock` (🟡).
+   */
   blockRaw: Uint8Array;
   animations: FieldModelAnimation[];
 }
 
 export interface FieldModelAnimation {
-  /** Animationsdatei, z. B. `xxxx.a` (kleingeschrieben). */
+  /** Rohname aus dem Manifest, z. B. `xxxx.aki` (kleingeschrieben). */
   name: string;
-  /** u16 hinter dem Namen; in den Originaldaten durchgehend 1 (🟡). */
+  /**
+   * Auflösbarer Dateiname in `char.lgp`: Stamm + `.a`.
+   * ✅ Realdaten-validiert: Der Teil hinter dem Punkt ist KEINE Dateiendung —
+   * mit `<stamm>.a` lösen 26.212/26.212 Referenzen auf, mit dem Rohnamen 0.
+   */
+  file: string;
+  /** 🟡 Kennung hinter dem Punkt (aki/yos/chi/tak/tor/hei/kei/anm) — Zweck offen. */
+  tag: string;
+  /** u16 hinter dem Namen; in 97,1 % der Einträge 1 (🟡 Restsemantik). */
   tail: number;
 }
 

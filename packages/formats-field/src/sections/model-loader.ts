@@ -5,16 +5,16 @@ import { SECTION, type FieldModelAnimation, type FieldModelEntry, type FieldMode
  * Model-Loader-Sektion (Sektion 3) — Grammatik ✅ realdaten-validiert
  * (S10-Accounting über alle 702 Fields byteexakt, 0 Brüche):
  *
- *   u16 blank (0) · u16 modelCount (1…12) · u16 scaleGlobal (512 in 643/702)
+ *   u16 blank (0) · u16 modelCount (1…16) · u16 scaleGlobal (512 in 643/702)
  *   je Modell:
- *     u16 nameLen · char name[nameLen]          (19…27 Zeichen)
- *     u16 unknownAfterName                      (durchgehend 0, 🟡)
+ *     u16 nameLen · char name[nameLen]          (15…30 Zeichen)
+ *     u16 unknownAfterName                      (🟡 binäres Flag 0/1)
  *     byte fileField[12]                        ASCII "xxxx.hrc" + Skalatext
- *     u16 animCount
- *     byte block[30]                            (🟡 Zweck offen)
+ *     u16 animCount                             (Modus 3, bis > 20)
+ *     byte block[30]                            (🟡 vermutlich Beleuchtung)
  *     je Animation:
- *       u16 nameLen · char name[nameLen]        (meist 8: "xxxx.yyy")
- *       u16 tail                                (durchgehend 1, 🟡)
+ *       u16 nameLen · char name[nameLen]        (ausnahmslos 8: "xxxx.yyy")
+ *       u16 tail                                (🟡 1 in 97,1 %)
  *
  * Der Weg dorthin: fünf Probeniterationen. Ein erstes Grammatikraster fand
  * KEINE passende Auslegung — erst der maskierte Bytestrom-Dump zeigte, dass
@@ -25,7 +25,8 @@ import { SECTION, type FieldModelAnimation, type FieldModelEntry, type FieldMode
 
 export const MDL_FILE_FIELD_LEN = 12;
 export const MDL_BLOCK_LEN = 30;
-const MAX_MODELS = 32;
+/** Realdaten: bis 16 Modelle je Field — die Schranke fängt nur Unsinn ab. */
+const MAX_MODELS = 64;
 const MAX_ANIMS = 128;
 const MAX_NAME = 64;
 
@@ -45,6 +46,55 @@ function cstring(data: Uint8Array, from: number, len: number): string {
  * → `{ file: 'xxxx.hrc', scale: 512 }`. Die Skala steht als ASCII-Ziffern
  * direkt hinter der Endung (realdaten-belegtes Format).
  */
+export interface ModelLight {
+  /** Richtung als i16-Tripel — im Original NICHT normiert (|v| streut 0…55882). */
+  direction: [number, number, number];
+  color: [number, number, number];
+}
+
+export interface ModelLightBlock {
+  lights: [ModelLight, ModelLight, ModelLight];
+  ambient: [number, number, number];
+}
+
+/**
+ * 🟡 Deutungsvorschlag für den 30-B-Block: drei Lichtquellen à
+ * (i16 x, i16 y, i16 z, u8 r, u8 g, u8 b) = 27 B plus 3 B Umgebungsfarbe.
+ *
+ * Realdaten-Befund (5454 Modelle): Die letzten drei Bytes sind mit
+ * Mittelwerten 88,8/87,4/87,9 und praktisch ohne Nullen sehr plausibel eine
+ * (graue) Umgebungsfarbe — die Gegenhypothese „Zähler" ist damit widerlegt.
+ * Die Richtungstripel sind jedoch UNNORMIERT, und innerhalb jeder
+ * 9-Byte-Einheit tragen drei Bytes auffällig wenige verschiedene Werte
+ * (22–32 gegenüber 69–142). Die Aufteilung ist deshalb noch nicht bewiesen;
+ * `blockRaw` bleibt maßgeblich, diese Funktion ist ein Arbeitsmittel für die
+ * Sichtvalidierung in S11.
+ */
+export function decodeModelLightBlock(blockRaw: Uint8Array): ModelLightBlock | null {
+  if (blockRaw.length < MDL_BLOCK_LEN) return null;
+  const view = new DataView(blockRaw.buffer, blockRaw.byteOffset, blockRaw.byteLength);
+  const light = (base: number): ModelLight => ({
+    direction: [view.getInt16(base, true), view.getInt16(base + 2, true), view.getInt16(base + 4, true)],
+    color: [blockRaw[base + 6]!, blockRaw[base + 7]!, blockRaw[base + 8]!],
+  });
+  return {
+    lights: [light(0), light(9), light(18)],
+    ambient: [blockRaw[27]!, blockRaw[28]!, blockRaw[29]!],
+  };
+}
+
+/**
+ * Zerlegt einen Animationsnamen: `xxxx.aki` → Datei `xxxx.a`, Kennung `aki`.
+ * ✅ Realdaten-validiert: 26.212/26.212 Referenzen lösen so in `char.lgp` auf
+ * (mit dem Rohnamen als Dateinamen: 0). Der Teil hinter dem Punkt ist also
+ * keine Dateiendung, sondern eine 🟡 noch unerklärte Kennung.
+ */
+export function splitAnimationName(name: string): { file: string; tag: string } {
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return { file: `${name}.a`, tag: '' };
+  return { file: `${name.slice(0, dot)}.a`, tag: name.slice(dot + 1) };
+}
+
 export function splitModelFileField(raw: Uint8Array): { file: string; scale: number | null } {
   const text = cstring(raw, 0, raw.length);
   const m = /^(.*?\.[a-z]{1,4})(\d*)$/.exec(text);
@@ -109,7 +159,9 @@ export function parseModelLoaderSection(
       o += 2;
       if (aLen < 1 || aLen > MAX_NAME) return fail('E-MDL-SIZE', `Modell ${m}/Anim ${a}: Namenslänge ${aLen}`);
       if (!need(aLen + 2, `Modell ${m} Animation ${a}`)) return null;
-      animations.push({ name: cstring(data, o, aLen), tail: view.getUint16(o + aLen, true) });
+      const animName = cstring(data, o, aLen);
+      const { file: animFile, tag } = splitAnimationName(animName);
+      animations.push({ name: animName, file: animFile, tag, tail: view.getUint16(o + aLen, true) });
       o += aLen + 2;
     }
     models.push({ name, modelFile: file, scale, fileFieldRaw, unknownAfterName, blockRaw, animations });

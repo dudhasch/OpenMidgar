@@ -7,6 +7,7 @@
     "@webmidgar/cache": "*",
     "@webmidgar/formats-field": "*",
     "@webmidgar/formats-lgp": "*",
+    "@webmidgar/field-runtime": "*",
     "@webmidgar/io": "*",
     "@webmidgar/render-field": "*",
     "@webmidgar/walkmesh": "*"

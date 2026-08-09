@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S10 Field-Modelle</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem; }
+    canvas { border: 1px solid #888; image-rendering: pixelated; display: block; margin: .5rem 0; }
+    button, select, input[type="range"] { font: inherit; padding: .3rem .8rem; margin-right: .4rem; }
+    .hint { background: #fff6d8; border: 1px solid #d8c26a; padding: .6rem .9rem; border-radius: 4px; }
+    .row { margin: .6rem 0; display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+    .cols { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
+    .col { flex: 0 0 auto; }
+    table { border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #ccc; padding: .25rem .5rem; text-align: left; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #eef4ff; }
+    .swatch { display: inline-block; width: 1rem; height: 1rem; border: 1px solid #666; vertical-align: middle; margin-right: .3rem; }
+    #modelTableWrap { max-height: 20rem; overflow-y: auto; border: 1px solid #ccc; }
+    #readout { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #f4f4f4; border: 1px solid #ccc; padding: .6rem; overflow-x: auto; min-width: 26rem; }
+    #status { font-family: ui-monospace, monospace; font-size: 12px; }
+    .toggles label { margin-right: 1rem; font-family: ui-monospace, monospace; font-size: 12px; }
+    #frameLabel { font-family: ui-monospace, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>S10: Field-Modelle — echtes Modell aus der lokalen Installation</h1>
+  <p class="hint">
+    Originaldaten werden ausschließlich lokal im Browser gelesen und niemals
+    hochgeladen; im Repository liegen keine Originaldaten. Die Verzeichniswahl
+    unten erfordert zwingend eine Nutzergeste (Browser-Sicherheitsvorgabe für
+    <code>showDirectoryPicker</code>) und kann deshalb nicht automatisiert
+    werden — der übrige Ablauf ist über <code>window.fieldModelDebug</code>
+    prüfbar.
+  </p>
+
+  <div class="row">
+    <button id="pick">Installationsverzeichnis wählen</button>
+    <span id="status">— noch kein Verzeichnis gewählt —</span>
+  </div>
+
+  <div class="row">
+    <label for="fieldSelect">Field:</label>
+    <select id="fieldSelect" disabled></select>
+    <button id="loadManifest" disabled>Manifest laden</button>
+  </div>
+
+  <div id="modelTableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Index</th>
+          <th>modelFile</th>
+          <th>scale</th>
+          <th>unknownAfterName</th>
+          <th>Animationen</th>
+          <th>Umgebungsfarbe</th>
+          <th>Aktion</th>
+        </tr>
+      </thead>
+      <tbody id="modelTableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <canvas id="view" width="640" height="480"></canvas>
+
+      <div class="row toggles">
+        <label><input type="checkbox" id="toggleAxes" /> Achsenkreuz &amp; Bone-Achsen (B1)</label>
+        <label>Ansicht:
+          <select id="viewSelect">
+            <option value="front">Front</option>
+            <option value="side">Seite</option>
+            <option value="top">Draufsicht</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="toggleSwap" /> Texturkanäle RGB↔BGR (B5/B6)</label>
+      </div>
+
+      <div class="row">
+        <label for="animSelect">Animation:</label>
+        <select id="animSelect" disabled></select>
+      </div>
+      <div class="row">
+        <label for="frameSlider">Frame:</label>
+        <input type="range" id="frameSlider" min="0" max="0" value="0" />
+        <span id="frameLabel">0 / 0</span>
+      </div>
+    </div>
+
+    <div class="col">
+      <div id="readout">—</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/field-model-demo.ts"></script>
+</body>
+</html>

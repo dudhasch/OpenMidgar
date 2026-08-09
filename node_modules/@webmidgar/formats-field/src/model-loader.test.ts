@@ -61,6 +61,9 @@ describe('Sektion 3: Model-Loader', () => {
     expect(m0.blockRaw[29]).toBe(0x7f);
     expect(m0.animations.map((a) => a.name)).toEqual(['aaaa.anm', 'aaab.anm']);
     expect(m0.animations[0]!.tail).toBe(1);
+    // Der Teil hinter dem Punkt ist keine Endung: die Datei heißt <stamm>.a.
+    expect(m0.animations.map((a) => a.file)).toEqual(['aaaa.a', 'aaab.a']);
+    expect(m0.animations[0]!.tag).toBe('anm');
 
     const m1 = manifest.models[1]!;
     expect(m1.modelFile).toBe('bbbb.hrc');

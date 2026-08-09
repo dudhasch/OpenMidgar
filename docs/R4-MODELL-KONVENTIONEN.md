@@ -24,12 +24,33 @@ Masterplan). Ergänzt [R1-REQUEST-SEMANTIK.md](R1-REQUEST-SEMANTIK.md).
 | B5 | Palettenblock **BGRA** | `tex.ts`, `model-writers.ts` | Referenzbild (bekannte Farbfläche) |
 | B6 | Vertexfarben BGRA; UV-V-Ursprung/flipY ungeprüft | `p.ts`, `actor.ts` | texturiertes Realmodell |
 | B7 | Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz kommt aus rootTranslation der Animation | Demo/`actor.ts` | Bodenkontakt echter Modelle |
-| B8 | Field-Skalierungsfaktor (Triggersektion) als Modell-Divisor noch NICHT angewendet | — | bei Field-Integration (S8+) |
+| B8 | Field-Skalierungsfaktor als Modell-Divisor noch NICHT angewendet | — | bei Field-Integration (S11) |
+
+## Stand nach S10 (2026-08-09)
+
+Die Voraussetzung für B1–B4 ist geschaffen, die Sichtprüfung selbst steht noch aus.
+
+- **Erledigt:** Die Model-Loader-Sektion ist geparst (702/702 byteexakt), und
+  **jede** Referenz löst gegen `char.lgp` auf — 5454/5454 Modelle und
+  26.212/26.212 Animationen. Die echten hrc↔a-Paarungen liegen damit vor;
+  die Demoseite `apps/demo/field-model.html` lädt sie lokal und blendet
+  Bone-Achsen, Ansichten und einen RGB↔BGR-Tausch als Vergleichsschalter ein.
+- **Korrektur zu B8:** Der Skalierungsfaktor kommt NICHT aus der
+  Triggersektion, sondern doppelt aus Sektion 3 — global im Kopf
+  (`scaleGlobal`, 512 in 643/702 Fields) und je Modell als ASCII-Ziffern im
+  12-B-Dateifeld. Beide stimmen nur in 93,6 % überein; welcher Wert bei
+  Abweichung gilt, ist offen.
+- **Neu offen (B9):** Das u16 hinter dem Modellnamen ist ein binäres Flag
+  (0 in 47,6 %, 1 in 52,4 %) — Bedeutung unbekannt.
+- **Neu offen (B10):** Der 30-B-Block je Modell ist vermutlich Beleuchtung
+  (`decodeModelLightBlock`); die Umgebungsfarbe am Ende ist gut gestützt, die
+  Aufteilung der drei Lichteinheiten nicht. Erst anwenden, wenn die
+  Sichtprüfung sie bestätigt.
 
 ## Nächste Schritte
 
-1. Model-Loader-Sektion (Field-Sektion 3) parsen → echte hrc↔a-Paarungen,
-   dann B1–B4 an einem Referenzmodell (aufrechte Idle-Pose) sichtprüfen.
+1. B1–B4 an einem Referenzmodell (aufrechte Idle-Pose) sichtprüfen —
+   die Demoseite dafür steht, die Prüfung selbst gehört in S11.
 2. B5/B6 über ein texturiertes Modell mit bekannter Farbverteilung prüfen.
 3. Renderstate-Blöcke (100 B): abgesicherte Flags (Blend/Cull/Lit) mappen —
    bisher roh konserviert.
