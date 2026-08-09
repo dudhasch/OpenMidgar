@@ -28,7 +28,7 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 - 🔶 **S16 — Audio** (`packages/audio`): OGG-Schleifenmarken und Engine-Kommandomodell mit Autoplay-Sperre stehen; `audio.fmt` und die Musikindex-Zuordnung sind **Negativbefunde**
 - ✅ **S17 — Story-Progression**: Wirkungen nach außen als Daten (`HostRequest`); Audio-Ops, der **aus den Daten identifizierte** Field-Wechsel-Opcode `0x60` und der **Kampf-Opcode `0x70`** sind verdrahtet — inklusive Wartezustand und Rückkanal. Der Kampf-Opcode war lange ein Negativbefund, weil in der falschen Menge gesucht wurde: Die Formationsnummer ist global, nicht aus der Encounter-Tabelle des Fields (nachgemessen 1/173 gegen 1/173 im Kontrollfield)
 - ✅ **S18 — App-Shell** (`packages/app-shell`): Import-Zustandsmaschine inkl. Re-Grant-Pfad, Fähigkeitsmatrix mit Einzeldiagnosen, **beweisbar assetfreier** Diagnose-Export
-- ✅ **S19 — Modding-MVP** (`packages/modding`): Mod-Manifest-Validierung mit mod-lokalen Fehlern, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order, generationsbasierte Umschaltung
+- ✅ **S19 — Modding-MVP** (`packages/modding`): Manifest-Validierung mit mod-lokalen Fehlern, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order, generationsbasierte Umschaltung
 
 ## Struktur
 
@@ -49,7 +49,7 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 | `packages/dialog` | Fenster-/Textlayout, Seiten, Textgeschwindigkeit, Auswahl — in Takten, DOM-frei |
 | `packages/audio` | OGG-Schleifenmarken (ohne Audiodekodierung) + Engine-Kommandomodell mit Autoplay-Sperre |
 | `packages/app-shell` | Import-Zustandsmaschine, Fähigkeitsprüfung, assetfreier Diagnose-Export |
-| `packages/modding` | Mod-Manifest-Validierung + fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order, generationsbasierte Umschaltung |
+| `packages/modding` | Mod-Manifest-Validierung + fünfstufige Auflösungskette mit Herkunfts-Tags |
 | `packages/interpreter` | Fixed-Tick-Interpreter: VM (Kontrollfluss/Variablen/Dialog-Stub), Scheduler, Serde, Replay |
 | `packages/interpreter-debug` | Event-Timeline (JSON, asset-frei), Breakpoints + Einzelschritt |
 | `packages/formats-model` | Modellkette: hrc/rsd/p/tex/a → Skeleton/Binding/Mesh/Textur/Clip (Index-Flattening, Degradierung) |
