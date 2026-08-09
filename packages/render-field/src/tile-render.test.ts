@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { BufferAttribute } from 'three';
-import { composeBackgroundSection, composePaletteSection, type Rgba8 } from '@webmidgar/fixture-gen';
+import {
+  composeBackgroundSection,
+  composePaletteSection,
+  type BackgroundSectionSpec,
+  type Rgba8,
+} from '@webmidgar/fixture-gen';
 import { parseBackgroundSection, parsePaletteSection, type FieldDiagnostic } from '@webmidgar/formats-field';
 import {
+  baseLayerIndex,
   composeBackgroundImage,
   layerTileSize,
   layerTransparency,
@@ -315,6 +321,68 @@ describe('buildTileAtlas: Deduplizierung und UV-Rechtecke', () => {
         expect([...atlasPixels.slice(ao, ao + 4)]).toEqual([...expected.slice(eo, eo + 4)]);
       }
     }
+  });
+});
+
+describe('Basisebene ist der unterste bemalte Layer, nicht zwingend Layer 0', () => {
+  /**
+   * Regression: `ship_2` aus dem Originalbestand hat einen leeren Layer 0; sein
+   * gesamtes Bild liegt in Layer 1. Wird die Transparenzregel am Layerindex
+   * statt an der tatsächlichen Basis festgemacht, gilt dort Index 0 als
+   * transparent und stanzt Löcher ins Basisbild (gemessen: 100,00 % Deckung
+   * unter `opaque` gegen 94,73 % unter `index0`).
+   */
+  const painted = {
+    width: 2,
+    height: 1,
+    tiles: [
+      { dstX: 0, dstY: 0, srcX: 0, srcY: 0, paletteId: 0, textureId: 0, bpp: 1 }, // Index 1
+      { dstX: 16, dstY: 0, srcX: 16, srcY: 0, paletteId: 0, textureId: 0, bpp: 1 }, // Index 0
+    ],
+  };
+
+  function background(layers: BackgroundSectionSpec['layers']) {
+    const texData = texturePage(1);
+    fillPalettizedBlock(texData, 0, 0, 16, 1); // Index 1 → rot
+    fillPalettizedBlock(texData, 16, 0, 16, 0); // Index 0 → echtes Schwarz der Palette
+    const bgBytes = composeBackgroundSection({
+      layers,
+      texturePages: [{ slot: 0, depth: 1, data: texData }],
+    });
+    return parseBackgroundSection(bgBytes, 'fix', [])!;
+  }
+
+  it('deckt das Basisbild auch dann, wenn Layer 0 leer ist und Layer 1 die Basis trägt', () => {
+    // Palettenindex 0 ist hier ECHTES Schwarz, nicht transparent — genau der
+    // Fall, den die index0-Regel fälschlich ausstanzen würde.
+    const palBytes = composePaletteSection({ pages: [[[0, 0, 0, 255], RED]] });
+    const palette = parsePaletteSection(palBytes, 'fix', [])!;
+
+    const bg = background({ 0: { width: 0, height: 0, tiles: [] }, 1: painted });
+    expect(bg.layers.find((l) => l.index === 0)?.tiles ?? []).toHaveLength(0);
+    expect(baseLayerIndex(bg)).toBe(1);
+
+    const image = composeBackgroundImage(bg, palette);
+    // Beide Kacheln müssen deckend sein: die rote UND die aus Index 0.
+    expect([...image.rgba.slice(0, 4)]).toEqual(RED);
+    const o = 16 * 4;
+    expect([...image.rgba.slice(o, o + 4)]).toEqual([0, 0, 0, 255]);
+  });
+
+  it('Gegenprobe: liegt die Basis auf Layer 0, bleibt Index 0 auf Layer 1 ein Loch', () => {
+    const palBytes = composePaletteSection({ pages: [[[0, 0, 0, 255], RED]] });
+    const palette = parsePaletteSection(palBytes, 'fix', [])!;
+
+    const bg = background({ 0: painted, 1: painted });
+    expect(baseLayerIndex(bg)).toBe(0);
+    // Nur Layer 1 komponieren: Die Basis liegt auf 0, also ist Layer 1 eine
+    // Überlagerung und darf nicht zur deckenden Basis befördert werden.
+    const overlay = composeBackgroundImage(bg, palette, { layers: [1] });
+    const o = 16 * 4;
+    expect(overlay.rgba[o + 3]).toBe(0);
+    // ...während dieselbe Kachel auf der Basisebene deckend bleibt.
+    const base = composeBackgroundImage(bg, palette, { layers: [0] });
+    expect([...base.rgba.slice(o, o + 4)]).toEqual([0, 0, 0, 255]);
   });
 });
 

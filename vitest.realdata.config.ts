@@ -10,6 +10,7 @@ export default defineConfig({
       '@webmidgar/formats-lgp': r('./packages/formats-lgp/src/index.ts'),
       '@webmidgar/formats-field': r('./packages/formats-field/src/index.ts'),
       '@webmidgar/convert': r('./packages/convert/src/index.ts'),
+      '@webmidgar/render-field': r('./packages/render-field/src/index.ts'),
       '@webmidgar/walkmesh': r('./packages/walkmesh/src/index.ts'),
       '@webmidgar/field-runtime': r('./packages/field-runtime/src/index.ts'),
       '@webmidgar/formats-kernel': r('./packages/formats-kernel/src/index.ts'),

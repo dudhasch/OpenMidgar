@@ -138,11 +138,28 @@ im Kachelinneren. Gemessen wird das Verhältnis beider Farbabstände (ideal 1):
 | Gegenhypothese Palette aus u16@20 (S8-Annahme) | 1,124 |
 
 Deckung der Basisebene (Layer 0+1) bei den 135 Fields mit bemalter Fläche
-320×240: **97,1 %** mit der Regel „Layer 0 deckend, Layer 1–3 Index 0
+320×240: **97,1 %** mit der Regel „Basisebene deckend, darüber Index 0
 transparent"; die Alternative „Rohwert 0 transparent" verliert 4 Punkte an
 echtem Schwarz. Atlas-Packing: max. **1997 Kachelvarianten** je Field, damit
-**1 Atlas** (2048²) für jedes der 701 Fields — die Masterplan-Grenze von 4
+**1 Atlas** (2048²) für jedes der 702 Fields — die Masterplan-Grenze von 4
 wird deutlich unterschritten.
+
+**Nachtrag (2026-08-09): Die Basisebene ist nicht zwingend Layer 0.** Genau
+ein Field im Bestand — `ship_2` — hat einen leeren Layer 0 und trägt sein
+ganzes Bild (747 Kacheln) in Layer 1. Die Transparenzregel hing bis dahin am
+Layer**index**, nicht an der tatsächlichen Basis; dadurch galt in diesem Field
+Palettenindex 0 als Loch. Gemessen:
+
+| `ship_2`, Basisebene (Layer 1) | Deckung |
+|---|---|
+| `opaque` (Regel nach tatsächlicher Basis) | **100,00 %** |
+| `index0` (Regel nach Layerindex) | 94,73 % |
+
+Kontrolle `md1stin` (Basis auf Layer 0): 77,64 % gegen 71,34 % — die Regel
+entfernt also nachweislich echte Bildpixel, wenn sie falsch angewendet wird.
+Behoben über `baseLayerIndex()` in `packages/render-field/src/tile-image.ts`;
+die Probe zählt seither **702/702** komponierte Fields statt 701 und meldet
+die Ausreißer namentlich (`basisNichtLayer0`).
 
 **R2 entschieden: FOV-Basis 240.** Zwei Verfahren scheiterten sauber
 (Walkmesh-Projektion zu unscharf; `cameraRange` liefert konstant 16 und ist

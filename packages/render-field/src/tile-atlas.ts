@@ -1,5 +1,6 @@
 import type { BackgroundTile, FieldBackground, FieldPalette } from '@webmidgar/formats-field';
 import {
+  baseLayerIndex,
   layerTileSize,
   layerTransparency,
   resolveTileRgba,
@@ -83,9 +84,10 @@ export function buildTileAtlas(
     return spot;
   };
 
+  const baseIndex = baseLayerIndex(bg);
   for (const layer of bg.layers) {
     const size = layerTileSize(layer);
-    const transparency = layerTransparency(layer.index);
+    const transparency = layerTransparency(layer.index, baseIndex);
     for (const [tileIndex, tile] of layer.tiles.entries()) {
       const key = tileVariantKey(tile, size, transparency);
       if (entries.has(key)) continue;
@@ -133,9 +135,12 @@ export interface TileDrawItem {
  */
 export function buildDrawList(bg: FieldBackground, atlas: TileAtlasSet): TileDrawItem[] {
   const items: TileDrawItem[] = [];
+  // Muss dieselbe Basis annehmen wie `buildTileAtlas` — die Transparenzregel
+  // geht in den Atlasschlüssel ein, eine Abweichung fände schlicht nichts.
+  const baseIndex = baseLayerIndex(bg);
   for (const layer of [...bg.layers].sort((a, b) => a.index - b.index)) {
     const size = layerTileSize(layer);
-    const transparency = layerTransparency(layer.index);
+    const transparency = layerTransparency(layer.index, baseIndex);
     for (const tile of sortTilesForDraw(layer.tiles)) {
       const entry = atlas.entries.get(tileVariantKey(tile, size, transparency));
       if (!entry) continue;

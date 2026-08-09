@@ -3,7 +3,12 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { IndexService } from '@webmidgar/io';
 import { effectiveTileSource, parseFieldEntry, type BackgroundTile } from '@webmidgar/formats-field';
-import { buildTileAtlas, composeBackgroundImage, type TileResolveIssue } from '@webmidgar/render-field';
+import {
+  baseLayerIndex,
+  buildTileAtlas,
+  composeBackgroundImage,
+  type TileResolveIssue,
+} from '@webmidgar/render-field';
 import { NodeDirectorySource } from './node-source.js';
 
 /**
@@ -104,6 +109,8 @@ describe.skipIf(!available)('Realdaten: Hintergrund-Komposition (S9-Abnahme)', (
       atlasCountMax: 0,
       atlasCountHist: {} as Record<number, number>,
       sizes: {} as Record<string, number>,
+      /** Fields, deren unterster bemalter Layer nicht Layer 0 ist. */
+      basisNichtLayer0: [] as string[],
     };
 
     for (const entry of index.listEntries('flevel')) {
@@ -130,13 +137,19 @@ describe.skipIf(!available)('Realdaten: Hintergrund-Komposition (S9-Abnahme)', (
         }
       }
 
-      const layer0 = bg.layers.find((l) => l.index === 0);
+      // Die Basisebene ist der unterste BEMALTE Layer — nicht zwingend
+      // Layer 0. `ship_2` hat einen leeren Layer 0 und trägt sein ganzes Bild
+      // in Layer 1; die frühere Prüfung auf Layer 0 hat dieses Field
+      // stillschweigend übersprungen (composed 701 statt 702).
+      const base = baseLayerIndex(bg);
+      const layer0 = bg.layers.find((l) => l.index === base);
       if (!layer0 || layer0.tiles.length === 0) continue;
+      if (base !== 0) stats.basisNichtLayer0.push(entry.name);
 
-      // Deckung wird über Layer 0 UND 1 gemessen: Layer 1 ist in den
-      // Originaldaten ausnahmslos vorhanden (702/702) und trägt Bildfläche,
-      // ist also keine reine Überlagerung.
-      const baseLayers = bg.layers.filter((l) => l.index <= 1);
+      // Deckung wird über die Basis UND den darüber liegenden Layer gemessen:
+      // Layer 1 ist in den Originaldaten ausnahmslos vorhanden (702/702) und
+      // trägt Bildfläche, ist also keine reine Überlagerung.
+      const baseLayers = bg.layers.filter((l) => l.index <= base + 1);
       let screenSized = false;
       for (const rule of ['opaque', 'index0', 'paletteAlpha'] as const) {
         const img = composeBackgroundImage({ ...bg, layers: baseLayers }, pal, { transparency: rule });
@@ -202,6 +215,7 @@ describe.skipIf(!available)('Realdaten: Hintergrund-Komposition (S9-Abnahme)', (
           atlasCountMax: stats.atlasCountMax,
           atlasCountHist: stats.atlasCountHist,
           topGroessen: Object.entries(stats.sizes).sort((a, b) => b[1] - a[1]).slice(0, 6),
+          basisNichtLayer0: stats.basisNichtLayer0,
         },
         null,
         1,
@@ -209,6 +223,9 @@ describe.skipIf(!available)('Realdaten: Hintergrund-Komposition (S9-Abnahme)', (
     );
 
     expect(stats.fields).toBeGreaterThan(700);
+    // Kein Field darf mehr stillschweigend durchfallen: Die Basisebene wird
+    // über den untersten bemalten Layer bestimmt, nicht über Index 0.
+    expect(stats.composed).toBe(stats.fields);
     // Die belegte Auslegung muss die Gegenhypothesen schlagen.
     expect(ratios['korrekt']!).toBeLessThan(ratios['texAus30']!);
     expect(ratios['korrekt']!).toBeLessThan(ratios['palAus20']!);

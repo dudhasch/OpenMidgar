@@ -133,15 +133,36 @@ export interface ComposeOptions {
 }
 
 /**
- * Standard-Transparenzregel je Layer: Layer 0 ist die deckende Basisebene,
- * die Layer 1–3 überlagern sie mit Index 0 als Loch.
+ * Kleinster Layerindex, der tatsächlich Kacheln trägt — die Basisebene.
+ *
+ * ✅ Realdaten-belegt: Das ist **nicht** immer Layer 0. Im Bestand hat genau
+ * ein Field (`ship_2`) einen leeren Layer 0; sein gesamtes Bild liegt in
+ * Layer 1. Ein Layer wird also nicht dadurch zur Basis, dass er Index 0 hat,
+ * sondern dadurch, dass er der unterste bemalte ist.
+ */
+export function baseLayerIndex(bg: Pick<FieldBackground, 'layers'>): number {
+  let base = -1;
+  for (const l of bg.layers) {
+    if (l.tiles.length > 0 && (base < 0 || l.index < base)) base = l.index;
+  }
+  return base;
+}
+
+/**
+ * Standard-Transparenzregel je Layer: Die Basisebene deckt, die darüber
+ * liegenden Layer überlagern sie mit Index 0 als Loch.
  *
  * ✅ Realdaten-gestützt: Mit der Regel `paletteAlpha` (Rohwert 0 = transparent)
- * blieben nur 57 % der Layer-0-Fläche gedeckt — echtes Schwarz wäre dann
- * überall ein Loch. `opaque` schließt die Fläche.
+ * blieben nur 57 % der Basisfläche gedeckt — echtes Schwarz wäre dann überall
+ * ein Loch. `opaque` schließt die Fläche.
+ *
+ * `baseIndex` ist ein Parameter, weil die Basis nicht immer Layer 0 ist
+ * (siehe `baseLayerIndex`): Bei `ship_2` deckt die Basisebene unter `opaque`
+ * 100,00 %, unter der nach Index gewählten `index0`-Regel nur 94,73 % —
+ * 5,27 % des Basisbilds wären Löcher.
  */
-export function layerTransparency(layerIndex: number): TileTransparency {
-  return layerIndex === 0 ? 'opaque' : 'index0';
+export function layerTransparency(layerIndex: number, baseIndex = 0): TileTransparency {
+  return layerIndex === baseIndex ? 'opaque' : 'index0';
 }
 
 /** Zeichenreihenfolge: hinterster Layer zuerst, innerhalb dessen großes z zuerst. */
@@ -166,6 +187,10 @@ export function composeBackgroundImage(
   const palettePages = palette?.pages ?? [];
   const wanted = opts.layers ?? bg.layers.map((l) => l.index);
   const chosen = bg.layers.filter((l) => wanted.includes(l.index)).sort((a, b) => a.index - b.index);
+  // Die Basis wird über ALLE Layer des Fields bestimmt, nicht über die
+  // gewählte Teilmenge: Wer nur Überlagerungen komponiert, soll dadurch keine
+  // davon zur deckenden Basis befördern.
+  const baseIndex = baseLayerIndex(bg);
 
   // Bildausdehnung aus den tatsächlich bemalten Zellen (dst ist um 0 zentriert).
   let minX = Infinity;
@@ -198,7 +223,7 @@ export function composeBackgroundImage(
         page,
         palettePages,
         size,
-        opts.transparency ?? layerTransparency(layer.index),
+        opts.transparency ?? layerTransparency(layer.index, baseIndex),
       );
       if (!texels) {
         opts.issues?.push({

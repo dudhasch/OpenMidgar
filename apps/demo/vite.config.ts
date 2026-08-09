@@ -28,5 +28,17 @@ export default defineConfig({
       '@webmidgar/fixture-gen': r('../../tools/fixture-gen/src/index.ts'),
     },
   },
+  // Vite nimmt ohne diese Liste nur `index.html` als Einstiegspunkt — der
+  // Produktionsbuild hätte die sechs Diagnoseseiten stillschweigend
+  // weggelassen, obwohl sie im Entwicklungsserver erreichbar sind.
+  build: {
+    rollupOptions: {
+      input: Object.fromEntries(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model'].map(
+          (name) => [name, r(`./${name}.html`)],
+        ),
+      ),
+    },
+  },
   server: { port: 5199 },
 });
