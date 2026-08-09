@@ -111,6 +111,7 @@ export class FieldRuntime {
       })),
       eventQueue: [],
       hostRequests: [],
+      randomEncountersDisabled: false,
       unknownSkips: {},
       droppedRequests: 0,
       faults: [],
@@ -281,6 +282,15 @@ export class FieldRuntime {
             if (w.choice) writeBank(st, w.choice.bank, w.choice.addr, ev.choice, false);
             ctx.waitState = { kind: 'none' };
           } else if (ev.kind === 'movement-arrived' && w.kind === 'movement' && w.requestId === ev.requestId) {
+            ctx.waitState = { kind: 'none' };
+          } else if (ev.kind === 'battle-finished' && w.kind === 'battle' && w.requestId === ev.requestId) {
+            // 🟡 `outcome` wird noch nicht in Variablen gespiegelt — welche
+            // Bank/Adresse das Original dafür nutzt, ist nicht belegt. Lieber
+            // nichts schreiben als an eine geratene Stelle.
+            ctx.waitState = { kind: 'none' };
+          } else if (ev.kind === 'transition-done' && w.kind === 'transition') {
+            // Der Wechselzustand trägt keine requestId — es kann pro Field
+            // ohnehin nur einen laufenden Wechsel geben.
             ctx.waitState = { kind: 'none' };
           }
         }

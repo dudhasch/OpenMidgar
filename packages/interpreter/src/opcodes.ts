@@ -89,6 +89,27 @@ export const OP = {
    * anderen Kandidaten bleiben unter 2,2 % und damit im Rauschen.
    */
   MAPJUMP: 0x60,
+  /**
+   * Kampfstart. Operanden: Bank-Byte, dann u16 Formationsnummer.
+   *
+   * ✅ Identifiziert (S17, zweiter Anlauf). Der erste Anlauf suchte den Opcode
+   * über die Encounter-Tabelle des eigenen Fields (Sektion 7) und **musste**
+   * scheitern: `battleID` ist eine **globale** Formationsnummer, keine Nummer
+   * aus dieser Tabelle. Sektion 7 beschreibt die Zufallskämpfe eines Fields,
+   * `BATTLE` löst einen skriptierten Kampf aus. Realdaten-Nachweis: Die
+   * Nummer steht in Sektion 7 des eigenen Fields genau **1/173 mal** — und im
+   * Nachbarfield exakt gleich oft. Es gab dort schlicht nichts zu finden.
+   *
+   * Bestätigt über zwei unabhängige Prüfungen: 184 Vorkommen über 702 Fields,
+   * davon 173 mit Literaloperanden; 169 der 173 Formationsnummern liegen unter
+   * 1024 (Median 468) — bei einem falsch gedeuteten Bytepaar läge der Median
+   * bei ~32768. Zusätzlich deckt sich die Operandenlänge 3 mit der aus den
+   * Realdaten abgeleiteten Längentabelle, und der Nachbaropcode `MAPJUMP`
+   * (0x60) war bereits unabhängig aus den Daten bestimmt.
+   */
+  BATTLE: 0x70,
+  /** Zufallskämpfe an/aus. 1 Operandenbyte; 102 Vorkommen im Bestand. */
+  BTLON: 0x71,
 } as const;
 
 export type OpCategory =
@@ -170,6 +191,8 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.MUSIC]: 1,
   [OP.SOUND]: 4,
   [OP.MAPJUMP]: 9,
+  [OP.BATTLE]: 3,
+  [OP.BTLON]: 1,
 };
 
 /**

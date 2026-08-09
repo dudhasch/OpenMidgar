@@ -319,6 +319,25 @@ export function stepInstruction(
       ctx.waitState = { kind: 'transition' };
       return { kind: 'yield' };
     }
+    case OP.BATTLE: {
+      // Bank-Byte in der unteren Hälfte adressiert die Formationsnummer;
+      // 0 bedeutet Literal (im Bestand 173 von 184 Vorkommen).
+      const encounterId = srcValue(u8(0) & 0xf, u16(1), true);
+      const requestId = rt.nextRequestId++;
+      rt.hostRequests.push({ kind: 'battle', encounterId, requestId });
+      ctx.ip = next;
+      // Der Kontext wartet auf das Kampfergebnis; der Wirt meldet es über
+      // `battle-finished` zurück (Vertrag aus ADR-011, jetzt erstmals genutzt).
+      ctx.waitState = { kind: 'battle', requestId };
+      return { kind: 'yield' };
+    }
+    case OP.BTLON: {
+      // Zufallskämpfe an/aus. 🟡 Die Polarität ist nicht belegt; der Wert wird
+      // roh mitgeführt, damit der Wirt entscheidet, statt hier zu raten.
+      rt.randomEncountersDisabled = u8(0) !== 0;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
     default:
       break;
   }

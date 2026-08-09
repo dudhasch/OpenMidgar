@@ -575,3 +575,75 @@ describe('Serialisierung & Replay (Akzeptanzkriterien S6)', () => {
     expect(replayed.finalDigest).toBe(runA.final);
   });
 });
+
+describe('Kampf-Opcodes (S17)', () => {
+  it('BATTLE stellt eine HostRequest, hält den Kontext an und läuft nach battle-finished weiter', () => {
+    const asm = new ScriptAssembler();
+    asm.battle(0x01c2).setByte(3, 0, 42).ret();
+    const { bytes } = asm.assemble();
+    const prepared = prepare([{ name: 'a', entries: [0] }], bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+
+    rt.tick();
+    const req = rt.state.hostRequests.find((r) => r.kind === 'battle');
+    expect(req).toBeDefined();
+    expect(req).toMatchObject({ kind: 'battle', encounterId: 0x01c2 });
+
+    // Der Kontext wartet — die Folgeanweisung darf NICHT gelaufen sein.
+    const ctx = rt.state.entities[0]!.context!;
+    expect(ctx.waitState.kind).toBe('battle');
+    rt.tick();
+    rt.tick();
+    expect(bank(rt, 3, 0)).toBe(0);
+
+    // Erst das Kampfergebnis löst ihn.
+    const requestId = req?.kind === 'battle' ? req.requestId : -1;
+    rt.postEvent({ kind: 'battle-finished', requestId, outcome: 1 });
+    rt.tick();
+    expect(bank(rt, 3, 0)).toBe(42);
+  });
+
+  it('ein fremdes battle-finished weckt den Kontext NICHT', () => {
+    const asm = new ScriptAssembler();
+    asm.battle(7).setByte(3, 1, 9).ret();
+    const prepared = prepare([{ name: 'a', entries: [0] }], asm.assemble().bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+    rt.tick();
+
+    const req = rt.state.hostRequests.find((r) => r.kind === 'battle')!;
+    const requestId = req.kind === 'battle' ? req.requestId : -1;
+    rt.postEvent({ kind: 'battle-finished', requestId: requestId + 1000, outcome: 0 });
+    rt.tick();
+    rt.tick();
+    expect(bank(rt, 3, 1)).toBe(0);
+    expect(rt.state.entities[0]!.context!.waitState.kind).toBe('battle');
+  });
+
+  it('BTLON schaltet die Zufallskämpfe und blockiert nicht', () => {
+    const asm = new ScriptAssembler();
+    asm.btlon(1).setByte(3, 2, 5).ret();
+    const prepared = prepare([{ name: 'a', entries: [0] }], asm.assemble().bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+    rt.tick();
+    expect(rt.state.randomEncountersDisabled).toBe(true);
+    expect(bank(rt, 3, 2)).toBe(5);
+  });
+
+  it('die Bank-Variante liest die Formationsnummer aus einer Variablen', () => {
+    const asm = new ScriptAssembler();
+    // Formationsnummer 300 in Bank 3, Adresse 10 (Wort) ablegen …
+    asm.setWord(3, 10, 300);
+    // … und BATTLE mit Bank 3 im unteren Nibble aufrufen.
+    asm.raw(0x70, 0x03, 10, 0).ret();
+    const prepared = prepare([{ name: 'a', entries: [0] }], asm.assemble().bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+    rt.tick();
+    rt.tick();
+    const req = rt.state.hostRequests.find((r) => r.kind === 'battle');
+    expect(req).toMatchObject({ kind: 'battle', encounterId: 300 });
+  });
+});

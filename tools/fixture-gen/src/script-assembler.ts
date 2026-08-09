@@ -214,6 +214,18 @@ export class ScriptAssembler {
     return this.raw(0x24, ticks & 0xff, (ticks >> 8) & 0xff);
   }
 
+  // --- Kampf (S17) -----------------------------------------------------------
+
+  /** BATTLE: skriptierter Kampf mit globaler Formationsnummer (Literal). */
+  battle(encounterId: number): this {
+    return this.raw(0x70, 0x00, encounterId & 0xff, (encounterId >> 8) & 0xff);
+  }
+
+  /** BTLON: Zufallskämpfe an/aus (Rohwert, Polarität 🟡). */
+  btlon(value: number): this {
+    return this.raw(0x71, value & 0xff);
+  }
+
   // --- Dialog-Stub -----------------------------------------------------------
 
   message(windowId: number, dialogId: number): this {

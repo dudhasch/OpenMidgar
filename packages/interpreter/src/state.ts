@@ -52,7 +52,7 @@ export type WaitState =
   | { kind: 'movement'; requestId: number }
   | { kind: 'sync'; entityIndex: number; slot: number }
   | { kind: 'transition' }
-  | { kind: 'battle' };
+  | { kind: 'battle'; requestId: number };
 
 export type ContextStatus = 'running' | 'completed' | 'faulted';
 
@@ -198,6 +198,12 @@ export interface FieldRuntimeState {
   eventQueue: RuntimeEvent[];
   /** Ausstehende Wirkungen nach außen; der Host leert die Liste je Takt. */
   hostRequests: HostRequest[];
+  /**
+   * Zustand von `BTLON` (0x71). 🟡 Die Polarität des Operanden ist nicht
+   * belegt — der Wert wird roh mitgeführt, damit der Wirt entscheidet. Teil
+   * des Snapshots, weil er das Verhalten beeinflusst.
+   */
+  randomEncountersDisabled: boolean;
   /** Telemetrie der UNKNOWN-Politik: op → Übersprung-Zähler. */
   unknownSkips: Record<number, number>;
   /** Requests an nicht existente Entitäten/Slots (diagnostiziert, nie geraten). */

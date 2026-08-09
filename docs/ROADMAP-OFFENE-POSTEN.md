@@ -17,7 +17,7 @@ Messung lügt".
 | Kopflänge der Spielstanddatei | 🟡 | 🟢 **gelöst** (9/4340 trifft 8/8, Alternativen 0/8) |
 | `audio.fmt`-Layout | 🔴 | 🟡 Eintragsgröße 74 B gemessen, WAVEFORMATEX belegt, Vorspann offen |
 | Musikindex → Dateiname | 🔴 | 🟡 Zielmenge geschlossen (94/94), Permutation offen |
-| Kampf-Opcode | 🔴 | 🔴 unverändert |
+| Kampf-Opcode | 🔴 | 🟢 **gelöst** (`BATTLE` = 0x70, verdrahtet und getestet) |
 | R4-Sichtprüfungen B1–B8 | ⏳ | ⏳ unverändert (braucht ein Auge, s. u.) |
 
 ---
@@ -86,33 +86,70 @@ positionsgleich. Wäre die Archivordnung kanonisch, müssten alle vier
 nicht als eingebaute Konstante. Damit ist S16 auch ohne O2 auslieferbar — die
 Tabelle ist dann eben unvollständig statt falsch.
 
-## O3 — Kampf-Opcode (Ziel: S23, Ergebnis offen)
+## O3 — Kampf-Opcode ✅ gelöst
 
-**Stand.** Unverändert 🔴. Bester Kandidat 8,8 Prozentpunkte über der
-Kontrolle (Faktor 1,3) — zum Vergleich lag der Field-Wechsel-Opcode bei
-Faktor 44.
+**Ergebnis.** `BATTLE` = **0x70**, Operanden: Bank-Byte + u16 Formationsnummer.
+`BTLON` = 0x71 (Zufallskämpfe an/aus). Beide sind implementiert, der
+Wartezustand und der Rückkanal `battle-finished` sind verdrahtet und durch
+Fixture-Tests abgesichert.
 
-**Warum die bisherige Messung stumpf ist.** Sie prüft, ob ein Operand in der
-u16-Kandidatenmenge aus Sektion 7 des eigenen Fields vorkommt. Solange Sektion
-7 unerschlossen ist, ist diese Menge so groß, dass fast jeder Wert zufällig
-trifft. Die Kontrolle misst dann dasselbe Rauschen wie der Kandidat.
+**Warum der erste Anlauf scheitern musste — die eigentliche Lehre.** Die
+Messung prüfte, ob der Operand in der Kandidatenmenge aus Sektion 7 des
+**eigenen** Fields vorkommt. Aber `battleID` ist eine **globale**
+Formationsnummer: Sektion 7 beschreibt die *Zufalls*kämpfe eines Fields,
+`BATTLE` löst einen *skriptierten* Kampf aus. Die Probe hat in einer Menge
+gesucht, in der die Antwort gar nicht liegen kann — nachgemessen steht die
+Nummer dort in 1 von 173 Fällen, und im Nachbarfield exakt gleich oft.
 
-**Methode — Reihenfolge umdrehen.** Erst **Sektion 7 erschließen**, dann den
-Opcode suchen:
+Das ist ein anderer Fehlertyp als die bisherigen: nicht eine schlechte
+Kontrolle, sondern eine **falsche Suchmenge**. Eine Kontrolle kann das nicht
+aufdecken — sie misst dasselbe Rauschen wie der Kandidat und sieht dabei
+völlig gesund aus. Der einzige Schutz ist, die Annahme hinter der Suchmenge
+selbst auszusprechen: *„Ich nehme an, die gesuchte Nummer stammt aus dieser
+Tabelle."* Genau dieser Satz stand nirgends.
 
-1. Sektion 7 mit dem Standardverfahren angehen (Accounting + Strukturkarte
-   „Wertevielfalt je Byteposition", das Verfahren, das `audio.fmt` geknackt
-   hat). Ziel: Eintragsgröße und Encounter-Recordgrenzen.
-2. Erst mit einer *kleinen*, strukturierten Kandidatenmenge die Opcode-Suche
-   wiederholen. Dann ist die Kontrolle wieder trennscharf.
-3. **Zweiter, unabhängiger Weg:** Der Kampf hat einen Rückkanal
-   (`battle-finished` mit `outcome`). Ein Opcode, der einen Kampf auslöst,
-   sollte im Bytecode auffällig oft von einem Vergleich auf dieses Ergebnis
-   gefolgt werden. Dieses **Nachbarschaftsmuster** ist unabhängig von Sektion 7.
+**Offen geblieben:** Ob `outcome` aus `battle-finished` im Original in eine
+Variable gespiegelt wird und in welche. Der Interpreter schreibt bewusst
+nichts, statt eine Adresse zu raten. 🟡
 
-**Ausdrücklich erlaubtes Ergebnis:** ein weiterer Negativbefund. Der
-Stub-Vertrag (ADR-011) steht beidseitig; ohne Opcode bleibt er ungenutzt, aber
-korrekt.
+## O3b — Sektion 7 (Encounter-Tabelle) erschließen (Ziel: S23)
+
+Durch O3 nicht mehr blockierend, aber weiterhin unerschlossen — und für
+Zufallskämpfe nötig. Standardverfahren: Accounting plus die Strukturkarte
+„Wertevielfalt je Byteposition", also das Verfahren, das bei `audio.fmt` die
+Eintragsgröße freigelegt hat.
+
+## O9 — Operandenlängentabelle systematisch abgleichen (Ziel: S20)
+
+**Neu aufgetaucht.** Die aus den Realdaten abgeleitete Längentabelle (S12,
+99,73 % Spannen-Abschluss) hat Lücken. Gegen die Strukturgrößen aus Makou
+Reactor geprüft, weichen **4 von 8** Stichproben ab:
+
+| Opcode | Referenz | unsere Ableitung |
+|---|---|---|
+| `BTMD2` 0x22 | 4 | 1 |
+| `BTRLD` 0x23 | 2 | 4 |
+| `BTLTB` 0x4B | 1 | 0 |
+| `BTLMD` 0x72 | 2 | 1 |
+| `BATTLE` 0x70 | 3 | 3 ✓ |
+| `BTLON` 0x71 | 1 | 1 ✓ |
+| `MAPJUMP` 0x60 | 9 | 9 ✓ |
+| `WAIT` 0x24 | 2 | 2 ✓ |
+
+Alle vier Abweichungen betreffen **seltene** Opcodes — genau dort trägt der
+Spannen-Abschluss als Gütefunktion am wenigsten, weil wenige Vorkommen kaum
+Druck auf die Optimierung ausüben.
+
+**Methode.** Die Referenzgrößen als **Hypothese** einsetzen (nicht übernehmen)
+und gegen die Realdaten messen: Steigt der Spannen-Abschluss über 99,73 %?
+Sinkt die Overrun-Quote unter 0,22 %? Jede Änderung, die beides verbessert,
+ist belegt; jede, die es verschlechtert, wird verworfen — auch wenn die
+Referenz etwas anderes sagt. Das ist dasselbe Verfahren wie beim
+Koordinatenabstieg, nur mit besseren Startwerten.
+
+**Erwarteter Ertrag:** Die 0,22 % Overrun sind die Stellen, an denen der
+Interpreter heute aus dem Tritt gerät. Jede korrigierte Länge schließt eine
+davon.
 
 ## O4 — R4-Sichtprüfungen B1–B8 (jederzeit, braucht 20 Minuten)
 
@@ -205,7 +242,9 @@ ist sie ein Migrationsproblem.
 |---|---|---|
 | O1 `audio.fmt` | S23 (vorziehbar) | Soundeffekte |
 | O2 Musikindex | S23 | korrekte Musikauswahl (Engine läuft ohne) |
-| O3 Kampf-Opcode | S23 | Story-Progression über Pflichtkämpfe |
+| ~~O3 Kampf-Opcode~~ | ✅ erledigt | — |
+| O3b Sektion 7 | S23 | Zufallskämpfe |
+| O9 Längentabelle | S20 | 0,22 % Overrun im Interpreter |
 | O4 R4-Sichtprüfung | jederzeit | nichts — aber acht Annahmen bleiben ungeprüft |
 | O5 LGP-Check-Code | S20 | nichts (Fehlererkennung entfällt) |
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
