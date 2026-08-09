@@ -367,15 +367,20 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
     // der Anteil aufrechter Frames je Kandidatenreihenfolge. Die Bindpose
     // taugt als Maß NICHT — dort sind alle Rotationen 0, also liefern alle
     // sechs Reihenfolgen dasselbe Ergebnis. Nur animierte Frames trennen sie.
+    // Kujata (picklejar76) setzt fuer FELD-Modelle rootRotationDegreesX = 180
+    // bei sonst unveraenderten Bone-Winkeln und Reihenfolge 'YXZ'. Dieser
+    // Wurzelversatz fehlt bei uns vollstaendig — er wird hier als zusaetzliche
+    // Dimension mitgemessen, statt uebernommen zu werden.
+    const ROOT_X = [0, 180];
     const bewertung: Record<string, { aufrecht: number; gesamt: number; verhaeltnis: number[] }> = {};
-    for (const o of EULER_ORDERS) bewertung[o] = { aufrecht: 0, gesamt: 0, verhaeltnis: [] };
+    for (const o of EULER_ORDERS) for (const rx of ROOT_X) bewertung[`${o} rootX+${rx}`] = { aufrecht: 0, gesamt: 0, verhaeltnis: [] };
 
     for (const probe of proben) {
       for (const f of probe.clip.frames.slice(0, 12)) {
-        for (const o of EULER_ORDERS) {
-          const e = extentWithOrder(probe.skeleton, probe.meshes, f, o);
+        for (const o of EULER_ORDERS) for (const rx of ROOT_X) {
+          const e = extentWithOrder(probe.skeleton, probe.meshes, f, o, rx);
           if (e.points === 0) continue;
-          const b = bewertung[o]!;
+          const b = bewertung[`${o} rootX+${rx}`]!;
           b.gesamt++;
           if (longestAxis(e) === 'y') b.aufrecht++;
           const quer = Math.max(e.dx, e.dz);
@@ -391,7 +396,8 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
         median: median(b.verhaeltnis),
         gesamt: b.gesamt,
       }))
-      .sort((a, b) => b.aufrecht - a.aufrecht || b.median - a.median);
+      .sort((a, b) => b.aufrecht - a.aufrecht || b.median - a.median)
+      .slice(0, 6);
 
     console.log(
       'Eulerreihenfolge gegen die Aufrechtigkeit animierter Frames:',
@@ -517,6 +523,7 @@ function extentWithOrder(
   meshesByBone: Map<number, Float32Array[]>,
   frame: AnimationFrame,
   order: string,
+  rootOffsetX = 0,
 ): Extent {
   const mats: M3[] = [];
   const origins: Vec3[] = [];
@@ -528,7 +535,7 @@ function extentWithOrder(
     const local = eulerMatrix(order, rx, ry, rz);
     if (bone.parentIndex < 0) {
       const rootR = frame.rootRotation;
-      const rootM = eulerMatrix(order, rootR[0], rootR[1], rootR[2]);
+      const rootM = eulerMatrix(order, rootR[0] + rootOffsetX, rootR[1], rootR[2]);
       mats.push(mul3(rootM, local));
       origins.push([...frame.rootTranslation] as Vec3);
     } else {

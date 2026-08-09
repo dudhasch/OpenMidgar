@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ff7DirToScene } from '@webmidgar/convert';
 import { texToRgba, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource } from '@webmidgar/formats-model';
-import { EULER_ORDER } from './pose.js';
+import { EULER_ORDER, FIELD_ROOT_PITCH_DEG } from './pose.js';
 
 /**
  * GPU-Adapter der Modellkette: Skeleton → Three-Bone-Hierarchie mit starren
@@ -107,11 +107,20 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
 
 const DEG2RAD = Math.PI / 180;
 
-/** Frame anwenden — exakt die Konventionen der Referenzmathematik (pose.ts). */
-export function applyFrame(actor: Actor, skeleton: Skeleton, frame: AnimationFrame): void {
+/**
+ * Frame anwenden — die Konventionen der Referenzmathematik (pose.ts) plus den
+ * Feldversatz auf der Wurzel. `rootPitchDeg` ist der EINZIGE Ort im
+ * Renderpfad, an dem er gesetzt wird; `computePose` bleibt davon frei.
+ */
+export function applyFrame(
+  actor: Actor,
+  skeleton: Skeleton,
+  frame: AnimationFrame,
+  rootPitchDeg: number = FIELD_ROOT_PITCH_DEG,
+): void {
   actor.model.position.set(...frame.rootTranslation);
   actor.model.rotation.set(
-    frame.rootRotation[0] * DEG2RAD,
+    (frame.rootRotation[0] + rootPitchDeg) * DEG2RAD,
     frame.rootRotation[1] * DEG2RAD,
     frame.rootRotation[2] * DEG2RAD,
     EULER_ORDER,

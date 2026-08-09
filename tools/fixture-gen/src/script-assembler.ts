@@ -183,9 +183,9 @@ export class ScriptAssembler {
     return this.raw(loop ? 0xa2 : 0xa3, animId & 0xff, speed & 0xff);
   }
 
-  /** DIR: Blickrichtung in Grad (Literal). */
-  dir(degrees: number): this {
-    return this.raw(0xab, 0x00, degrees & 0xff, (degrees >> 8) & 0xff);
+  /** DIR (0xb3): Blickrichtung als ein Byte (Literal). */
+  dir(direction: number): this {
+    return this.raw(0xb3, 0x00, direction & 0xff);
   }
 
   /** XYZI: setzt Position und Walkmesh-Dreieck hart (Literale). */

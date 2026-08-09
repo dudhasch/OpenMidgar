@@ -108,7 +108,9 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
     const poses = computePose(sk, frame);
 
     const actor = buildActor(sk, () => []);
-    applyFrame(actor, sk, frame);
+    // Ohne Feldversatz: Dieser Test belegt die Dualität der reinen
+    // Referenzmathematik, nicht die Fassungs-Konvention.
+    applyFrame(actor, sk, frame, 0);
     for (let b = 0; b < sk.bones.length; b++) {
       const three = boneModelMatrix(actor, b); // column-major elements
       const ref = poses[b]!.matrix;
@@ -123,7 +125,7 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
   it('Scene-Wrapper: FF7-Höhenachse (+Z) landet auf Three-+Y', () => {
     const sk = skeleton();
     const actor = buildActor(sk, () => []);
-    applyFrame(actor, sk, bindPoseFrame(sk));
+    applyFrame(actor, sk, bindPoseFrame(sk), 0);
     actor.root.updateMatrixWorld(true);
     // Kettenende (0,0,6)_ff7 muss in Scene-Koordinaten (0,6,0) liegen.
     const tip = actor.boneGroups[2]!.localToWorld(new THREE.Vector3(0, 0, 1));

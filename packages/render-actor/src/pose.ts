@@ -17,6 +17,28 @@ import type { AnimationFrame, Skeleton } from '@webmidgar/formats-model';
 
 export const EULER_ORDER = 'YXZ' as const;
 
+/**
+ * Fester Zusatzwinkel auf der Wurzel-X-Achse (Grad), nur für FELD-Modelle.
+ *
+ * 🟡 Herkunft: Kujata (picklejar76) führt für Feldmodelle
+ * `rootRotationDegreesX = 180` bei sonst unveränderten Bone-Winkeln und
+ * derselben Eulerreihenfolge 'YXZ'. Zwei Dinge stützen das:
+ *
+ *  - Die Sichtprüfung am echten Modell meldet „die Figur liegt, man sieht sie
+ *    **von unten**" — eine 180°-Drehung ist genau diese Symptomatik.
+ *  - Kujatas Quaternion-Herleitung entspricht Zeichen für Zeichen der
+ *    Three-Semantik von 'YXZ' (R = Ry·Rx·Rz), also derselben Konvention wie
+ *    `rotationEulerYxz` hier. Die Reihenfolge war nie das Problem.
+ *
+ * **Warum das (noch) nicht gemessen ist:** Die Realdaten-Probe bewertet über
+ * die Ausdehnung der Mesh-Punktwolke — und eine 180°-Drehung lässt eine
+ * Bounding-Box unverändert. Die Gütefunktion ist für diesen Fehler
+ * konstruktionsbedingt blind; gemessen liefern Versatz 0 und 180 exakt
+ * dieselben Werte. Der Wert ist deshalb ausdrücklich 🟡 und braucht eine
+ * Sichtprüfung oder ein richtungsempfindliches Maß.
+ */
+export const FIELD_ROOT_PITCH_DEG = 180;
+
 /** Spaltenvektor-Konvention, Speicherung zeilenweise (m[r][c]). */
 export type Mat4 = number[][];
 
@@ -101,12 +123,21 @@ export function bindPoseFrame(skeleton: Skeleton): AnimationFrame {
 /**
  * Modellraum-Posen aller Bones für einen Frame. `rotations` wird in
  * Dateireihenfolge adressiert; fehlende Einträge gelten als 0 (Pad-Regel).
+ *
+ * `rootPitchDeg` ist bewusst **0** als Vorgabe: Diese Funktion ist die reine
+ * Referenzmathematik und soll keine Fassungs-Konvention tragen. Den
+ * Feldversatz (`FIELD_ROOT_PITCH_DEG`) setzt der Aufrufer — im Renderpfad
+ * genau einmal in `applyFrame`.
  */
-export function computePose(skeleton: Skeleton, frame: AnimationFrame): BonePose[] {
+export function computePose(
+  skeleton: Skeleton,
+  frame: AnimationFrame,
+  rootPitchDeg = 0,
+): BonePose[] {
   const rootR = frame.rootRotation;
   const rootMatrix = matMul(
     translation(frame.rootTranslation[0], frame.rootTranslation[1], frame.rootTranslation[2]),
-    rotationEulerYxz(rootR[0], rootR[1], rootR[2]),
+    rotationEulerYxz(rootR[0] + rootPitchDeg, rootR[1], rootR[2]),
   );
   const poses: BonePose[] = [];
   for (let i = 0; i < skeleton.bones.length; i++) {

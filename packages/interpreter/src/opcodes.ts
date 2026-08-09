@@ -76,7 +76,18 @@ export const OP = {
   VISI: 0xa4,
   XYZI: 0xa5,
   MOVE: 0xa8,
-  DIR: 0xab,
+  /**
+   * Blickrichtung setzen. Operanden: Bank-Byte + u8 Richtung.
+   *
+   * ⚠️ **Korrektur (2026-08-10):** Stand vorher auf `0xab` — das ist in
+   * Wahrheit `TURA` (Drehen über Zeit, eigener Operandensatz). `DIR` liegt auf
+   * `0xb3`. Aufgefallen beim Abgleich gegen die positionsgeordnete
+   * Opcode-Liste aus Makou Reactor. Die aus den Realdaten abgeleitete
+   * Operandenlänge für 0xb3 ist 2 und deckt sich mit der Referenzstruktur
+   * `{ banks, direction }` — die Länge war also längst richtig, nur der Name
+   * hing am falschen Opcode.
+   */
+  DIR: 0xb3,
   // Audio (S17). Die abgeleiteten Längen (1 bzw. 4) decken sich mit der
   // öffentlichen Dokumentation — zwei unabhängige Quellen, die übereinstimmen.
   MUSIC: 0xf0,
@@ -187,7 +198,7 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.VISI]: 1,
   [OP.XYZI]: 10,
   [OP.MOVE]: 5,
-  [OP.DIR]: 3,
+  [OP.DIR]: 2,
   [OP.MUSIC]: 1,
   [OP.SOUND]: 4,
   [OP.MAPJUMP]: 9,

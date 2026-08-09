@@ -125,3 +125,42 @@ Beide Annahmen bleiben damit auf die Sichtprüfung angewiesen; die Demoseite
 2. B5/B6 über ein texturiertes Modell mit bekannter Farbverteilung prüfen.
 3. Renderstate-Blöcke (100 B): abgesicherte Flags (Blend/Cull/Lit) mappen —
    bisher roh konserviert.
+
+## Kujata-Abgleich (2026-08-10)
+
+Kujata (picklejar76) übersetzt FF7-Assets nach glTF und muss die
+Modellkonventionen daher vollständig auflösen. Der Abgleich bringt drei
+Aussagen:
+
+1. **`rotationOrder = "YXZ"`** — identisch mit unserer Annahme B2. Kujatas
+   Euler→Quaternion-Herleitung entspricht Zeichen für Zeichen der
+   Three-Semantik (R = Ry·Rx·Rz). **Die Reihenfolge war nie das Problem.**
+2. **`rootRotationDegreesX = 180` für Feldmodelle**, bei
+   `boneRotationScale = 1` und `boneRotationDegrees = 0`. Diesen Versatz
+   hatten wir gar nicht.
+3. Für Kampfmodelle gilt stattdessen `containerRotationDegreesX = 180` —
+   die Fassungen unterscheiden sich also, was die Existenz eines solchen
+   Versatzes zusätzlich plausibel macht.
+
+**Umgesetzt als `FIELD_ROOT_PITCH_DEG = 180`** in `render-actor/pose.ts`,
+angewendet an genau einer Stelle (`applyFrame`). `computePose` bleibt frei
+davon — es ist die reine Referenzmathematik und soll keine
+Fassungs-Konvention tragen; die Dualitätstests rufen es entsprechend mit 0.
+
+### Warum das 🟡 bleibt und nicht ✅
+
+Die Realdaten-Probe kann diesen Wert **nicht** entscheiden, und zwar aus einem
+prinzipiellen Grund: Sie bewertet über die Ausdehnung der Mesh-Punktwolke, und
+eine 180°-Drehung lässt eine Bounding-Box unverändert. Gemessen liefern
+Versatz 0 und 180 **exakt dieselben Zahlen** — die Gütefunktion ist für genau
+diesen Fehler blind.
+
+Das ist selbst ein Befund: Eine Gütefunktion muss zur gesuchten Größe passen.
+Die Ausdehnung misst „liegt oder steht", nicht „steht richtig herum". Für den
+zweiten Fall braucht es ein **richtungsempfindliches** Maß — etwa die Lage des
+Wurzelgelenks relativ zur Figurenhöhe, oder den Bodenkontakt gegen das
+Walkmesh.
+
+Bis dahin gilt: Der Wert ist durch eine unabhängige Zweitimplementierung
+gestützt UND deckt sich mit dem Symptom der Sichtprüfung („man sieht ihn von
+unten"). Das ist mehr Beleg als für den vorherigen Zustand — aber kein Beweis.

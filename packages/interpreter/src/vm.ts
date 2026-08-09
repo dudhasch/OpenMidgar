@@ -250,10 +250,10 @@ export function stepInstruction(
       return { kind: 'continue' };
     }
     case OP.DIR: {
-      // 🟡 Operanden: Bankpaar + i16-Richtung in Grad.
+      // Operanden: Bank-Byte + u8 Richtung (Referenzstruktur { banks,
+      // direction }; Länge 2 auch aus den Realdaten abgeleitet).
       const bankPair = u8(0);
-      const raw = u16(1);
-      const value = srcValue((bankPair >> 4) & 0xf, raw, true);
+      const value = srcValue(bankPair & 0xf, u8(1), false);
       actor(rt, ctx).direction = ((value % 360) + 360) % 360;
       ctx.ip = next;
       return { kind: 'continue' };
