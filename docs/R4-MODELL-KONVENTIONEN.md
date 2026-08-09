@@ -26,9 +26,59 @@ Masterplan). Ergänzt [R1-REQUEST-SEMANTIK.md](R1-REQUEST-SEMANTIK.md).
 | B7 | Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz kommt aus rootTranslation der Animation | Demo/`actor.ts` | Bodenkontakt echter Modelle |
 | B8 | Field-Skalierungsfaktor als Modell-Divisor noch NICHT angewendet | — | bei Field-Integration (S11) |
 
-## Stand nach S10 (2026-08-09)
+## Sichtprüfung durchgeführt (2026-08-09) — und was sie ausgelöst hat
 
-Die Voraussetzung für B1–B4 ist geschaffen, die Sichtprüfung selbst steht noch aus.
+Der Nutzer hat die Demoseite mit der echten Installation geprüft. Vier
+Beobachtungen, wörtlich:
+
+1. „Ansicht Front — Cloud *liegt*. Man sieht ihn von unten, sieht aber an sich
+   richtig aus."
+2. „Animationen selbst sind richtig, aber die Bonestruktur zuckt in falsche
+   Richtungen."
+3. „Ansicht Seite und Draufsicht — Bones komplett falsch angeordnet."
+4. „Bei Texturkanäle sehe ich keinen Unterschied zwischen den beiden."
+
+Beobachtung 1 ist der Schlüssel: *„sieht an sich richtig aus"* heißt, dass
+Netzaufbau, Bone-Anbindung und Farben stimmen — falsch ist nur die **Lage**.
+Damit war endlich klar, wonach ein automatischer Test suchen muss, und die
+seit S11 blockierte Automatisierung ließ sich bauen
+(`tools/realdata-scan/src/model-orientation-probe.rdtest.ts`).
+
+### Was daraufhin gemessen wurde
+
+| Aussage | Ergebnis |
+|---|---|
+| **B1 ✅ bestätigt** | Bindpose über 280 Modelle: bei **266 (95,0 %)** ist die Höhe die längste Achse, Verhältnis Höhe/Quer **2,109**. Die Kontrollabbildung (ohne Konvertierung) liefert 0,453 und legt die Figur flach. Bone-Achse, Kindversatz und die zentrale Konvertierung (ADR-009) sind damit belegt. |
+| **Winkeleinheit ✅ bestätigt** | 11.421 Bone-Winkel: **100 % ≤ 360°**, Maximum 359,91°, Median 76°, voller Wertebereich ausgeschöpft. Grad, nicht Radiant, kein Festkommamaß. |
+| **B3 ✅ eingegrenzt** | Beide Hälften des 24-B-Wurzelblocks tragen winzige Werte (Bytes 0–11 zu 98,7 % genau 0; Bytes 12–23 maximal 16,45). Die Wurzel verursacht das Kippen **nicht** — unabhängig davon, welche Hälfte welche ist. |
+| **B2 ❌ widerlegt, Ersatz offen** | Die Bindpose steht aufrecht (72/76), **Frame 0 einer echten Animation nur in 10/76**. Es sind also die **Bone-Rotationen**. Der Durchlauf aller sechs Eulerreihenfolgen liefert aber keinen Sieger: ZXY 57,2 %, ZYX 51,7 %, YZX 50,9 %, XYZ 39,5 %, das implementierte **YXZ 34,3 %**. Faktor 1,11 zum Zweiten — nach Projektmaßstab kein Befund. |
+| **B5/B6 ⏳ weiterhin ungeprüft** | Nur **13,3 %** der Teilnetze (626/4710) sind überhaupt texturiert; der Rest trägt Vertexfarben. Der RGB↔BGR-Schalter wirkt nur auf Texturen — deshalb ist „kein Unterschied" **kein** Ergebnis, sondern ein untauglicher Testaufbau. |
+
+### Beinahe-Fehlschluss, festgehalten
+
+Im ersten Anlauf wurden Skelett und Animation über die **Bone-Anzahl** gepaart,
+weil Animationen nicht wie ihr Skelett heißen. Damit gewann XYZ mit 66,6 %.
+Mit der **echten** Paarung aus dem Field-Manifest (S10, 100 % auflösbar) fällt
+XYZ auf 39,5 % und ZXY führt. Die erste Rangfolge war ein reines Artefakt der
+Behelfspaarung — dieselbe Lehre wie bei der Prüfsumme: Eine bequeme
+Hilfsannahme im Messaufbau kann die Rangfolge vollständig drehen.
+
+### Was als Nächstes zu tun ist
+
+Die Unbekannte ist jetzt eng: **die Auslegung der Bone-Rotationen** — und
+nur sie. Ausgeschlossen sind Konvertierung, Winkeleinheit, Wurzelblock,
+Netzaufbau. Da die reine Reihenfolge nicht trennt, ist der nächste Suchraum
+größer als sechs Kandidaten: Reihenfolge **× Vorzeichen je Achse** (48
+Kombinationen) und ggf. eine Achsenpermutation der Winkel gegenüber den
+Bone-Achsen. Die Gütefunktion steht bereits, der Durchlauf ist mechanisch.
+
+Zusätzlich sollte die Gütefunktion geschärft werden: „Höhe ist die längste
+Achse" ist grob. Besser wäre die **Stetigkeit** über aufeinanderfolgende
+Frames (gemessen: Höhensprung Median 0,6 %, p95 10,5 %) zusammen mit der
+Aufrechtigkeit — eine falsche Auslegung erzeugt Sprünge, die eine echte
+Animation nicht hat. Genau das beschreibt Beobachtung 2 mit „zuckt".
+
+## Stand nach S10 (2026-08-09)
 
 - **Erledigt:** Die Model-Loader-Sektion ist geparst (702/702 byteexakt), und
   **jede** Referenz löst gegen `char.lgp` auf — 5454/5454 Modelle und
