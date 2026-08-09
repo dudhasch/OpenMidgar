@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ff7DirToScene } from '@webmidgar/convert';
 import { texToRgba, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource } from '@webmidgar/formats-model';
-import { DEFAULT_ROOT_PITCH_DEG, EULER_ORDER } from './pose.js';
+import { EULER_ORDER, ROOT_FRAME_FIX_DEG, rootFrameTranslationToModel } from './pose.js';
 
 /**
  * GPU-Adapter der Modellkette: Skeleton → Three-Bone-Hierarchie mit starren
@@ -9,7 +9,8 @@ import { DEFAULT_ROOT_PITCH_DEG, EULER_ORDER } from './pose.js';
  *
  * Aufbau: `root` (Scene-Space-Wrapper — trägt als EINZIGE Stelle die zentrale
  * FF7→Scene-Basis aus packages/convert, ADR-009) → `model` (FF7-Modellraum,
- * erhält Wurzeltranslation/-rotation je Frame) → Bone-Gruppen (Kindversatz
+ * erhält Wurzeltranslation/-rotation je Frame — mit Wurzelrahmen-Korrektur,
+ * R4-Fix, siehe `applyFrame`) → Bone-Gruppen (Kindversatz
  * (0,0,parentLength), Eulerorder 'YXZ' — Referenzmathematik in pose.ts).
  */
 
@@ -108,19 +109,29 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
 const DEG2RAD = Math.PI / 180;
 
 /**
- * Frame anwenden — die Konventionen der Referenzmathematik (pose.ts) plus den
- * Feldversatz auf der Wurzel. `rootPitchDeg` ist der EINZIGE Ort im
- * Renderpfad, an dem er gesetzt wird; `computePose` bleibt davon frei.
+ * Frame anwenden — die Konventionen der Referenzmathematik (pose.ts).
+ *
+ * Wurzelrahmen-Vertrag (`rootFrameFix`, Vorgabe **an**): Die `.a`-Wurzel
+ * steht in einem gedrehten Rahmen (Kujata: rootRotationDegreesX = 180 im
+ * reinen Modellraum). Mit unserem ADR-009-Wrapper C = Rx(−90°) über dem
+ * Modell heißt das hier: Wurzel-X-Winkel um `ROOT_FRAME_FIX_DEG` (−90°)
+ * erhöht und Wurzeltranslation über `rootFrameTranslationToModel` gespiegelt
+ * (t_m = C⁻¹·t). Numerisch verifiziert: Szene == Kujata-Welt (max. Fehler
+ * 1e-15 bei Wurzelrotation 0, siehe docs/R4-MODELL-KONVENTIONEN.md).
+ * `false` liefert das rohe Verhalten (Hypothesen-Sweep / Dualitätstest).
  */
 export function applyFrame(
   actor: Actor,
   skeleton: Skeleton,
   frame: AnimationFrame,
-  rootPitchDeg: number = DEFAULT_ROOT_PITCH_DEG,
+  rootFrameFix = true,
 ): void {
-  actor.model.position.set(...frame.rootTranslation);
+  const rootT = rootFrameFix
+    ? rootFrameTranslationToModel(frame.rootTranslation)
+    : frame.rootTranslation;
+  actor.model.position.set(...rootT);
   actor.model.rotation.set(
-    (frame.rootRotation[0] + rootPitchDeg) * DEG2RAD,
+    (frame.rootRotation[0] + (rootFrameFix ? ROOT_FRAME_FIX_DEG : 0)) * DEG2RAD,
     frame.rootRotation[1] * DEG2RAD,
     frame.rootRotation[2] * DEG2RAD,
     EULER_ORDER,

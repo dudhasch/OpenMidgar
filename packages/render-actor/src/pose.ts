@@ -5,7 +5,8 @@ import type { AnimationFrame, Skeleton } from '@webmidgar/formats-model';
  * der S4-Kameraprojektion): Der Three-Szenegraph in actor.ts muss diese
  * Matrizen reproduzieren; Tests asserten numerisch gegen diese Implementierung.
  *
- * Konventionen (R4, 🟡 `Zu validieren` per Referenzszene):
+ * Konventionen (R4, Bone-Seite per Referenzabgleich ✅ entschieden —
+ * docs/R4-MODELL-KONVENTIONEN.md, „Referenz-Entscheid B1–B4"):
  *  - Bindpose: Rotationen neutral; Kind-Ursprung liegt am Parent-Ende,
  *    versetzt um die Parent-Bone-Länge entlang der BONE-ACHSE.
  *  - BONE-ACHSE: lokales +Z → Versatz (0, 0, length). Längen sind im
@@ -13,49 +14,62 @@ import type { AnimationFrame, Skeleton } from '@webmidgar/formats-model';
  *  - Eulerreihenfolge: R = Ry · Rx · Rz (entspricht Three-Order 'YXZ'),
  *    Winkel in Grad, Frame-Zuordnung in Bone-DATEIreihenfolge.
  *  - Wurzel: M = T(rootTranslation) · R(rootRotation).
+ *  - Wurzelrahmen-Korrektur (R4-Fix, Vorgabe AN): Die `.a`-Wurzel steht in
+ *    einem gedrehten Rahmen — Kujata setzt für Feldmodelle
+ *    rootRotationDegreesX = 180. Weil unsere Szene zusätzlich die
+ *    ADR-009-Basis C = Rx(−90°) trägt, gilt hier: fix = −90° auf der
+ *    Wurzel-X-Komponente und t_m = rootFrameTranslationToModel(t). Herleitung
+ *    und numerische Verifikation: `ROOT_FRAME_FIX_DEG`.
  */
 
 export const EULER_ORDER = 'YXZ' as const;
 
 /**
- * Fester Zusatzwinkel auf der Wurzel-X-Achse (Grad), nur für FELD-Modelle.
+ * Fester Zusatzwinkel auf der Wurzel-X-Achse (Grad) — der **Wurzelrahmen-Fix**
+ * für FELD-Modelle (R4, entschieden 2026-08-10, numerisch verifiziert).
  *
- * 🟡 Herkunft: Kujata (picklejar76) führt für Feldmodelle
- * `rootRotationDegreesX = 180` bei sonst unveränderten Bone-Winkeln und
- * derselben Eulerreihenfolge 'YXZ'. Zwei Dinge stützen das:
+ * Herleitung (Details: docs/R4-MODELL-KONVENTIONEN.md):
+ *  - Kujata (picklejar76) — nachweislich korrekte Pipeline — setzt für
+ *    Feldmodelle `rootRotationDegreesX = 180` auf die Wurzelrotation, bei
+ *    sonst identischer Bone-Mathematik (YXZ, Grad, Kindversatz [0,0,−|L|]).
+ *    Kujata arbeitet direkt im Modellraum, ohne Achsen-Basiswechsel.
+ *  - Unsere Szene hängt über dem Modell die ADR-009-Basis
+ *    C = (x,y,z) → (x,z,−y) = Rx(−90°) als Wrapper.
+ *  - Äquivalenzforderung `Szene == Kujata-Welt`:
+ *    Rotation: C · Rx(fix) = Rx(180°)  ⇒  fix = C⁻¹·Rx(180°) = Rx(270°)
+ *    ≡ **−90°**, Euler-additiv auf der Wurzel-X-Komponente (wie der bisherige
+ *    Pitch-Mechanismus).
+ *  - Verifiziert: Bei Wurzelrotation = 0 (98,7 % der echten Frames) ist die
+ *    korrigierte Szene EXAKT identisch mit der Kujata-Referenzkette (max.
+ *    Fehler 1e-15). Zuvor lag die Figur global um 90° verkippt — das erklärt
+ *    alle drei Sichtsymptome der R4-Sichtprüfung (liegt/von unten, Glieder in
+ *    falschen Ebenen, Seiten-/Draufsicht falsch).
+ *  - Residuum: Nur bei Wurzelrotation mit **Y-Anteil ≠ 0** bleibt eine
+ *    Abweichung, weil Kujatas +180 intern in der Euler-Komposition sitzt und
+ *    nicht mit Ry kommutiert (X-/Z-Anteile sind exakt abgedeckt). Diese
+ *    Frames sind im Bestand selten; Watch-Item in der R4-Notiz.
  *
- *  - Die Sichtprüfung am echten Modell meldet „die Figur liegt, man sieht sie
- *    **von unten**" — eine 180°-Drehung ist genau diese Symptomatik.
- *  - Kujatas Quaternion-Herleitung entspricht Zeichen für Zeichen der
- *    Three-Semantik von 'YXZ' (R = Ry·Rx·Rz), also derselben Konvention wie
- *    `rotationEulerYxz` hier. Die Reihenfolge war nie das Problem.
- *
- * **Warum das (noch) nicht gemessen ist:** Die Realdaten-Probe bewertet über
- * die Ausdehnung der Mesh-Punktwolke — und eine 180°-Drehung lässt eine
- * Bounding-Box unverändert. Die Gütefunktion ist für diesen Fehler
- * konstruktionsbedingt blind; gemessen liefern Versatz 0 und 180 exakt
- * dieselben Werte. Der Wert ist deshalb ausdrücklich 🟡 und braucht eine
- * Sichtprüfung oder ein richtungsempfindliches Maß.
+ * Der frühere Ansatz `FIELD_ROOT_PITCH_DEG = 180` war wirkungslos: Er drehte
+ * die Figur im bereits verkippten Rahmen nur um ihre eigene Achse, und die
+ * BBox-Gütefunktion der Realdaten-Probe ist für 180°-Drehungen ohnehin blind.
  */
-export const FIELD_ROOT_PITCH_DEG = 180;
+export const ROOT_FRAME_FIX_DEG = -90;
 
 /**
- * ⚠️ **Nicht als Vorgabe gesetzt.** Der Wert stammt aus einer Pipeline, die
- * sich an ZWEI weiteren Stellen von unserer unterscheidet: Kujata versetzt das
- * Kind nach `−parentLength` (bei uns `+parentLength`) und kennt keinen
- * Achsen-Basiswechsel FF7→Szene, sondern arbeitet direkt im Modellraum. Die
- * drei Entscheidungen gehören zusammen; eine davon einzeln zu übernehmen ist
- * genau der Fehler, den dieses Projekt sonst vermeidet.
+ * Wurzeltranslation aus dem `.a`-Wurzelrahmen in den Modellraum:
+ * t_m = C⁻¹ · t = (t.x, −t.z, t.y).
  *
- * Nachgemessen: Kujatas Versatzvorzeichen verschlechtert unsere Aufrechtigkeit
- * durchgehend — `offset+` belegt alle vorderen Plätze. Unsere Bindpose steht
- * ohne den Pitch bereits zu 95 % aufrecht.
+ * Die rohe Wurzeltranslation steht im selben gedrehten Wurzelrahmen wie die
+ * Wurzelrotation — unverändert übernommen versenkt sie die Figur um ihre
+ * Höhenkomponente (Symptom „man sieht die Figur von unten").
  *
- * Der Pitch bleibt deshalb ein **Schalter** (`applyFrame(..., pitch)`), den
- * die Demoseite live umlegen kann. Erst wenn ein Auge oder ein
- * richtungsempfindliches Maß entschieden hat, wird daraus eine Vorgabe.
+ * Bewusst LOKAL definiert, obwohl die Abbildung numerisch mit `sceneToFf7`
+ * (ADR-009) übereinstimmt: Semantisch ist das KEINE FF7↔Szene-Konvertierung,
+ * sondern die Umkehrung des Kujata-Wurzelrahmens innerhalb des Modellraums.
  */
-export const DEFAULT_ROOT_PITCH_DEG = 0;
+export function rootFrameTranslationToModel(t: [number, number, number]): [number, number, number] {
+  return [t[0], -t[2], t[1]];
+}
 
 /** Spaltenvektor-Konvention, Speicherung zeilenweise (m[r][c]). */
 export type Mat4 = number[][];
@@ -142,20 +156,25 @@ export function bindPoseFrame(skeleton: Skeleton): AnimationFrame {
  * Modellraum-Posen aller Bones für einen Frame. `rotations` wird in
  * Dateireihenfolge adressiert; fehlende Einträge gelten als 0 (Pad-Regel).
  *
- * `rootPitchDeg` ist bewusst **0** als Vorgabe: Diese Funktion ist die reine
- * Referenzmathematik und soll keine Fassungs-Konvention tragen. Den
- * Feldversatz (`FIELD_ROOT_PITCH_DEG`) setzt der Aufrufer — im Renderpfad
- * genau einmal in `applyFrame`.
+ * `rootFrameFix` (Vorgabe **an**) wendet die Wurzelrahmen-Korrektur an
+ * (`ROOT_FRAME_FIX_DEG` + `rootFrameTranslationToModel`) — das ist der
+ * entschiedene R4-Vertrag und die numerisch verifizierte Kujata-Äquivalenz.
+ * `false` liefert das rohe Verhalten ohne Korrektur und dient dem
+ * Hypothesen-Sweep in der Realdaten-Probe sowie der Dualitätsprüfung beider
+ * Modi gegen den Three-Szenegraph.
  */
 export function computePose(
   skeleton: Skeleton,
   frame: AnimationFrame,
-  rootPitchDeg = 0,
+  rootFrameFix = true,
 ): BonePose[] {
   const rootR = frame.rootRotation;
+  const rootT = rootFrameFix
+    ? rootFrameTranslationToModel(frame.rootTranslation)
+    : frame.rootTranslation;
   const rootMatrix = matMul(
-    translation(frame.rootTranslation[0], frame.rootTranslation[1], frame.rootTranslation[2]),
-    rotationEulerYxz(rootR[0] + rootPitchDeg, rootR[1], rootR[2]),
+    translation(rootT[0], rootT[1], rootT[2]),
+    rotationEulerYxz(rootR[0] + (rootFrameFix ? ROOT_FRAME_FIX_DEG : 0), rootR[1], rootR[2]),
   );
   const poses: BonePose[] = [];
   for (let i = 0; i < skeleton.bones.length; i++) {
