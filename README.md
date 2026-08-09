@@ -21,7 +21,14 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 - ✅ **S9 — Hintergrund-Rendering + R2-Entscheid** (Tile-Semantik über 647.531 Tiles erschlossen: Palette u8@24 statt u16@20 korrigiert, Texturseite u8@34, UV-Cache-Regel `src2 vor src`; Atlas-Packer mit 1 Atlas je Field, texturierte Tile-Depth-Quads; Abnahme per Bildkohärenztest gegen Gegenhypothesen; **FOV-Basis 240 realdaten-entschieden** — [Kalibrier-Doku](tools/calibration/CALIBRATION.md))
 - ✅ **S10 — Model-Loader-Sektion (Field-Sektion 3)** (Grammatik über fünf Probeniterationen erschlossen, 702/702 Fields byteexakt; Modell- und Animationsreferenzen zu **100 %** gegen `char.lgp` auflösbar — inklusive der Korrektur, dass Animationsnamen den Stamm plus eine Kennung tragen und die Datei `<stamm>.a` heißt)
 - ✅ **S11 — Field-Integration (vertikaler Durchstich)**: `packages/field-runtime` bindet Solver, Trigger, Interpreter und Dialogbrücke zu einer Fixed-Tick-Sitzung mit Snapshot/Restore und Eingabe-Replay (Realdaten: 702 Fields × 240 Takte, **0 Digest-Abweichungen**; Wechselbudget Median 5,1 ms gegen 500 ms NFR). Der Field-Wechsel läuft: Zielfield über die `maplist` (u16@14, per Graph-Symmetrie belegt — 78,8 % Rückkanten gegen 0,2 % Kontrolle), Ankunft über das Gegen-Gateway, weil der Zielpunkt nachweislich **nicht** im Record steht. **Offen:** R4-Sichtprüfungen B1–B8 (brauchen ein Auge, [Begründung](docs/R4-MODELL-KONVENTIONEN.md))
-- ⏳ S12 — Interpreter-Ausbau: Bewegungs- und Kamera-Opcodes
+- ✅ **S12 — Interpreter-Ausbau**: Operandenlängen **aus den Realdaten abgeleitet** statt aus Dokumentation übernommen (Spannen-Abschluss 43,19 % → 99,73 %); unknown-op-Faults von 7241 auf **0**, Fault-Rate rund 3 %; Bewegungs-Opcodes gegen den Solver, Feldaufteilung realdaten-geprüft
+- ✅ **S13 — Kernel-Datenbasis + Textdekoder** (`packages/formats-kernel`): 27-Sektionen-Container mit gzip, Zeichentabellen-Versatz 0x20 aus den Daten abgeleitet, 98,9 % der Zeichenketten dekodieren vollständig
+- ✅ **S14 — Bankmodell + Spielstände** (`packages/formats-save`): Bank-Aliasing korrigiert (5 persistente Regionen statt 15 unabhängiger Bänke), eigenes versioniertes Spielstandsformat mit IndexedDB-Speicher; Original-Saves als Inventar lesbar (Prüfsumme 🔴 ungeklärt)
+- ✅ **S15 — Dialog- und Textsystem** (`packages/dialog`): Fenster-/Textlayout mit Umbruch, Seiten, Textgeschwindigkeit und Auswahl — vollständig in Takten statt Millisekunden, damit Replays exakt bleiben
+- 🔶 **S16 — Audio** (`packages/audio`): OGG-Schleifenmarken und Engine-Kommandomodell mit Autoplay-Sperre stehen; `audio.fmt` und die Musikindex-Zuordnung sind **Negativbefunde**
+- 🔶 **S17 — Story-Progression**: Wirkungen nach außen als Daten (`HostRequest`), Audio-Ops und der **aus den Daten identifizierte** Field-Wechsel-Opcode `0x60` sind verdrahtet; der Kampf-Opcode ist nicht auffindbar (🔴)
+- ✅ **S18 — App-Shell** (`packages/app-shell`): Import-Zustandsmaschine inkl. Re-Grant-Pfad, Fähigkeitsmatrix mit Einzeldiagnosen, **beweisbar assetfreier** Diagnose-Export
+- ✅ **S19 — Modding-MVP** (`packages/modding`): Manifest-Validierung mit mod-lokalen Fehlern, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order, generationsbasierte Umschaltung
 
 ## Struktur
 
@@ -36,7 +43,13 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 | `packages/convert` | Zentrale Koordinatenkonvertierung (ADR-009), Kamerarekonstruktion, Referenzprojektion, Depth-Mapping |
 | `packages/render-field` | Three.js: PerspectiveCamera-Aufbau, Letterbox-Kompositor, Tile-Depth-Hintergrundmesh, Tile-Auflösung + Atlas-Packer (Three-frei) |
 | `packages/walkmesh` | Bewegungs-Solver (Punkt-in-Dreieck, Kantenübertritt, Sliding), Gateway-Querung, Debug-Daten |
-| `packages/field-runtime` | Field-Sitzung: Fixed-Tick-Schleife über Solver + Trigger + Interpreter, Snapshot/Restore, Eingabe-Replay (framework-frei) |
+| `packages/field-runtime` | Field-Sitzung: Fixed-Tick-Schleife über Solver + Trigger + Interpreter, Snapshot/Restore, Eingabe-Replay, Field-Wechsel (framework-frei) |
+| `packages/formats-kernel` | `kernel.bin`-Container (27 gzip-Sektionen) + FF-Textdekoder mit abgeleiteter Zeichentabelle |
+| `packages/formats-save` | Eigenes Spielstandsformat + IndexedDB-Speicher; Leser für originale `save*.ff7` |
+| `packages/dialog` | Fenster-/Textlayout, Seiten, Textgeschwindigkeit, Auswahl — in Takten, DOM-frei |
+| `packages/audio` | OGG-Schleifenmarken (ohne Audiodekodierung) + Engine-Kommandomodell mit Autoplay-Sperre |
+| `packages/app-shell` | Import-Zustandsmaschine, Fähigkeitsprüfung, assetfreier Diagnose-Export |
+| `packages/modding` | Mod-Manifest-Validierung + fünfstufige Auflösungskette mit Herkunfts-Tags |
 | `packages/interpreter` | Fixed-Tick-Interpreter: VM (Kontrollfluss/Variablen/Dialog-Stub), Scheduler, Serde, Replay |
 | `packages/interpreter-debug` | Event-Timeline (JSON, asset-frei), Breakpoints + Einzelschritt |
 | `packages/formats-model` | Modellkette: hrc/rsd/p/tex/a → Skeleton/Binding/Mesh/Textur/Clip (Index-Flattening, Degradierung) |

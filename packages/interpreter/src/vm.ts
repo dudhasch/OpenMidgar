@@ -289,6 +289,36 @@ export function stepInstruction(
       ctx.waitState = { kind: 'movement', requestId };
       return { kind: 'yield' };
     }
+    // --- Audio (S17) ----------------------------------------------------------
+    // Beide Ops wirken NICHT direkt: sie reihen eine Wirkung ein, die der Host
+    // abholt. Audio darf den Tick weder verzögern noch beeinflussen, sonst wäre
+    // der Replay nicht mehr bitgenau.
+    case OP.MUSIC: {
+      rt.hostRequests.push({ kind: 'music', trackId: u8(0) });
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.SOUND: {
+      // 🟡 Operanden: Bankpaar, u16 Klang-ID, u8 Panorama (0x00…0x7F, Mitte 0x40).
+      const bankPair = u8(0);
+      rt.hostRequests.push({
+        kind: 'sound',
+        soundId: srcValue((bankPair >> 4) & 0xf, u16(1), true),
+        pan: srcValue(bankPair & 0xf, u8(3), false),
+      });
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.MAPJUMP: {
+      // 🟡 Nur der Zielfield-Index (u16@0) ist belegt; die restlichen 7 Bytes
+      // tragen vermutlich Zielposition und Blickrichtung und bleiben roh.
+      const requestId = rt.nextRequestId++;
+      rt.hostRequests.push({ kind: 'field-change', maplistIndex: u16(0), requestId });
+      ctx.ip = next;
+      // Der Kontext wartet: Ein Field-Wechsel beendet die Welt, in der er läuft.
+      ctx.waitState = { kind: 'transition' };
+      return { kind: 'yield' };
+    }
     default:
       break;
   }

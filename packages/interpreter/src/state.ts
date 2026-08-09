@@ -157,10 +157,29 @@ export function createActor(): ActorRuntime {
 /** 🟡 Vorgabe in Field-Einheiten je Takt; MSPED überschreibt sie. */
 export const DEFAULT_MOVE_SPEED = 8;
 
+/**
+ * Wirkungen nach außen (S17) — als **Daten**, nicht als Aufrufe.
+ *
+ * Musik, Kampf und Field-Wechsel sind Nebenwirkungen, die der Interpreter
+ * nicht selbst ausführen darf: Sie sind langsam, asynchron und teilweise
+ * unumkehrbar. Er reiht sie stattdessen ein, der Host arbeitet sie ab und
+ * antwortet über die Ereignisschlange. Damit bleibt jeder Tick ein reiner
+ * Zustandsübergang und der Replay bitgenau (ADR-006).
+ */
+export type HostRequest =
+  | { kind: 'music'; trackId: number }
+  | { kind: 'sound'; soundId: number; pan: number }
+  | { kind: 'battle'; encounterId: number; requestId: number }
+  | { kind: 'field-change'; maplistIndex: number; requestId: number }
+  | { kind: 'save-offer'; requestId: number };
+
 /** Externe, tick-synchron einsortierte Ereignisse (UI, Solver, …). */
 export type RuntimeEvent =
   | { kind: 'dialogue-resolved'; requestId: number; choice: number }
-  | { kind: 'movement-arrived'; requestId: number };
+  | { kind: 'movement-arrived'; requestId: number }
+  /** Kampf beendet; `outcome` wird laut Vertragstabelle in Variablen gespiegelt. */
+  | { kind: 'battle-finished'; requestId: number; outcome: number }
+  | { kind: 'transition-done'; requestId: number };
 
 export interface FieldRuntimeState {
   schemaVersion: typeof RUNTIME_SCHEMA_VERSION;
@@ -177,6 +196,8 @@ export interface FieldRuntimeState {
   /** Sichtbarer Entitätszustand, parallel zu `entities` indiziert (S12). */
   actors: ActorRuntime[];
   eventQueue: RuntimeEvent[];
+  /** Ausstehende Wirkungen nach außen; der Host leert die Liste je Takt. */
+  hostRequests: HostRequest[];
   /** Telemetrie der UNKNOWN-Politik: op → Übersprung-Zähler. */
   unknownSkips: Record<number, number>;
   /** Requests an nicht existente Entitäten/Slots (diagnostiziert, nie geraten). */

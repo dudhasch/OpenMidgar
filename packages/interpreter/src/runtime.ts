@@ -8,6 +8,7 @@ import {
   type EntityRuntime,
   type FieldRuntimeState,
   type PendingRequest,
+  type HostRequest,
   type RuntimeEvent,
   type ScriptContext,
 } from './state.js';
@@ -109,6 +110,7 @@ export class FieldRuntime {
         mainIp: null,
       })),
       eventQueue: [],
+      hostRequests: [],
       unknownSkips: {},
       droppedRequests: 0,
       faults: [],
@@ -126,6 +128,17 @@ export class FieldRuntime {
   /** Externe Ereignisse (UI, Solver) — wirken erst am nächsten Tickanfang. */
   postEvent(event: RuntimeEvent): void {
     this.state.eventQueue.push(event);
+  }
+
+  /**
+   * Nimmt die aufgelaufenen Wirkungen entgegen und leert die Liste. Der Host
+   * ruft das nach jedem Tick; unabgeholte Wirkungen sammeln sich, gehen aber
+   * nie verloren — sie sind Teil des Snapshots.
+   */
+  takeHostRequests(): HostRequest[] {
+    const out = this.state.hostRequests;
+    this.state.hostRequests = [];
+    return out;
   }
 
   enqueueRequest(entityIndex: number, slot: number, priority: number, mode: PendingRequest['mode']): boolean {

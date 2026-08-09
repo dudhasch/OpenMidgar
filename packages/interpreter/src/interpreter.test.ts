@@ -413,14 +413,14 @@ describe('Budget-Eskalation & UNKNOWN-Politik', () => {
 
   it('UNKNOWN mit bekannter Länge wird übersprungen und gezählt, der Kontext läuft weiter', () => {
     const asm = new ScriptAssembler();
-    // 0xF0 (MUSIC, Skip-Tabelle, 1 Operand) — nicht implementiert, aber Länge bekannt.
-    asm.raw(0xf0, 0x07).setByte(3, 0, 1).raw(0xf0, 0x08).setByte(3, 0, 2).ret();
+    // 0x7E (TLKON, Skip-Tabelle, 1 Operand) — nicht implementiert, Länge bekannt.
+    asm.raw(0x7e, 0x01).setByte(3, 0, 1).raw(0x7e, 0x00).setByte(3, 0, 2).ret();
     const { bytes } = asm.assemble();
     const trace = new RingTrace(16);
     const rt = new FieldRuntime(prepare([{ name: 'hero', entries: [0] }], bytes), { mainLoop: false, trace });
     rt.start();
     rt.tick();
-    expect(rt.state.unknownSkips[0xf0]).toBe(2);
+    expect(rt.state.unknownSkips[0x7e]).toBe(2);
     expect(bank(rt, 3, 0)).toBe(2); // beide Zuweisungen erreicht
     const last = trace.last(1)[0]!;
     expect(last.category).not.toBe('unknown-fault');

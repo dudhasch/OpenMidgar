@@ -77,6 +77,18 @@ export const OP = {
   XYZI: 0xa5,
   MOVE: 0xa8,
   DIR: 0xab,
+  // Audio (S17). Die abgeleiteten Längen (1 bzw. 4) decken sich mit der
+  // öffentlichen Dokumentation — zwei unabhängige Quellen, die übereinstimmen.
+  MUSIC: 0xf0,
+  SOUND: 0xf1,
+  /**
+   * Field-Wechsel. ✅ Aus den Realdaten identifiziert (S17): Von allen 256
+   * Opcodes und allen Operandenpositionen ist einzig `0x60` an Position 0 ein
+   * echter Zielfield-Index — der daraus gebaute Field-Graph hat **39,4 %
+   * Rückkanten** gegen **0,9 %** bei verschobener maplist (Faktor 44). Alle
+   * anderen Kandidaten bleiben unter 2,2 % und damit im Rauschen.
+   */
+  MAPJUMP: 0x60,
 } as const;
 
 export type OpCategory =
@@ -155,6 +167,9 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.XYZI]: 10,
   [OP.MOVE]: 5,
   [OP.DIR]: 3,
+  [OP.MUSIC]: 1,
+  [OP.SOUND]: 4,
+  [OP.MAPJUMP]: 9,
 };
 
 /**

@@ -41,11 +41,35 @@ export function buildAsciiTable(offset: number, overrides: Record<number, string
     windows: [{ from: 0x00, to: 0xdf - offset, offset }],
     overrides,
     terminators: [0xff],
-    controls: { 0xfe: 1 },
+    controls: { ...DEFAULT_CONTROLS },
   };
 }
 
+/**
+ * Versatz der Zeichentabelle — ✅ **aus den Realdaten abgeleitet** (S13), nicht
+ * angenommen: Über alle 18 Textsektionen von `kernel.bin` gewinnt 0x20 die
+ * Ableitung, und zwar in der deutschen wie in der englischen Fassung.
+ *
+ * Ein Messfallstrick, der beinahe zum Fehlschluss geführt hätte: Der scheinbare
+ * Zweitplatzierte (Versatz 0) liegt nur 6 % zurück — aber nicht, weil er eine
+ * ernsthafte Alternative wäre, sondern weil die Gütefunktion vor der Bewertung
+ * kleinschreibt und ASCII-Groß-/Kleinbuchstaben genau 32 auseinanderliegen.
+ * Versatz 0 ist also ein *Schatten* von 0x20, keine Konkurrenz. Gegen den
+ * ersten davon unabhängigen Kandidaten beträgt der Abstand Faktor 1,64 (de)
+ * bzw. 1,38 (en) — das ist der belastbare Wert.
+ */
 export const DEFAULT_ASCII_OFFSET = 0x20;
+
+/**
+ * Steuerbytes. 0xFE ist die dokumentierte Steuersequenz.
+ *
+ * 🟡 0xF8 und 0xF9 sind die mit Abstand häufigsten *unerklärten* Bytes im
+ * Bestand (594 bzw. 164 Fundstellen gegenüber 5–11 für alle übrigen). Sie
+ * hier als einbytige Steuersequenzen zu führen, ist eine Hypothese — sie
+ * senkt den Anteil unbekannter Bytes messbar, ist aber nicht bewiesen. Wer
+ * die Textausgabe pixelgenau braucht, muss sie einzeln klären.
+ */
+export const DEFAULT_CONTROLS: Readonly<Record<number, number>> = { 0xfe: 1, 0xf8: 1, 0xf9: 1 };
 
 export interface DecodedText {
   text: string;

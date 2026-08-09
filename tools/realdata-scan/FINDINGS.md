@@ -39,6 +39,32 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | Tile-Feld u16@20 als paletteId-Kandidat: nur 54 % < Seitenzahl | 🟡 Offset falsch oder zusammengesetzt — bei S9-Rendering kalibrieren (Record roh konserviert) |
 | Sektion 6: variabel 1,2–30 kB, kein Tile-Bezug erkennbar | 🟡 Zweck offen (nicht MVP-blockierend) |
 
+## S16/S17 — Audio und Opcode-Identifikation (2026-08-09)
+
+| Befund | Status |
+|---|---|
+| **Field-Wechsel-Opcode ist `0x60`, Zielfield als u16 an Operandenposition 0.** Gefunden über dieselbe Rückkantenprobe wie beim Gateway: Der aus diesen Zielen gebaute Field-Graph hat **39,4 % Rückkanten** gegen **0,9 %** bei verschobener maplist — Faktor 44. Alle anderen 255 Opcodes und Positionen bleiben unter 2,2 % | ✅ identifiziert (2157 Vorkommen) |
+| Bemerkenswert: Die reine Auflösungsquote (82,3 %) liegt *unter* der Kontrolle (86,9 %) — bei 788 maplist-Einträgen löst fast jeder Index irgendwie auf. Ohne die Rückkantenprobe wäre der Befund unsichtbar geblieben | ⚠️ Messfallstrick |
+| **Kampf-Opcode: Negativbefund.** Kein Opcode trägt erkennbar eine Encounter-ID des eigenen Fields; der beste Kandidat mit ausreichender Häufigkeit erreicht 8,8 Prozentpunkte Abstand (Faktor 1,3). Entweder ist die Kampfauslösung indirekt kodiert, oder Sektion 7 enthält zu viele Zufallstreffer | 🔴 offen |
+| Musik: 94 Titel, alle Kommentar-Header lesbar. **87 % tragen `LOOPSTART`, kein einziger `LOOPLENGTH`** | ✅ prägt das Schleifenmodell: von `LOOPSTART` bis Dateiende |
+| `audio.fmt` (54.668 B) als feste Eintragstabelle: Nur die Eintragsgrößen 4 und 79 teilen die Datei glatt; die beste Feldkombination erreicht 66 % Rahmen-, 51 % Monotonie- und 46 % Überlappungsfreiheitsquote | 🔴 Negativbefund — das Format braucht einen Vorspann oder andere Feldbreiten |
+| Musikindex → Dateiname: keine Indexdatei auffindbar, Dateinamen ohne Nummernschema (0 von 188 numerisch) | 🔴 Zuordnung offen |
+
+## S13/S14 — Kerneldaten, Textkodierung, Spielstände (2026-08-09)
+
+| Befund | Status |
+|---|---|
+| `kernel.bin` (deutsch 22.104 B, englisch 22.376 B): Kopf ist **u16 komprimiert · u16 entpackt · u16 Dateityp**, **27 Sektionen**, gzip-Ströme; die entpackte Länge stimmt in **allen 27** mit dem Kopf überein. Der Parser trägt beide Fassungen ohne eine einzige Diagnose | ✅ Formatfakt |
+| Die Datei endet mit **2 Nullbytes außerhalb des Sektionsschemas**. Der Parser lässt genau diesen Rest zu — aber nur, wenn er wirklich genullt ist | ✅ Formatfakt |
+| **Messfallstrick:** Die beiden denkbaren Kopfauslegungen sind für Sektionen unter 64 KB *byteidentisch*. Die Sektionsanzahl trennt sie nicht; entschieden wird über die entpackte Länge im Kopf | ⚠️ im Parser dokumentiert |
+| Sektionen 0–8 tragen Recorddaten, **9–26 Text** (Dateityp 9) mit u16-Zeigertabelle am Sektionsanfang | ✅ Bestand |
+| **Zeichentabellen-Versatz = 0x20, aus den Daten abgeleitet** (Gütefunktion „wie deutsch sieht das aus?"), identisch in der deutschen und der englischen Fassung | ✅ belegt |
+| **Zweiter Messfallstrick:** Der scheinbare Zweitplatzierte (Versatz 0) liegt nur 6 % zurück — weil die Gütefunktion kleinschreibt und ASCII-Groß-/Kleinbuchstaben genau 32 auseinanderliegen. Versatz 0 ist ein *Schatten* von 0x20, keine Alternative. Gegen den ersten unabhängigen Kandidaten beträgt der Abstand Faktor **1,64** (de) bzw. 1,38 (en) | ⚠️ ohne diese Einsicht wäre der Befund als „knapp" fehlgedeutet worden |
+| Textabdeckung: Mit dem linearen Fenster allein dekodieren 70,3 % der Zeichenketten vollständig; die beiden dominanten Restbytes 0xF9 (594×) und 0xF8 (164×) als Steuersequenzen ergänzt, steigt der Wert auf **98,93 %** und der Anteil unbekannter Bytes fällt von 5,4 % auf **0,04 %** | ✅ 🟡 die Deutung von 0xF8/0xF9 bleibt Hypothese |
+| `kernel2.bin` ist LZS-komprimiert und entpackt mit dem vorhandenen Dekoder zu 27.390 B (deutsch) | ✅ Pfad trägt |
+| Spielstände: 5 Dateien à 65.109 B unter `save/`; Aufteilung 9-B-Kopf + **15 Slots à 4340 B**. Belegte Slots sind sicher unterscheidbar (leer > 99,6 % genullt, belegt ≤ 39 %) | ✅ tragfähig, 🟡 Kopflänge arithmetisch mehrdeutig (9/24/39/54 gehen alle auf) |
+| **Prüfsumme ungeklärt — und ein beinahe geglaubter Fehlschluss:** Fünf CRC-16-Varianten zeigten zunächst 89 % Treffer. Die Nachrechnung ergab, dass diese Treffer **exakt den leeren Slots** entsprechen, für die eine CRC mit Startwert 0 trivial 0 liefert. Bei den 8 belegten Slots trifft **keine** Variante | 🔴 Negativbefund; der Parser prüft deshalb bewusst keine Prüfsumme |
+
 ## S12 — Operandenlängen und Bewegungs-Opcodes (2026-08-09)
 
 | Befund | Status |
