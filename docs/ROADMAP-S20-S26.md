@@ -167,6 +167,11 @@ S22 gesetzt. S26 ist bewusst „nur Fixes" — keine Feature-Versuchung.
 
 ---
 
+*Die offenen Forschungsposten (audio.fmt, Musikindex, Kampf-Opcode,
+LGP-Check-Code, R1-Prioritäten, 0xFF-Wrap, Mod-Variablenbänke) sind mit
+Methode und Ziel-Session in
+[ROADMAP-OFFENE-POSTEN.md](ROADMAP-OFFENE-POSTEN.md) eingeplant.*
+
 *Rückverweis: [ROADMAP-S13-S19.md](ROADMAP-S13-S19.md) ·
 [ROADMAP-S8-S12.md](ROADMAP-S8-S12.md) ·
 [WEBMIDGAR-MASTERPLAN.md](WEBMIDGAR-MASTERPLAN.md) ·

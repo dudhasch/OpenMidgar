@@ -2,10 +2,11 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  SAVE_EMPTY_ZERO_SHARE,
+  SAVE_CHECKSUM_FROM,
   SAVE_LAYOUTS,
   isSlotOccupied,
   parseOriginalSave,
+  saveSlotChecksum,
   type SaveFileLayout,
 } from './original.js';
 import {
@@ -32,13 +33,49 @@ function pseudoRandomBytes(length: number, seed: number): Uint8Array {
 
 const LAYOUT: SaveFileLayout = SAVE_LAYOUTS[0]!; // 9/4340, 15 Slots
 
+/**
+ * Prüfsumme des Fixture-Writers — **tabellengetrieben**, während der Parser
+ * bitweise rechnet. Die Dopplung ist Absicht: Zwei Verfahren, die dasselbe
+ * Ergebnis liefern müssen, fangen einen Denkfehler, den eine geteilte
+ * Implementierung beidseitig durchreichen würde.
+ */
+const CRC_TABLE = (() => {
+  const table = new Uint16Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n << 8;
+    for (let k = 0; k < 8; k++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xffff : (c << 1) & 0xffff;
+    table[n] = c;
+  }
+  return table;
+})();
+
+function writerChecksum(slot: Uint8Array): number {
+  let r = 0xffff;
+  for (let i = SAVE_CHECKSUM_FROM; i < slot.length; i++) {
+    r = ((r << 8) & 0xffff) ^ CRC_TABLE[((r >> 8) ^ slot[i]!) & 0xff]!;
+  }
+  return (r ^ 0xffff) & 0xffff;
+}
+
+/** Schreibt einen Slot mit gültiger Prüfsumme am Slotanfang (u16 LE). */
+function sealSlot(slot: Uint8Array): Uint8Array {
+  slot[0] = 0;
+  slot[1] = 0;
+  slot[2] = 0;
+  slot[3] = 0;
+  const crc = writerChecksum(slot);
+  slot[0] = crc & 0xff;
+  slot[1] = (crc >> 8) & 0xff;
+  return slot;
+}
+
 function buildSaveFile(occupiedIndices: readonly number[]): Uint8Array {
   const totalSize = LAYOUT.headerLength + LAYOUT.slotCount * LAYOUT.slotLength;
   const bytes = new Uint8Array(totalSize);
   for (let i = 0; i < LAYOUT.headerLength; i++) bytes[i] = 0xa0 + i;
   for (const idx of occupiedIndices) {
     const start = LAYOUT.headerLength + idx * LAYOUT.slotLength;
-    bytes.set(pseudoRandomBytes(LAYOUT.slotLength, 1000 + idx), start);
+    bytes.set(sealSlot(pseudoRandomBytes(LAYOUT.slotLength, 1000 + idx)), start);
   }
   return bytes;
 }
@@ -80,17 +117,55 @@ describe('parseOriginalSave', () => {
     // prüfen, nicht der Diagnosecode selbst.
   });
 
-  it('behauptet keine Prüfsummenprüfung: checksumRaw wird nur roh übernommen, keine W-SAVE-CHECKSUM-Diagnose', () => {
-    const bytes = buildSaveFile([0]);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    // Absichtlich eine "falsche" Prüfsumme an den Slotanfang schreiben.
-    view.setUint16(LAYOUT.headerLength, 0xdead, true);
-
+  it('bestätigt die Prüfsumme jedes belegten Slots ohne Diagnose', () => {
+    const bytes = buildSaveFile([0, 2, 5]);
     const parsed = parseOriginalSave(bytes, 'save/checksum-test.ff7');
     expect(parsed).not.toBeNull();
-    expect(parsed!.slots[0]!.checksumRaw).toBe(0xdead);
-    expect(parsed!.diagnostics.some((d) => d.code === 'W-SAVE-CHECKSUM')).toBe(false);
+    for (const slot of parsed!.slots) {
+      if (!slot.occupied) continue;
+      expect(slot.checksumValid).toBe(true);
+      expect(slot.checksumRaw).toBe(slot.checksumComputed);
+    }
     expect(parsed!.diagnostics).toEqual([]);
+  });
+
+  it('meldet W-SAVE-CHECKSUM, sobald ein belegter Slot verfälscht ist', () => {
+    const bytes = buildSaveFile([0, 2]);
+    // Ein einzelnes Byte tief im Slot kippen — die Prüfsumme selbst bleibt
+    // unangetastet, genau wie bei einer echten Beschädigung.
+    const target = LAYOUT.headerLength + 2 * LAYOUT.slotLength + 2000;
+    bytes[target] = bytes[target]! ^ 0x01;
+
+    const parsed = parseOriginalSave(bytes, 'save/broken-slot.ff7');
+    expect(parsed).not.toBeNull();
+    expect(parsed!.slots[0]!.checksumValid).toBe(true);
+    expect(parsed!.slots[2]!.checksumValid).toBe(false);
+    const warnings = parsed!.diagnostics.filter((d) => d.code === 'W-SAVE-CHECKSUM');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.slot).toBe(2);
+  });
+
+  it('meldet für genullte Slots KEINE Prüfsummenwarnung', () => {
+    const bytes = buildSaveFile([0]);
+    const parsed = parseOriginalSave(bytes, 'save/mostly-empty.ff7');
+    // 14 leere Slots — ohne die Belegtheitsbedingung gäbe es 14 Warnungen.
+    expect(parsed!.slots.filter((s) => !s.occupied)).toHaveLength(14);
+    expect(parsed!.diagnostics).toEqual([]);
+  });
+
+  it('Nachlauf-XOR: ein genullter Slot ergibt gerade NICHT die gespeicherte 0', () => {
+    // Das ist der Grund, warum die frühere 89-%-Trefferquote ein Artefakt war
+    // und die jetzige Regel keines sein kann.
+    const empty = new Uint8Array(LAYOUT.slotLength);
+    expect(saveSlotChecksum(empty)).not.toBe(0);
+  });
+
+  it('Writer und Parser rechnen unabhängig dasselbe', () => {
+    for (const seed of [1, 42, 9999]) {
+      const slot = sealSlot(pseudoRandomBytes(LAYOUT.slotLength, seed));
+      expect(saveSlotChecksum(slot)).toBe(writerChecksum(slot));
+      expect(slot[0]! | (slot[1]! << 8)).toBe(saveSlotChecksum(slot));
+    }
   });
 });
 
@@ -105,8 +180,13 @@ describe('isSlotOccupied', () => {
     expect(isSlotOccupied(data)).toBe(true);
   });
 
-  it('nutzt die dokumentierte Nullanteil-Schwelle', () => {
-    expect(SAVE_EMPTY_ZERO_SHARE).toBe(0.95);
+  it('erkennt auch einen sehr dünn beschriebenen Slot als belegt', () => {
+    // Regression: Die frühere 95-%-Nullanteil-Schwelle hätte diesen Slot
+    // verworfen. Im echten Bestand gibt es genau so einen — mit gültiger
+    // Prüfsumme.
+    const sparse = new Uint8Array(LAYOUT.slotLength);
+    sparse[4000] = 1;
+    expect(isSlotOccupied(sparse)).toBe(true);
   });
 });
 
