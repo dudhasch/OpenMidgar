@@ -81,6 +81,13 @@ flowchart LR
 
 ---
 
+---
+
+*Anschluss: [ROADMAP-S13-S19.md](ROADMAP-S13-S19.md) führt den Bogen von hier
+aus weiter (Dialoge, Persistenz, Audio, Story-Kern, App-Shell, Modding-MVP).
+Achtung, dort notiert: Das Dokument entstand während S8 und referenziert
+Soll-Ergebnisse aus S8–S12 — vor Sessionstart den Ist-Stand gegenprüfen.*
+
 *Reihenfolge-Empfehlung: S8 → S9 → S10 → S11 → S12. S8/S10 sind
 parallelisierbar; S11 braucht beide.*
 
