@@ -52,9 +52,10 @@ import {
  * (`actor-demo.ts`), aber mit echten Daten. Ausschließlich lokal gelesene
  * Originaldaten; nichts verlässt den Browser.
  *
- * Zusätzlich drei Vergleichsschalter für die R4-Sichtvalidierung
+ * Zusätzlich Vergleichsschalter für die R4-Sichtvalidierung
  * (docs/R4-MODELL-KONVENTIONEN.md, B1/B5/B6) — sie wirken NUR hier in der
- * Demo, nicht in den Bibliothekspaketen.
+ * Demo, nicht in den Bibliothekspaketen. Die Wurzelrahmen-Korrektur
+ * (R4-Fix) ist seit dem Referenz-Entscheid Vorgabe und hier abschaltbar.
  */
 
 type CameraView = 'front' | 'side' | 'top';
@@ -127,14 +128,15 @@ const axesCheckboxEl = $('toggleAxes') as HTMLInputElement;
 const viewSelectEl = $('viewSelect') as HTMLSelectElement;
 const swapCheckboxEl = $('toggleSwap') as HTMLInputElement;
 /**
- * R4-B2: Kujata setzt fuer Feldmodelle einen festen 180-Grad-Versatz auf der
- * Wurzel-X-Achse. Unsere Realdaten-Probe kann ihn NICHT entscheiden — sie
- * misst die Ausdehnung der Punktwolke, und eine 180-Grad-Drehung laesst eine
- * Bounding-Box unveraendert. Deshalb steht er hier als Schalter statt als
- * Vorgabe: Das Auge entscheidet in fuenf Sekunden, was keine Messung kann.
+ * R4-Wurzelrahmen-Fix: Die `.a`-Wurzel steht in einem gedrehten Rahmen
+ * (Kujata: rootRotationDegreesX = 180 im reinen Modellraum); mit unserem
+ * ADR-009-Wrapper heißt das Wurzel-X −90° und t_m = (t.x, −t.z, t.y).
+ * Numerisch verifiziert (docs/R4-MODELL-KONVENTIONEN.md) und deshalb
+ * standardmäßig AN — der Schalter bleibt als Vergleich für die finale
+ * Sichtprüfung an der echten Installation.
  */
-const pitchCheckboxEl = $('togglePitch') as HTMLInputElement;
-const rootPitch = (): number => (pitchCheckboxEl.checked ? 180 : 0);
+const rootFrameFixCheckboxEl = $('toggleRootFrameFix') as HTMLInputElement;
+const rootFrameFix = (): boolean => rootFrameFixCheckboxEl.checked;
 
 function setStatus(text: string): void {
   statusEl.textContent = text;
@@ -575,7 +577,8 @@ viewSelectEl.addEventListener('change', () => {
   setCameraView(viewSelectEl.value as CameraView);
 });
 
-pitchCheckboxEl.addEventListener('change', () => {
+rootFrameFixCheckboxEl.addEventListener('change', () => {
+  applyCurrentFrame();
   frameActorCamera();
 });
 
@@ -642,13 +645,13 @@ frameSliderEl.addEventListener('input', () => {
 });
 
 function applyBindPoseIfPossible(): void {
-  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton), rootPitch());
+  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton), rootFrameFix());
 }
 
 function applyCurrentFrame(): void {
   if (currentActor && currentSkeleton && currentClipBound) {
     const frame = currentClipBound.frames[frameIndex] ?? bindPoseFrame(currentSkeleton);
-    applyFrame(currentActor, currentSkeleton, frame, rootPitch());
+    applyFrame(currentActor, currentSkeleton, frame, rootFrameFix());
   }
   updateFrameLabel();
 }
