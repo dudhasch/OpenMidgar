@@ -256,4 +256,38 @@ describe('.a', () => {
     expect(result.value).toBeNull();
     expect(result.diagnostics.map((d) => d.code)).toContain('E-ANIM-SIZE');
   });
+
+  describe('Rotationsreihenfolge steht im Dateikopf, nicht im Code', () => {
+    const frames = [{ rootRotation: [0, 0, 0] as const, rootTranslation: [0, 0, 0] as const, boneRotations: [[0, 0, 0] as const] }];
+    const spec = (rotationOrder?: [number, number, number]) =>
+      composeA({
+        frames: frames.map((f) => ({
+          rootRotation: [...f.rootRotation] as [number, number, number],
+          rootTranslation: [...f.rootTranslation] as [number, number, number],
+          boneRotations: f.boneRotations.map((b) => [...b] as [number, number, number]),
+        })),
+        ...(rotationOrder ? { rotationOrder } : {}),
+      });
+
+    it('liest die Vorgabe YXZ zurück — der real belegte Wert', () => {
+      const result = parseA(spec(), 'fix.a');
+      expect(result.value!.rotationOrder).toEqual([1, 0, 2]);
+      expect(result.diagnostics.map((d) => d.code)).not.toContain('W-ANIM-ROTORDER');
+    });
+
+    it('liest eine ABWEICHENDE Reihenfolge zurück, statt sie zu überschreiben', () => {
+      // Gegenprobe zur Vorgabe: Läse der Parser die Bytes nicht wirklich,
+      // käme hier trotzdem YXZ heraus und der Test bliebe unbemerkt grün.
+      const result = parseA(spec([2, 1, 0]), 'fix.a');
+      expect(result.value!.rotationOrder).toEqual([2, 1, 0]);
+      expect(result.diagnostics.map((d) => d.code)).not.toContain('W-ANIM-ROTORDER');
+    });
+
+    it('W-ANIM-ROTORDER, wenn das Tripel keine Permutation ist', () => {
+      const result = parseA(spec([1, 1, 2]), 'fix.a');
+      expect(result.diagnostics.map((d) => d.code)).toContain('W-ANIM-ROTORDER');
+      // Kein Raten: Rückfall auf die einzige real belegte Reihenfolge.
+      expect(result.value!.rotationOrder).toEqual([1, 0, 2]);
+    });
+  });
 });

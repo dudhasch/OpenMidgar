@@ -11,7 +11,8 @@ export type ModelDiagnosticCode =
   | 'E-TEX-FORMAT' // nicht unterstütztes Pixelformat
   | 'E-TEX-BOUNDS' // Palettenindex außerhalb der Palette
   | 'E-ANIM-SIZE' // Header vs. Datenlänge inkonsistent
-  | 'W-ANIM-BONES'; // Bone-Zahl ≠ Skelett (Clamp/Pad-Toleranzregel)
+  | 'W-ANIM-BONES' // Bone-Zahl ≠ Skelett (Clamp/Pad-Toleranzregel)
+  | 'W-ANIM-ROTORDER'; // Reihenfolge-Tripel im Kopf ist keine Permutation von {0,1,2}
 
 export interface ModelDiagnostic {
   code: ModelDiagnosticCode;

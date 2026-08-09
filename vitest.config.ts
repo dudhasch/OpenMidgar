@@ -27,10 +27,16 @@ export default defineConfig({
       '@webmidgar/io': r('./packages/io/src/index.ts'),
       '@webmidgar/cache': r('./packages/cache/src/index.ts'),
       '@webmidgar/fixture-gen': r('./tools/fixture-gen/src/index.ts'),
+      '@webmidgar/nfr-run': r('./tools/nfr-run/src/index.ts'),
     },
   },
   test: {
     include: ['packages/*/src/**/*.test.ts', 'tools/*/src/**/*.test.ts'],
     environment: 'node',
+    // `--expose-gc` macht die Heap-Messung der NFR-Läufe erst belastbar:
+    // ohne erzwungene Speicherbereinigung ist ein Baselinevergleich nur
+    // Rauschen (gemessen: 12,5 % „Abweichung" ohne echtes Leck).
+    pool: 'forks',
+    poolOptions: { forks: { execArgv: ['--expose-gc'] } },
   },
 });

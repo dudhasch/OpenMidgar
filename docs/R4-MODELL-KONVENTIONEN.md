@@ -208,3 +208,43 @@ wäre genau der Fehler, den dieses Projekt sonst vermeidet. Der Pitch steht
 deshalb als **Schalter** auf der Demoseite (`Wurzel-Pitch 180°`), nicht als
 Vorgabe — die Realdaten-Probe kann ihn nicht entscheiden, weil eine
 180°-Drehung eine Bounding-Box unverändert lässt.
+
+### B2 — die Reihenfolge ist es nachweislich nicht (2026-08-10)
+
+KimeraCS liest im `.a`-Kopf drei Bytes `rotationOrder`. Läge dort eine je
+Datei wechselnde Reihenfolge, wäre das die **vollständige** Erklärung dafür,
+dass animierte Frames nur in 10/76 Fällen aufrecht stehen: Eine fest
+verdrahtete Reihenfolge müsste überall dort scheitern, wo die Datei etwas
+anderes sagt.
+
+Gemessen über alle 3209 `.a`-Dateien der Installation:
+
+| | |
+|---|---|
+| Versatz 12..14 ist eine Permutation von {0,1,2} | **3209/3209** |
+| Kontrollversätze 13 und 16 | **0/3209** und **0/3209** |
+| belegte Reihenfolgen | **genau eine: YXZ** (3209 ×) |
+| Byte 15, `version` | 0 bzw. 1 in allen Dateien |
+
+Das Feld ist echt — ein Zufallstripel bestünde den Permutationstest mit
+6 / 2²⁴ —, aber es **variiert nicht**. Die Hypothese ist damit sauber
+widerlegt und B2s Ursache liegt woanders. Unser YXZ ist zugleich bestätigt,
+und der Parser liest die Reihenfolge jetzt aus der Datei (`W-ANIM-ROTORDER`
+bei Abweichung), statt sie anzunehmen.
+
+**Nebenertrag:** Dass im Frame die Wurzelrotation **vor** der Wurzeltranslation
+steht, war bisher 🟡. Zwei unabhängige Fremdimplementierungen lesen es so —
+🟡 → 🟢.
+
+**Die verbleibende Spur — und warum sie bisher falsch gemessen wurde.**
+KimeraCS versetzt **Field**-Bones mit `translate(0, 0, −len)`, **Battle**-Bones
+dagegen mit `+len`; Kujata nutzt für Field ebenfalls `−len`. Zwei unabhängige
+Quellen sagen also `−len`, und unsere Messung sagt, dass `−len` alles
+verschlechtert.
+
+Dieser Widerspruch ist auflösbar: Gemessen wurde das Vorzeichen **einzeln**,
+bei unverändertem Achsen-Basiswechsel `(x, z, −y)`. Beide Größen beschreiben
+dieselbe Händigkeit. Eine davon zu drehen kippt das Ergebnis, beide zu drehen
+womöglich nicht — genau die Kopplungsfalle, die dieses Projekt an anderer
+Stelle schon einmal Zeit gekostet hat. Der nächste Anlauf muss das Kreuzprodukt
+aus Versatzvorzeichen × Basiswechsel durchmessen, nicht eine Achse davon.

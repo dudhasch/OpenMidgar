@@ -251,3 +251,73 @@ Offene Semantikfragen (Achsen, Eulerorder, BGRA, …): [R4-Notiz](../../docs/R4-
 |---|---|
 | **FFNx parst `audio.fmt` nicht.** Es greift auf das vom Spiel gefüllte Array `ff7_externals.sfx_fmt_header` zu und ruft die spieleigene Ladefunktion. Der Dateivorspann ist dort also nicht zu holen | 🔴 Quelle scheidet aus |
 | **FFNx führt keine Musiknamensliste.** Der Name kommt aus `common_externals.get_midi_name(musicId)` — einer Funktion in der EXE | 🔴 Quelle scheidet aus |
+
+## S20 — NFR-Messkampagne, Soak, R5 und R9 (2026-08-10)
+
+Vollständige Berichte: [NFR](../../docs/NFR-BERICHT-S20.md) ·
+[R9](../../docs/R9-CROSSBROWSER.md) · [R5](../../docs/R5-FINGERPRINT-MATRIX.md) ·
+[ADRs](../../docs/ADR-S20-HAERTUNG.md). Hier nur die Befunde, die aus den
+Realdaten stammen.
+
+| Befund | Status |
+|---|---|
+| **Alle Desktop-NFRs der Phase 2.4 eingehalten.** 702 Fields, 0 Bundle-Fehler: Field-Wechsel p95 **10,12 ms** gegen 500 ms, TTFF kalt **48,4 ms** gegen 10 s, warm **28,9 ms** gegen 2 s, Modellkette kalt **2,15 ms** gegen 300 ms, Heap **25,2 MB** gegen 256 MB, VRAM-Schätzung **32 MB** gegen 512 MB | ✅ gemessen |
+| **Knappster Wert: der Main-Thread-Task** mit 7,42 ms gegen 8 ms (7 % Luft). Es ist die längste von 702 Tick-Etappen zu je 60 Takten; der Median liegt bei 0,35 ms. Kein Verstoß, aber die einzige Zahl, die bei künftiger Tick-Arbeit beobachtet gehört | ⚠️ Beobachtungsposten |
+| **Lastprofil des Field-Wechsels:** Atlasaufbau 1823,7 ms und LZS 1102,7 ms von 3684,0 ms Gesamtarbeit über 702 Wechsel — zusammen **79,4 %**. Die IO-Etappe (Slice-Read) ist mit 448,6 ms überraschend klein; das Verzeichnis trägt | ✅ ADR-010-Grundlage |
+| **Soak über 500 Field-Wechsel auf echten Fields:** GPU-Buchführung kehrt exakt auf 0 zurück (500 Erwerbe, 500 Freigaben, 0 Fehlfreigaben), Heap **+1,07 %** gegen die Steady-State-Baseline, Verlauf flach von Wechsel 50 bis 500. Der Sitzungsdigest des ersten Rotationsfields ist im 476. Zyklus identisch zum ersten | ✅ leckfrei + zustandsfrei |
+| **Heap-Baseline muss nach einer Aufwärmrunde genommen werden.** Gegen den Zustand vor dem ersten Wechsel gemessen meldete ein Lauf 5,85 % „Abweichung" — das waren JIT- und Cache-Einmalkosten, kein Leck. Der flache Verlauf ab Wechsel 50 belegt das. Eine Baseline vor der Aufwärmphase misst die Einmalkosten mit | ⚠️ methodische Lehre |
+| **57 LGP-Archive der Installation, 0 mit fatalem Headerfehler, 0 Einträge in Quarantäne**, Terminator und Lookup-Tabelle in allen 57 reproduzierbar | ✅ R5-Grundlage |
+| **Release-Fingerprint muss inhaltsstrukturell sein.** Der vorhandene Archiv-Fingerprint enthält Pfad und mtime (Cache-Key nach ADR-008) und ist als Release-Kennung unbrauchbar — eine Kopie derselben Datei bekommt einen anderen Wert. Der neue Fingerprint hasht nur die TOC-Struktur | ✅ Formatentscheidung |
+| **Trennschärfe des Fingerprints in beide Richtungen belegt:** 10 Paare identischer Dateien (Hauptbaum ↔ Sicherungskopie, verschiedene Pfade und mtimes) liefern identische Werte; 5 Archivrollen (`condor`, `disc`, `snowboard`, `sub` je 4 Fassungen, `flevel` 2) liefern verschiedene | ✅ Sensitivität + Stabilität |
+| **Negativbefund: Die Game-Converter-Sicherungen sind byteidentisch zum Hauptbaum.** Der Konverter hat diese Archive nicht angefasst. Ebenso sind `cr_*`, `high-*`, `menu_*` und `world_*` über alle vier Sprachkürzel identisch — die Sprachfassung steckt dort nicht im Archiv. Ohne die Rollen-Sensitivitätsmessung hätte die Matrix nur gleiche Werte gezeigt und wie ein kaputter Fingerprint ausgesehen | 🔵 unerwartet |
+| **R9: Chromium 151 lieferte einen abweichenden Replay-Digest** (Vektor `skript`), Node 22 und Chromium 148 stimmten überein. Ursache per Math-Fingerprint eingegrenzt: `atan2`, `sin`, `cos`, `log` und `exp` unterscheiden sich **zwischen zwei V8-Ständen**; `sqrt`, `hypot` und `pow` nicht | 🔴 echter Fund |
+| **Warum nur ein Vektor betroffen war:** Tastatureingaben rufen `atan2` nur mit acht diskreten Richtungsvektoren auf — deren Ergebnisse stimmten überein. Die skriptgesteuerte Zielführung ruft `atan2` mit beliebigen Differenzvektoren. Ein einzelner Vektor hätte den Fehler übersehen | ⚠️ methodische Lehre |
+| **Behoben:** Richtungswinkel werden auf die 256 Richtungseinheiten des Originals quantisiert (Vielfache von 1,40625° — binär exakt), `Math.hypot` durch `Math.sqrt(x²+y²)` ersetzt (ECMA-262 legt `sqrt` bitgenau fest, `hypot` nicht). Danach stimmen alle drei Vektoren über Node 22, Chromium 148 und Chromium 151 überein | ✅ gehärtet |
+| **Expositionsmaß statt Bauchgefühl:** 5580 Aufrufe implementierungsdefinierter Math-Funktionen je Replay (atan2 1384, hypot 4196) gegen 34.232 bitgenau festgelegte — **14,02 %**. Der Kontrolllauf mit ausschließlich `sqrt`/`abs`/`floor` meldet exakt 0; ohne diese Null wäre nicht zu unterscheiden, ob die Instrumentierung überhaupt misst | ✅ Kontrollhypothese |
+| **GPU-Upload: eine ganze 2048²-Atlasseite kostet 5,4 ms (p95)** und verfehlt das 2-ms-Frame-Budget um 170 %. In 8 Streifen zerlegt: **1,0 ms je Streifen**. Die Gesamtzeit bleibt gleich, sie verteilt sich nur. Gemessen mit `gl.finish()` — ohne erzwungenes Fertigstellen misst man nur das Einreihen des Befehls und bekommt immer eine gute Zahl | 🔴 Verletzung → ADR-021 |
+
+## `audio.fmt` — Vorspann gelöst (2026-08-10)
+
+Der Befund oben („FFNx parst `audio.fmt` nicht") bleibt richtig, war aber nur
+das Ende **einer** Spur. FF7SND benennt die Struktur, und sie hält gegen die
+eigenen Daten.
+
+| Befund | Status |
+|---|---|
+| **Vorspann vollständig: 24 B aus sechs `uint32`** — `Length, Offset, Loop, Count, Start, End` — gefolgt von einem `ADPCMWAVEFORMAT` (18 B WAVEFORMATEX + 32 B Zusatz = 50 B). Zusammen **74 B**, exakt die zuvor hypothesenfrei gemessene Eintragsgröße | ✅ Formatfakt |
+| **Der Beweis ist das Accounting, nicht eine Quote.** Die 198 belegten Einträge beschreiben Bereiche in `audio.dat`, die bei 0 beginnen und **lückenlos und überlappungsfrei** bis 23.227.348 laufen: 0 Lücken, 0 Überlappungen, 0 außerhalb der Datei. Eine falsche Feldzuordnung erzeugt Löcher oder Überschneidungen | ✅ byteexakt |
+| **Zweite, unabhängige Vorhersage hält:** Ist `Loop` ein Flag und sind `Start`/`End` seine Marken, muss `End` genau dann gesetzt sein, wenn `Loop` gesetzt ist — **198/198**, davon 20 mit Schleife | ✅ zweiter Weg |
+| **Dritte Bestätigung:** Eintrag 198 ist die Abschlussmarke — `Length == 0` und `Offset` **genau** am Ende der Nutzdaten | ✅ dritter Weg |
+| `cbSize == 32` und `NumCoef == 7` in 198/198 (MS-ADPCM-Standardbelegung); Kontrollversätze 0 und 10 in **0/198** | ✅ Kontrolle fällt durch |
+| **Warum der erste Anlauf scheitern musste.** Das WAVEFORMATEX beginnt bei Versatz **24** — dem Wert, der sich aus 74 − 50 zwingend ergibt. Geprüft wurden damals 0 und 10. Die Suche lief über vermutete Stellen statt über die rechnerisch erzwungene | ⚠️ Lehre: die Rechnung sagte den Versatz voraus, sie wurde nur nicht befragt |
+| **Der Nullwert-Fallstrick, diesmal andersherum.** Ab Eintrag 199 steht uninitialisierter Speicher — die Bytes folgen dem MSVC-Füllmuster `0xCD`. Mitgezählt drückt das jede Quote auf 28,9 %, ohne dass die Auslegung falsch wäre. Der zweite Anlauf ist genau daran fast gescheitert | ⚠️ methodische Lehre |
+| **Offen (kleiner als vorher):** Von 71.738.528 B in `audio.dat` sind **23.227.348 B = 32,4 %** referenziert. Die restlichen 48,5 MB adressiert diese Tabelle nicht | 🟡 Restfrage |
+
+## `.a`-Rotationsreihenfolge — im Kopf, aber konstant (2026-08-10)
+
+Geprüft wurde die Hypothese, wechselnde Reihenfolgen könnten erklären, warum
+animierte Frames kippen (R4-B2, bisher 10/76 aufrecht). **Sie ist widerlegt.**
+
+| Befund | Status |
+|---|---|
+| **Die Rotationsreihenfolge steht in der Datei** (Versatz 12..14), nicht in der Engine: drei Bytes, je 0 = alpha/X, 1 = beta/Y, 2 = gamma/Z. In **3209/3209** Dateien ist das Tripel eine Permutation von {0,1,2}; die Kontrollversätze 13 und 16 liefern in **exakt 0** Fällen eine. Ein Zufallstripel bestünde das mit 6 / 2²⁴ | ✅ Formatfakt |
+| **Es kommt genau eine Reihenfolge vor: YXZ (3209/3209).** Byte 15 ist in allen Dateien 0, `version == 1` in allen | ✅ belegt |
+| **Damit ist die Hypothese tot und unser fest verdrahtetes YXZ bestätigt.** Der Parser liest die Reihenfolge trotzdem aus der Datei und meldet `W-ANIM-ROTORDER` bei Abweichung — eine gemessene Konstante ist etwas anderes als eine angenommene | ✅ Annahme → Datum |
+| Nebenbefund, unabhängig bestätigt: Im Frame steht **Wurzelrotation vor Wurzeltranslation** (zwei Fremdimplementierungen, zuvor 🟡) | ✅ 🟡 → 🟢 |
+| **Die verbleibende Spur für B2:** KimeraCS versetzt Field-Bones mit `translate(0, 0, −len)`, Battle-Bones dagegen mit `+len`; Kujata nutzt ebenfalls `−len`. Wir haben `−len` gemessen und es machte alles schlechter — aber **einzeln**, bei unverändertem Achsen-Basiswechsel. Vorzeichen und Basis gehören gemeinsam getestet | ⚠️ Kopplungsfalle |
+
+## Musikindex — verengt, nicht gelöst (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| Kujata führt eine **indizierte** Liste mit 100 Einträgen (id 0..99). Alle **94** lokalen OGG-Namen kommen darin vor; sechs Einträge haben lokal keine Datei, ein Name ist doppelt vergeben | 🟡 Kandidat |
+| **Die daraus abgeleitete scharfe Vorhersage fällt durch:** „kein `MUSIC`-Operand ≥ 100" — verletzt in **36 von 935** Vorkommen | 🔴 nicht erfüllt |
+| **Nicht entscheidungsfähig, und das ist der eigentliche Befund.** Der Kandidat ist mit 3,9 % zwar halb so schlecht wie die Kontrollmenge (Byte vor dem Opcode, 8,4 %) — aber die Ausreißer sind über viele Werte gestreut statt auf einen Sentinel wie 0xFF konzentriert, und ihr Anteil liegt in der Größenordnung der bekannten Fault-Rate des Spannen-Durchlaufs (~3 %, S12). Die Messung kann „Liste stimmt, Durchlauf verrutscht" nicht von „Liste stimmt nicht" trennen | ⚠️ blockiert auf O9 |
+| Nebenbefund: Feldmusik nutzt nur **34** verschiedene Indizes von 94 Titeln | ✅ Zahl |
+
+## LGP-Check-Code — vier Implementierungen, keine Semantik (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| Landscaper, PyFF7, Makou Reactor und WebMidgar lesen das 1-Byte-Feld je TOC-Eintrag und **verwenden es nicht**. Keine der vier Quellen nennt eine Bedeutung | 🔴 Recherche erschöpft |
+| **Konsequenz:** O5 ist keine Recherche-, sondern eine Messfrage. Die geplante Doppelmessung (Prüfwert über Name/Inhalt gegen Ordnungshinweis über Position) bleibt der einzige Weg — die beiden Hypothesen machen gegensätzliche Vorhersagen, eine muss durchfallen | 🔵 Vorgehen bestätigt |

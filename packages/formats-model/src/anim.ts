@@ -5,14 +5,34 @@ import type { ParseResult } from './hrc.js';
 /**
  * `.a`-Parser (Feld-Animation) — Framegröße realdaten-validiert
  * (3209/3209 Dateien): Header 36 B, Frame = 24 B Wurzel + 12 B je Bone.
- * 🟡 R4 offen: Zuordnung der 24 Wurzel-Bytes (Annahme: Rotation vor
- * Translation) sowie Winkelreihenfolge/-vorzeichen — beides an genau einer
- * Stelle in render-actor ausgewertet, per „Bekannte Pose"-Fixture geprüft.
+ *
+ * 🟢 Die **Rotationsreihenfolge steht im Kopf** (Versatz 12..14), nicht in der
+ * Engine: drei Bytes, je 0 = alpha/X, 1 = beta/Y, 2 = gamma/Z. Belegt über
+ * 3209/3209 Dateien — dort ist das Tripel **immer** eine Permutation von
+ * {0,1,2}, während die beiden Kontrollversätze 13 und 16 in **exakt 0** Fällen
+ * eine ergeben. Ein zufälliges Bytetripel bestünde diesen Test mit
+ * Wahrscheinlichkeit 6 / 2^24.
+ *
+ * Gemessen kommt genau **eine** Reihenfolge vor: YXZ (3209/3209). Damit ist
+ * die frühere Vermutung widerlegt, wechselnde Reihenfolgen könnten erklären,
+ * warum animierte Frames kippen — sie wechseln nicht. 🟡 R4-B2 bleibt offen,
+ * die Ursache liegt woanders.
+ *
+ * 🟢 Die Zuordnung der 24 Wurzel-Bytes (Rotation VOR Translation) ist durch
+ * zwei unabhängige Fremdimplementierungen gestützt und war zuvor 🟡.
  */
 
 const HEADER_LEN = 36;
 const ROOT_LEN = 24;
 const BONE_LEN = 12;
+/** Versatz der drei Reihenfolge-Bytes im Kopf. */
+const ROT_ORDER_AT = 12;
+
+/** Ist das Tripel eine Permutation von {0,1,2}? */
+function istPermutation(a: number, b: number, c: number): boolean {
+  if (a > 2 || b > 2 || c > 2) return false;
+  return a !== b && b !== c && a !== c;
+}
 
 export function parseA(bytes: Uint8Array, asset: string): ParseResult<AnimationClipSource> {
   const diagnostics: ModelDiagnostic[] = [];
@@ -44,8 +64,24 @@ export function parseA(bytes: Uint8Array, asset: string): ParseResult<AnimationC
     });
   }
 
+  const ro: [number, number, number] = [
+    bytes[ROT_ORDER_AT]!,
+    bytes[ROT_ORDER_AT + 1]!,
+    bytes[ROT_ORDER_AT + 2]!,
+  ];
+  if (!istPermutation(ro[0], ro[1], ro[2])) {
+    // Keine gültige Reihenfolge: Wir raten nicht, sondern melden und fallen
+    // auf die einzige real belegte zurück.
+    diagnostics.push(
+      mdiag('W-ANIM-ROTORDER', asset, `Reihenfolge-Tripel (${ro.join(',')}) ist keine Permutation von {0,1,2}`),
+    );
+    ro[0] = 1;
+    ro[1] = 0;
+    ro[2] = 2;
+  }
+
   return {
-    value: { schemaVersion: 1, boneCount, frames, diagnostics },
+    value: { schemaVersion: 1, boneCount, frames, rotationOrder: ro, diagnostics },
     diagnostics,
   };
 }

@@ -1,5 +1,22 @@
 import type { Walkmesh } from '@webmidgar/formats-field';
 
+
+/**
+ * Länge eines 2D-Vektors — bewusst `sqrt(x²+y²)` statt `Math.hypot`.
+ *
+ * R9-Härtung (S20): ECMA-262 legt `sqrt` und die Grundrechenarten bitgenau
+ * auf IEEE-754 fest, `Math.hypot` dagegen ausdrücklich nicht. Gemessen wurde
+ * am 2026-08-10, dass sich `atan2`, `sin`, `cos`, `log` und `exp` bereits
+ * zwischen zwei V8-Ständen unterscheiden — dieselbe Klasse Funktion, dasselbe
+ * Risiko. Da jede Kantenlänge und jeder Schrittrest in den Replay-Digest
+ * einfließt, wird hier die bitgenau festgelegte Form verwendet. Der
+ * Überlaufschutz von `hypot` wird nicht gebraucht: Field-Koordinaten liegen
+ * weit innerhalb des Wertebereichs.
+ */
+function laenge2d(x: number, y: number): number {
+  return Math.sqrt(x * x + y * y);
+}
+
 /**
  * Walkmesh-Bewegungs-Solver (Masterplan Phase 3.3).
  * Arbeitet im FF7-Field-Raum (Grundriss x/y, Höhe z) — die Konvertierung in
@@ -86,7 +103,7 @@ export class WalkmeshSolver {
       const ys: [number, number, number] = [a[1], b[1], c[1]];
       const edgeLen = [0, 1, 2].map((e) => {
         const f = (e + 1) % 3;
-        return Math.hypot(xs[f]! - xs[e]!, ys[f]! - ys[e]!) || TINY;
+        return laenge2d(xs[f]! - xs[e]!, ys[f]! - ys[e]!) || TINY;
       }) as [number, number, number];
       return { xs, ys, pA, pB, pC, det, walkable, adj: [...t.adjacency], edgeLen };
     });
@@ -172,7 +189,7 @@ export class WalkmeshSolver {
     let slides = 0;
 
     for (let iter = 0; iter < this.opts.maxCrossings; iter++) {
-      if (Math.hypot(rx, ry) < TINY) break;
+      if (laenge2d(rx, ry) < TINY) break;
       const tx = x + rx;
       const ty = y + ry;
       if (this.containsPoint(tri, tx, ty, this.opts.epsDist)) {

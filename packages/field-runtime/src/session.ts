@@ -152,6 +152,48 @@ function insideVolume(v: FieldTriggerVolume, x: number, y: number): boolean {
   return x >= x0 && x <= x1 && y >= y0 && y <= y1;
 }
 
+/**
+ * Länge eines 2D-Vektors ohne `Math.hypot` (R9-Härtung, S20).
+ *
+ * `Math.sqrt` und die Grundrechenarten sind in ECMA-262 bitgenau auf
+ * IEEE-754 festgelegt, `Math.hypot` ist es nicht. Da jede dieser Längen über
+ * Positionen in den Replay-Digest einfließt, wird die festgelegte Form
+ * verwendet.
+ */
+function laenge2d(x: number, y: number): number {
+  return Math.sqrt(x * x + y * y);
+}
+
+/** Volle Umdrehung in Richtungseinheiten — das Original führt Richtungen als Byte. */
+export const RICHTUNGSEINHEITEN = 256;
+
+/**
+ * Richtung eines Bewegungsvektors in Grad, **quantisiert auf die 256
+ * Richtungseinheiten des Originals**.
+ *
+ * Das ist die zentrale R9-Härtung dieser Session. Gemessen am 2026-08-10:
+ * `Math.atan2` liefert zwischen zwei V8-Ständen (Node 22 und Chrome 151)
+ * unterschiedliche Bitmuster — der Replay-Digest des skriptgesteuerten
+ * Vektors wich dadurch ab, obwohl beide Läufe fachlich identisch waren. Roh
+ * gespeicherte Winkel tragen die letzten Bits von `atan2` in den Zustand und
+ * damit in den Digest.
+ *
+ * Die Quantisierung entfernt genau diese Bits: Ergebnis ist immer ein
+ * ganzzahliges Vielfaches von 360/256 = 1,40625 — im Binärsystem exakt
+ * darstellbar, also über Engines hinweg bitgleich. Fachlich ist das keine
+ * Einbuße, sondern näher am Original, das Richtungen ohnehin als Byte führt.
+ *
+ * Rest­risiko: Liegt ein `atan2`-Ergebnis exakt auf einer Rundungsgrenze,
+ * könnten zwei Engines in verschiedene Eimer runden. Das ist nicht
+ * ausgeschlossen, sondern nur sehr unwahrscheinlich — und es ist der Grund,
+ * warum die Replay-Vektoren als Regressionstest bestehen bleiben.
+ */
+export function richtungGrad(dx: number, dy: number): number {
+  const einheit = Math.round((Math.atan2(dy, dx) * (RICHTUNGSEINHEITEN / 2)) / Math.PI);
+  const normiert = ((einheit % RICHTUNGSEINHEITEN) + RICHTUNGSEINHEITEN) % RICHTUNGSEINHEITEN;
+  return normiert * (360 / RICHTUNGSEINHEITEN);
+}
+
 export class FieldSession {
   readonly fieldId: string;
   readonly solver: WalkmeshSolver | null;
@@ -243,7 +285,7 @@ export class FieldSession {
       moveEvents.push(...result.events);
       this.player = {
         walk: result.state,
-        facing: (Math.atan2(dy, dx) * 180) / Math.PI,
+        facing: richtungGrad(dx, dy),
         moving: true,
       };
       const next = { x: result.state.x, y: result.state.y };
@@ -356,7 +398,7 @@ export class FieldSession {
       }
       const dx = target.x - state.x;
       const dy = target.y - state.y;
-      const dist = Math.hypot(dx, dy);
+      const dist = laenge2d(dx, dy);
       if (dist <= a.moveSpeed) {
         // Zielnähe: exakt setzen und quittieren.
         const final = this.solver.locate(target.x, target.y) ?? state;
@@ -368,10 +410,10 @@ export class FieldSession {
         continue;
       }
       const step = this.solver.move(state, (dx / dist) * a.moveSpeed, (dy / dist) * a.moveSpeed);
-      const progressed = Math.hypot(step.state.x - state.x, step.state.y - state.y);
+      const progressed = laenge2d(step.state.x - state.x, step.state.y - state.y);
       a.position = [step.state.x, step.state.y, step.state.height];
       a.triangle = step.state.tri;
-      a.direction = (Math.atan2(dy, dx) * 180) / Math.PI;
+      a.direction = richtungGrad(dx, dy);
       if (progressed < MOVE_MIN_PROGRESS) {
         const stalls = (this.moveStalls.get(entityIndex) ?? 0) + 1;
         this.moveStalls.set(entityIndex, stalls);

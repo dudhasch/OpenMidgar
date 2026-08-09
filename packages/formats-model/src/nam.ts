@@ -82,8 +82,23 @@ export interface AnimationClipSource {
   schemaVersion: 1;
   boneCount: number;
   frames: AnimationFrame[];
+  /**
+   * Rotationsreihenfolge aus dem Dateikopf, als Achsenfolge (0 = X/alpha,
+   * 1 = Y/beta, 2 = Z/gamma). 🟢 Realdaten-belegt: In allen 3209 `.a`-Dateien
+   * der Installation steht [1, 0, 2] = **YXZ**, und die beiden
+   * Kontrollversätze treffen in exakt 0 Fällen.
+   *
+   * Das Feld wird mitgeführt, statt die Reihenfolge fest zu verdrahten — sie
+   * ist nachweislich ein **Datum der Datei**, keine Konstante der Engine.
+   * Weicht eine Datei ab, meldet der Parser `W-ANIM-ROTORDER`, statt still
+   * falsch zu rechnen.
+   */
+  rotationOrder: [number, number, number];
   diagnostics: ModelDiagnostic[];
 }
+
+/** Die einzige in freier Wildbahn belegte Reihenfolge: YXZ. */
+export const ROTATION_ORDER_YXZ: readonly [number, number, number] = [1, 0, 2];
 
 export function fnv1a32Numbers(values: number[]): number {
   let h = 0x811c9dc5;

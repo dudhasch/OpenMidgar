@@ -20,9 +20,45 @@ Messung lügt".
 | Kampf-Opcode | 🔴 | 🟢 **gelöst** (`BATTLE` = 0x70, verdrahtet und getestet) |
 | R4-Sichtprüfungen B1–B8 | ⏳ | ⏳ unverändert (braucht ein Auge, s. u.) |
 
+## Stand nach der Repo-Recherche 2026-08-10
+
+| Posten | vorher | jetzt |
+|---|---|---|
+| **O1 `audio.fmt`-Vorspann** | 🟡 | 🟢 **gelöst** — 24 B aus sechs u32, Accounting lückenlos über 198 Einträge, Kontrollen bei 0/198 |
+| **O2 Musikindex** | 🟡 | 🟡 verengt: indizierte 100er-Liste deckt alle 94 lokalen Titel, aber die scharfe Vorhersage fällt durch (36/935). **Blockiert auf O9** |
+| **O5 LGP-Check-Code** | 🔴 | 🔴 unverändert, aber **Recherche abgeschlossen**: vier Implementierungen lesen und ignorieren das Byte. Nur noch Messfrage |
+| **R4-B2 Rotationsreihenfolge** | 🟡 | 🟢 als Datum belegt (im Dateikopf, 3209/3209 YXZ) — die Hypothese „wechselnde Reihenfolge erklärt B2" ist **widerlegt**, neue Spur: Versatzvorzeichen ⊗ Achsenbasis |
+| **Beweismaßstab für EXE-Größen** | offen | 🔵 [ROADMAP-S37-EXE-ANALYSE.md](ROADMAP-S37-EXE-ANALYSE.md) — Datentabellen lesen ist Import, nicht Dekompilierung |
+
 ---
 
-## O1 — `audio.fmt` schließen (Ziel: S23, vorziehbar)
+## O1 — `audio.fmt` ✅ gelöst
+
+**Ergebnis.** Je Eintrag 24 B Vorspann aus sechs `uint32` —
+`Length, Offset, Loop, Count, Start, End` — gefolgt von einem
+`ADPCMWAVEFORMAT` (50 B). Zusammen 74 B, exakt die gemessene Eintragsgröße.
+
+**Belegt durch Accounting, nicht durch eine Quote:** Die 198 belegten Einträge
+beschreiben Bereiche in `audio.dat`, die bei 0 beginnen und lückenlos sowie
+überlappungsfrei bis 23.227.348 laufen. Zwei unabhängige Zweitprüfungen
+halten: `Loop` ist genau dann gesetzt, wenn `End` gesetzt ist (198/198), und
+Eintrag 198 ist die Abschlussmarke mit `Length == 0` und `Offset` exakt am
+Datenende. Kontrollversätze 0 und 10: **0/198**.
+
+**Warum der erste Anlauf scheitern musste — die Lehre.** Das WAVEFORMATEX
+beginnt bei Versatz **24**, dem Wert, der sich aus 74 − 50 zwingend ergibt.
+Geprüft wurden 0 und 10. Die Rechnung hatte den Versatz die ganze Zeit
+vorhergesagt; sie wurde nur nicht befragt. Das ist ein dritter Fehlertyp neben
+„falsche Suchmenge" und „blinde Gütefunktion": **die Antwort lag in einer
+Rechnung, die schon dastand.**
+
+**Offen geblieben:** Nur 32,4 % von `audio.dat` sind referenziert; 48,5 MB
+adressiert diese Tabelle nicht. 🟡
+
+**Erst danach** lohnt sich der MS-ADPCM-Dekoder (reiner TS-Code,
+Node-testbar) — jetzt mit belegten Bereichsgrenzen.
+
+## O1-alt — der Weg dorthin (historisch)
 
 **Stand.** Die Eintragsgröße **74 Byte** ist hypothesenfrei gemessen: Häufige
 u32-Konstanten wiederholen sich zu 87,1 % im Abstand 74 (Zweitplatzierter

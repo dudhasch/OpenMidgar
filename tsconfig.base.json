@@ -32,7 +32,8 @@
       "@webmidgar/telemetry": ["./packages/telemetry/src/index.ts"],
       "@webmidgar/io": ["./packages/io/src/index.ts"],
       "@webmidgar/cache": ["./packages/cache/src/index.ts"],
-      "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"]
+      "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"],
+      "@webmidgar/nfr-run": ["./tools/nfr-run/src/index.ts"]
     }
   }
 }

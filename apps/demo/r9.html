@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — R9 Replay-Digest-Vergleich</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; padding: 0 1rem; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>R9 — Replay-Digest-Vergleich</h1>
+  <p>
+    Berechnet die Replay-Vektoren <strong>synchron beim Laden</strong> und schreibt das
+    Ergebnis in die Seite. Damit ist die Seite auch für kopflose Browserläufe
+    (<code>--dump-dom</code>) auswertbar — der Digestvergleich braucht keine Interaktion.
+  </p>
+  <pre id="r9">—</pre>
+  <script type="module" src="/src/r9-demo.ts"></script>
+</body>
+</html>
