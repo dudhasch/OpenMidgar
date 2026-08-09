@@ -1,0 +1,22 @@
+# Dependencies (inkl. npm-Workspace-Symlinks unter node_modules/@webmidgar/)
+node_modules/
+
+# Build-Output
+dist/
+*.tsbuildinfo
+
+# Vite- / Vitest-Caches
+.vite/
+.vitest/
+vitest.config.*.timestamp-*
+vite.config.*.timestamp-*
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
