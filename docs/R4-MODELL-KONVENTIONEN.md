@@ -13,14 +13,14 @@ Masterplan). Ergänzt [R1-REQUEST-SEMANTIK.md](R1-REQUEST-SEMANTIK.md).
 | `.a`: Header 36 B; **Frame = 24 B Wurzel + 12 B je Bone**; nBones 0–29 | 3209/3209 exakt |
 | `.hrc`/`.rsd`-Grammatik + Alt-Endungs-Mapping (PLY→.p, TIM→.tex) | 385/385 bzw. 4180/4180; alle 385 Ketten vollständig auflösbar |
 
-## Offene Semantik-Annahmen (🟡, je genau EINE Codestelle)
+## Semantik-Annahmen (B1–B4 ✅ referenz-entschieden, s. Abschnitt unten; B5+ je genau EINE Codestelle)
 
 | # | Annahme | Ort | Validierung |
 |---|---|---|---|
-| B1 | Bone-Längsachse = lokales +Z; Kindversatz T(0,0,parentLength); Längen im Bestand negativ ⇒ Kette wächst nach −Z | `render-actor/pose.ts`, `actor.ts` | Sichtprüfung echtes Modell (aufrechte Figur) |
-| B2 | Eulerreihenfolge **'YXZ'** (R = Ry·Rx·Rz), Winkel in Grad | `pose.ts EULER_ORDER` | „Bekannte Pose"-Vergleich gegen Original-Screenshot |
-| B3 | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | dito — vertauschte Deutung fiele durch springende Figuren auf |
-| B4 | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | Skelett mit ungleichen Kettenlängen sichtprüfen |
+| B1 ✅ | Bone-Längsachse = lokales +Z; Kindversatz T(0,0,parentLength); Längen im Bestand negativ ⇒ Kette wächst nach −Z | `render-actor/pose.ts`, `actor.ts` | Referenz-entschieden (Abschnitt unten): Kujata `[0,0,−len]`, Makou `translateAfter` |
+| B2 ✅ | Eulerreihenfolge **'YXZ'** (R = Ry·Rx·Rz), Winkel in Grad | `pose.ts EULER_ORDER` | Referenz-entschieden (Abschnitt unten): Makou `FieldModel.cpp`, Kujata/Kimera, Header `[1,0,2]` |
+| B3 ✅ | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | Referenz-entschieden (Abschnitt unten): Wiki, kujata a-loader, Makou `AFile.cpp` |
+| B4 ✅ | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | Referenz-entschieden (Abschnitt unten): kujata `boneIndex`, Makou `rot.at(i)`, QGears |
 | B5 | Palettenblock **BGRA** | `tex.ts`, `model-writers.ts` | Referenzbild (bekannte Farbfläche) |
 | B6 | Vertexfarben BGRA; UV-V-Ursprung/flipY ungeprüft | `p.ts`, `actor.ts` | texturiertes Realmodell |
 | B7 | Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz kommt aus rootTranslation der Animation | Demo/`actor.ts` | Bodenkontakt echter Modelle |
@@ -208,3 +208,76 @@ wäre genau der Fehler, den dieses Projekt sonst vermeidet. Der Pitch steht
 deshalb als **Schalter** auf der Demoseite (`Wurzel-Pitch 180°`), nicht als
 Vorgabe — die Realdaten-Probe kann ihn nicht entscheiden, weil eine
 180°-Drehung eine Bounding-Box unverändert lässt.
+
+## Referenz-Entscheid B1–B4 + Wurzelrahmen-Fix (2026-08-10)
+
+**Dieser Abschnitt ersetzt die 🟡-Einträge B1–B4 in der Tabelle oben.** Zwei
+unabhängige Referenzabgleiche (Makou Reactor, Kujata/picklejar76, plus der
+Header `rotation_order=[1,0,2]` aus dem Bestand) entscheiden die Bone-Seite
+endgültig — und der eigentliche Defekt der Sichtprüfung lag woanders:
+
+- **B1 ✅ entschieden:** Bone-Längsachse lokales +Z, Kindversatz entlang der
+  Bone-Achse, Längen im Bestand negativ. Extern bestätigt: Kujata
+  `boneTranslation [0,0,−len]` (≙ unser `[0,0,+len]` mit negativem len),
+  Makou `FieldModel.cpp` translateAfter.
+- **B2 ✅ entschieden:** Eulerreihenfolge **YXZ** (R = Ry·Rx·Rz), Grad, KEINE
+  Vorzeichenflips, KEINE Permutation. Belege: Makou `FieldModel.cpp`
+  Z. 286–303 (rotate(y)/rotate(x)/rotate(z)); Kujata `rotationToQuaternion`
+  = 'YXZ' (mit Kimera-Abstammung); Header `rotation_order=[1,0,2]`
+  = beta,alpha,gamma. **Die Reihenfolge war nie das Problem.**
+- **B3 ✅ entschieden:** Wurzelblock = Rotation vor Translation (Wiki
+  Mirex/Aali, Kujata a-loader, Makou `AFile.cpp`).
+- **B4 ✅ entschieden:** Bone-Adressierung in Dateireihenfolge (Kujata
+  boneIndex, Makou `rot.at(i)`, QGears `getBone(i+1)`).
+
+### Der eigentliche Defekt: der Wurzelrahmen
+
+Kujata setzt für Feldmodelle `rootRotationDegreesX = 180` auf die
+Wurzelrotation — im REINEN Modellraum, ohne Achsen-Basiswechsel. Unsere
+Pipeline hängt stattdessen die ADR-009-Basis C = (x,y,z) → (x,z,−y)
+= Rx(−90°) als Wrapper über dem Modell. Die Äquivalenzforderung
+`Szene == Kujata-Welt` liefert:
+
+- **Rotation:** C · Rx(fix) = Rx(180°) ⇒ **fix = −90°** (≡ 270°),
+  Euler-additiv auf der Wurzel-X-Komponente — implementiert als
+  `ROOT_FRAME_FIX_DEG` in `render-actor/pose.ts`.
+- **Translation:** Die rohe `.a`-Wurzeltranslation steht im selben gedrehten
+  Wurzelrahmen: **t_m = C⁻¹ · t = (t.x, −t.z, t.y)** — implementiert als
+  `rootFrameTranslationToModel`. Unverändert übernommen versenkt sie die
+  Figur um ihre Höhenkomponente (~13,5 Einheiten) — das ist das Symptom
+  „man sieht die Figur von unten".
+
+**Numerisch verifiziert:** Bei Wurzelrotation = 0 (98,7 % der echten Frames)
+ist die korrigierte Szene EXAKT identisch mit der Kujata-Referenzkette
+(max. Fehler 1e-15; Akzeptanztest „Kujata-Äquivalenz" in
+`render-actor.test.ts`). Vorher lag die Figur global um 90° verkippt — das
+erklärt alle drei Sichtsymptome vom 2026-08-09 (liegt/von unten, Glieder
+bewegen sich in falschen Ebenen, Seiten-/Draufsicht falsch).
+
+### Warum die bisherigen Messungen scheitern mussten
+
+- **Die 6-Reihenfolgen-Probe hatte keinen Sieger**, weil der Fehler
+  AUSSERHALB ihres Suchraums lag: Die Bone-Auslegung war korrekt, gesucht
+  wurde an der falschen Stelle (Reihenfolge × Vorzeichen statt Wurzelrahmen).
+- **Der Pitch-180-Ansatz war wirkungslos**: Er drehte die Figur im bereits
+  verkippten Rahmen um ihre eigene Achse, und die BBox-Gütefunktion ist für
+  180°-Drehungen konstruktionsbedingt blind.
+- **Die „95 % Bindpose aufrecht"-Messung war ein Artefakt**: In der Bindpose
+  sind alle Rotationen 0 — die gerade Kette entlang ±Y steht per Konstruktion
+  „aufrecht", ohne dass das etwas über animierte Frames aussagt. Real liegt
+  auch die Bindkette; die Aufrechtigkeit steckt in den Animationsdaten
+  (hip ≈ −90°X).
+
+### Verbleibend offen 🟡
+
+- **Finale Sichtprüfung** an der echten Installation (die Probe ist um die
+  Wurzelrahmen-Dimension und richtungsempfindliche Maße — vorzeichenbehaftete
+  Vertikalität, Per-Bone-Rotationsstetigkeit — erweitert, läuft aber nur mit
+  echten Daten).
+- **B5/B6** (Paletten-/Vertexfarben, UV) unverändert ungeprüft.
+- **Watch-Items:**
+  - Residuum nur bei Wurzelrotation mit Y-Anteil ≠ 0: Kujatas +180 sitzt
+    intern in der Euler-Komposition und kommutiert nicht mit Ry. X-/Z-Anteile
+    sind exakt abgedeckt; echte Wurzelrotationen sind zu 98,7 % exakt 0.
+  - Kujatas Animationspfad negiert empirisch `rootTranslation.z` — falls
+    Realdaten einen Tiefenversatz zeigen, dort ansetzen.

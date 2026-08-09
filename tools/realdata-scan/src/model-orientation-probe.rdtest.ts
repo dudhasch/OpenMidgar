@@ -5,7 +5,7 @@ import { IndexService } from '@webmidgar/io';
 import { parseA, parseHrc, parseP, parseRsd, type AnimationClipSource, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
 import { parseFieldEntry, splitAnimationName } from '@webmidgar/formats-field';
 import { ff7ToScene } from '@webmidgar/convert';
-import { bindPoseFrame, computePose, transformPoint } from '@webmidgar/render-actor';
+import { ROOT_FRAME_FIX_DEG, bindPoseFrame, computePose, rootFrameTranslationToModel, transformPoint } from '@webmidgar/render-actor';
 import { NodeDirectorySource } from './node-source.js';
 
 /**
@@ -61,13 +61,19 @@ function longestAxis(e: Extent): 'x' | 'y' | 'z' {
  * `mapModel` erlaubt es, eine ALTERNATIVE Modell→Szene-Abbildung zu prüfen,
  * ohne den Produktivcode anzufassen — die Gegenhypothesen laufen damit über
  * exakt dieselbe Rechenstrecke wie die belegte Auslegung.
+ *
+ * `rootFrameFix` steht hier bewusst auf **aus**: Diese Messung betrifft B1
+ * (Bone-Achse + ADR-009-Konvertierung), nicht den Wurzelrahmen — und bleibt
+ * so mit den historischen Zahlen vergleichbar. Die „95 % aufrechte Bindpose"
+ * dieser Messung ist ein Artefakt der geraden Kette (R4-Notiz, 2026-08-10).
  */
 function meshExtent(
   skeleton: Skeleton,
   meshesByBone: Map<number, Float32Array[]>,
   mapModel: (v: Vec3) => Vec3,
+  rootFrameFix = false,
 ): Extent {
-  const poses = computePose(skeleton, bindPoseFrame(skeleton));
+  const poses = computePose(skeleton, bindPoseFrame(skeleton), rootFrameFix);
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let points = 0;
@@ -263,7 +269,8 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
     const sprung: number[] = [];
     let geprueft = 0;
     let aufrechtBind = 0;
-    let aufrechtFrame0 = 0;
+    let aufrechtFrame0Fix = 0;
+    let aufrechtFrame0Roh = 0;
 
     for (const [hrcName, aName] of [...paare].slice(0, 80)) {
       if (!idByName.has(hrcName)) continue;
@@ -308,13 +315,20 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
 
       const f0 = clip.frames[0]!;
       wurzelrotationen.push([...f0.rootRotation]);
-      const e0 = extentForFrame(skeleton, meshesByBone, toScene, f0);
-      if (longestAxis(e0) === 'y') aufrechtFrame0++;
+      // Entschiedene Pipeline (Fix an) gegen das rohe Verhalten (Fix aus):
+      // Der R4-Fix ist nur dann der gesuchte Fehler, wenn er die Figuren
+      // messbar aufrichtet.
+      const e0 = extentForFrame(skeleton, meshesByBone, toScene, f0, true);
+      if (longestAxis(e0) === 'y') aufrechtFrame0Fix++;
+      if (longestAxis(extentForFrame(skeleton, meshesByBone, toScene, f0, false)) === 'y') {
+        aufrechtFrame0Roh++;
+      }
 
-      // Stetigkeit: relative Änderung der Höhe über aufeinanderfolgende Frames.
+      // Stetigkeit: relative Änderung der Höhe über aufeinanderfolgende Frames
+      // (entlang der entschiedenen Pipeline).
       let vorher = e0.dy;
       for (const f of clip.frames.slice(1, 20)) {
-        const e = extentForFrame(skeleton, meshesByBone, toScene, f);
+        const e = extentForFrame(skeleton, meshesByBone, toScene, f, true);
         if (vorher > 0) sprung.push(Math.abs(e.dy - vorher) / vorher);
         vorher = e.dy;
       }
@@ -346,8 +360,9 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
         {
           gepruefteModelle: geprueft,
           ausfallgruende: warum,
-          'aufrecht in der Bindpose': `${aufrechtBind}/${geprueft}`,
-          'aufrecht in Frame 0': `${aufrechtFrame0}/${geprueft}`,
+          'aufrecht in der Bindpose (roh, B1-Artefakt)': `${aufrechtBind}/${geprueft}`,
+          'aufrecht in Frame 0 (Fix an)': `${aufrechtFrame0Fix}/${geprueft}`,
+          'aufrecht in Frame 0 (Fix aus, roh)': `${aufrechtFrame0Roh}/${geprueft}`,
           wurzelrotationFrame0: { x: achsen[0], y: achsen[1], z: achsen[2] },
           'Höhensprung je Frame': { median: median(sprung).toFixed(4), p95: p95(sprung).toFixed(4) },
         },
@@ -356,40 +371,90 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
       ),
     );
 
-    // BELEGT: Die Bindpose steht aufrecht, der animierte Frame nicht. Damit
-    // ist die Fehlerquelle auf die Bone-Rotationen eingegrenzt.
+    // ENTSCHIEDEN (2026-08-10): Der frühere Befund „Bindpose aufrecht, Frame 0
+    // liegt" war der Defekt — er saß im Wurzelrahmen, nicht in den
+    // Bone-Rotationen. Die falsifizierbare Konsequenz des Fixes: Mit
+    // Wurzelrahmen-Korrektur stehen die animierten Frames häufiger aufrecht
+    // als roh. Die Bindpose-Erwartung bleibt die historische B1-Messung
+    // (roh gerechnet, s. meshExtent).
     expect(geprueft).toBeGreaterThan(10);
     expect(aufrechtBind / geprueft).toBeGreaterThan(0.8);
-    expect(aufrechtFrame0 / geprueft).toBeLessThan(0.5);
+    expect(aufrechtFrame0Fix).toBeGreaterThan(aufrechtFrame0Roh);
 
-    // --- Eulerreihenfolge als Gütefunktion --------------------------------
+    // --- Eulerreihenfolge × Wurzelrahmen als Gütefunktion -------------------
     // Sollbild: Die Figur bleibt über die Animation aufrecht. Gemessen wird
     // der Anteil aufrechter Frames je Kandidatenreihenfolge. Die Bindpose
     // taugt als Maß NICHT — dort sind alle Rotationen 0, also liefern alle
     // sechs Reihenfolgen dasselbe Ergebnis. Nur animierte Frames trennen sie.
-    // Kujata (picklejar76) setzt fuer FELD-Modelle rootRotationDegreesX = 180
-    // bei sonst unveraenderten Bone-Winkeln und Reihenfolge 'YXZ'. Dieser
-    // Wurzelversatz fehlt bei uns vollstaendig — er wird hier als zusaetzliche
-    // Dimension mitgemessen, statt uebernommen zu werden.
+    //
+    // Sweep-Dimensionen: die historischen Reihenfolgen-Hypothesen (mit
+    // Wurzel-X-Versatz und Versatzvorzeichen) UND die entschiedene
+    // Wurzelrahmen-Korrektur (fix=an: Wurzel-X um ROOT_FRAME_FIX_DEG erhöht,
+    // Wurzeltranslation über rootFrameTranslationToModel — exakt der neue
+    // `rootFrameFix`-Parameter von computePose/applyFrame). Bei fix=an wird
+    // der alte Wurzel-X-Versatz nicht zusätzlich variiert: Er ist durch den
+    // Referenz-Entscheid ersetzt.
     const ROOT_X = [0, 180];
     // Kujata versetzt das Kind nach -parentLength (ff7-to-gltf.js:556); wir
     // nach +parentLength. Da die Laengen negativ sind, kehrt das die
     // Wachstumsrichtung der Kette um — und DAS sieht eine Bounding-Box sehr
     // wohl, anders als eine 180-Grad-Drehung.
     const SIGNS: (1 | -1)[] = [1, -1];
-    const bewertung: Record<string, { aufrecht: number; gesamt: number; verhaeltnis: number[] }> = {};
-    for (const o of EULER_ORDERS) for (const rx of ROOT_X) for (const sg of SIGNS) bewertung[`${o} rootX+${rx} offset${sg > 0 ? '+' : '-'}`] = { aufrecht: 0, gesamt: 0, verhaeltnis: [] };
+    interface Variante {
+      label: string;
+      order: string;
+      rootX: number;
+      sign: 1 | -1;
+      fix: boolean;
+    }
+    const varianten: Variante[] = [];
+    for (const o of EULER_ORDERS) {
+      for (const rx of ROOT_X) {
+        for (const sg of SIGNS) {
+          varianten.push({ label: `${o} rootX+${rx} offset${sg > 0 ? '+' : '-'} fix=aus`, order: o, rootX: rx, sign: sg, fix: false });
+        }
+      }
+      for (const sg of SIGNS) {
+        varianten.push({ label: `${o} offset${sg > 0 ? '+' : '-'} fix=an`, order: o, rootX: 0, sign: sg, fix: true });
+      }
+    }
+    interface Bewertung {
+      aufrecht: number;
+      gesamt: number;
+      verhaeltnis: number[];
+      /** Vorzeichenbehaftete Vertikalität (Kettenende über/unter Wurzel). */
+      vertikalitaet: number[];
+      /** Geodätischer Bone-Rotationssprung zum vorherigen Frame (Grad). */
+      rotSprung: number[];
+    }
+    const bewertung: Record<string, Bewertung> = {};
+    for (const v of varianten) {
+      bewertung[v.label] = { aufrecht: 0, gesamt: 0, verhaeltnis: [], vertikalitaet: [], rotSprung: [] };
+    }
 
     for (const probe of proben) {
+      const vorherPosen = new Map<string, VariantPose>();
       for (const f of probe.clip.frames.slice(0, 12)) {
-        for (const o of EULER_ORDERS) for (const rx of ROOT_X) for (const sg of SIGNS) {
-          const e = extentWithOrder(probe.skeleton, probe.meshes, f, o, rx, sg);
+        for (const v of varianten) {
+          const pose = poseWithOrder(probe.skeleton, f, v.order, v.rootX, v.sign, v.fix);
+          const b = bewertung[v.label]!;
+          // Per-Bone-Rotationsstetigkeit: falsche Auslegungen erzeugen
+          // Spikes zwischen aufeinanderfolgenden Frames (Sichtprüfung:
+          // „die Bonestruktur zuckt in falsche Richtungen").
+          const vorher = vorherPosen.get(v.label);
+          if (vorher) {
+            for (let bi = 0; bi < pose.rots.length; bi++) {
+              b.rotSprung.push(rotJumpDeg(vorher.rots[bi]!, pose.rots[bi]!));
+            }
+          }
+          vorherPosen.set(v.label, pose);
+          const e = extentFromPose(probe.meshes, pose);
           if (e.points === 0) continue;
-          const b = bewertung[`${o} rootX+${rx} offset${sg > 0 ? '+' : '-'}`]!;
           b.gesamt++;
           if (longestAxis(e) === 'y') b.aufrecht++;
           const quer = Math.max(e.dx, e.dz);
           b.verhaeltnis.push(quer > 0 ? e.dy / quer : 0);
+          b.vertikalitaet.push(signedVerticality(probe.skeleton, pose));
         }
       }
     }
@@ -399,18 +464,23 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
         order: o,
         aufrecht: b.gesamt > 0 ? b.aufrecht / b.gesamt : 0,
         median: median(b.verhaeltnis),
+        vertikalitaet: median(b.vertikalitaet),
+        rotSprungMedian: median(b.rotSprung),
+        rotSprungP95: p95(b.rotSprung),
         gesamt: b.gesamt,
       }))
       .sort((a, b) => b.aufrecht - a.aufrecht || b.median - a.median)
-      .slice(0, 6);
+      .slice(0, 8);
 
     console.log(
-      'Eulerreihenfolge gegen die Aufrechtigkeit animierter Frames:',
+      'Eulerreihenfolge × Wurzelrahmen gegen animierte Frames (BBox-Maße + richtungsempfindlich):',
       JSON.stringify(
         rang.map((r) => ({
           order: r.order,
           aufrecht: `${(r.aufrecht * 100).toFixed(1)}% von ${r.gesamt}`,
           'Höhe/Quer (Median)': r.median.toFixed(3),
+          'Vertikalität ± (Median)': r.vertikalitaet.toFixed(2),
+          'Rot-Sprung° (Median/p95)': `${r.rotSprungMedian.toFixed(2)}/${r.rotSprungP95.toFixed(2)}`,
         })),
         null,
         1,
@@ -472,10 +542,14 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
       }),
     );
 
-    // NICHT belegt: Keine Reihenfolge trennt sich deutlich ab. Die Erwartung
-    // hält diesen Zustand fest — sobald jemand B2 wirklich löst, MUSS sie
-    // brechen und angepasst werden.
-    expect(rang[0]!.aufrecht).toBeLessThan(rang[1]!.aufrecht * 1.5);
+    // Die frühere Erwartung „kein Sieger" (Rang 1 < 1,5 × Rang 2) ist mit dem
+    // Referenz-Entscheid (2026-08-10) hinfällig und entfernt: Der Fehler lag
+    // AUSSERHALB des Reihenfolgen-Suchraums — im Wurzelrahmen —, deshalb
+    // konnte diese Probe ihn grundsätzlich nicht finden. Die entschiedene
+    // Variante (`YXZ … fix=an`) wird jetzt durch die falsifizierbare
+    // Erwartung weiter oben getragen (Fix richtet Frame 0 auf) und durch die
+    // richtungsempfindlichen Maße in der Rangliste begleitet; die finale
+    // Sichtprüfung an der echten Installation bleibt offen (R4-Notiz).
 
     await dir.closeAll();
   }, 900_000);
@@ -519,21 +593,38 @@ function eulerMatrix(order: string, x: number, y: number, z: number): M3 {
 const EULER_ORDERS = ['XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX'] as const;
 
 /**
- * Posenberechnung mit frei wählbarer Eulerreihenfolge — bewusst hier
- * dupliziert statt in pose.ts parametrisiert: Der Produktivcode soll erst
- * geändert werden, wenn die Messung entschieden hat.
+ * Modellraum-Pose unter einer Hypothese: Gelenkursprünge und Bone-WELT-
+ * rotationen. Bewusst hier dupliziert statt in pose.ts parametrisiert: Der
+ * Produktivcode trägt nur die entschiedene Auslegung; die Gegenhypothesen
+ * leben ausschließlich in dieser Probe.
+ *
+ * `rootFrameFix` ist exakt die Semantik des neuen `rootFrameFix`-Parameters
+ * von `computePose`/`applyFrame` (Wurzel-X += ROOT_FRAME_FIX_DEG,
+ * Wurzeltranslation über rootFrameTranslationToModel), hier auf die frei
+ * wählbare Reihenfolge übertragen.
  */
-function extentWithOrder(
+interface VariantPose {
+  /** Gelenkursprünge im Modellraum. */
+  origins: Vec3[];
+  /** Bone-Weltrotationen (3×3) im Modellraum. */
+  rots: M3[];
+}
+
+function poseWithOrder(
   skeleton: Skeleton,
-  meshesByBone: Map<number, Float32Array[]>,
   frame: AnimationFrame,
   order: string,
   rootOffsetX = 0,
   /** Vorzeichen des Kindversatzes entlang der Bone-Achse. */
   offsetSign: 1 | -1 = 1,
-): Extent {
-  const mats: M3[] = [];
+  /** Wurzelrahmen-Korrektur (R4-Fix) an/aus. */
+  rootFrameFix = false,
+): VariantPose {
+  const rots: M3[] = [];
   const origins: Vec3[] = [];
+  const rootT = rootFrameFix
+    ? rootFrameTranslationToModel(frame.rootTranslation)
+    : ([...frame.rootTranslation] as Vec3);
   for (let i = 0; i < skeleton.bones.length; i++) {
     const bone = skeleton.bones[i]!;
     const rx = frame.rotations[bone.fileOrder * 3] ?? 0;
@@ -542,11 +633,16 @@ function extentWithOrder(
     const local = eulerMatrix(order, rx, ry, rz);
     if (bone.parentIndex < 0) {
       const rootR = frame.rootRotation;
-      const rootM = eulerMatrix(order, rootR[0] + rootOffsetX, rootR[1], rootR[2]);
-      mats.push(mul3(rootM, local));
-      origins.push([...frame.rootTranslation] as Vec3);
+      const rootM = eulerMatrix(
+        order,
+        rootR[0] + rootOffsetX + (rootFrameFix ? ROOT_FRAME_FIX_DEG : 0),
+        rootR[1],
+        rootR[2],
+      );
+      rots.push(mul3(rootM, local));
+      origins.push(rootT);
     } else {
-      const pm = mats[bone.parentIndex]!;
+      const pm = rots[bone.parentIndex]!;
       const po = origins[bone.parentIndex]!;
       const plen = skeleton.bones[bone.parentIndex]!.length * offsetSign;
       // Kindursprung = Elternursprung + Elternrotation · (0,0,parentLength)
@@ -555,16 +651,20 @@ function extentWithOrder(
         po[1] + pm[1]![2]! * plen,
         po[2] + pm[2]![2]! * plen,
       ]);
-      mats.push(mul3(pm, local));
+      rots.push(mul3(pm, local));
     }
   }
+  return { origins, rots };
+}
 
+/** Ausdehnung der Mesh-Punktwolke im Szenenraum für eine Varianten-Pose. */
+function extentFromPose(meshesByBone: Map<number, Float32Array[]>, pose: VariantPose): Extent {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let points = 0;
   for (const [boneIndex, meshes] of meshesByBone) {
-    const m = mats[boneIndex];
-    const o = origins[boneIndex];
+    const m = pose.rots[boneIndex];
+    const o = pose.origins[boneIndex];
     if (!m || !o) continue;
     for (const positions of meshes) {
       for (let i = 0; i + 3 <= positions.length; i += 3) {
@@ -589,14 +689,49 @@ function extentWithOrder(
   return { dx: maxX - minX, dy: maxY - minY, dz: maxZ - minZ, points };
 }
 
+/**
+ * Richtungsempfindliches Güte-Maß (die Bounding-Box ist blind für
+ * 180°-Drehungen und Spiegelungen): Szene-Y des Kettenendes relativ zum
+ * Wurzelgelenk. Kopf über Füßen ⇒ POSITIV; eine liegende oder auf dem Kopf
+ * stehende Figur ⇒ ≤ 0 bzw. deutlich negativ.
+ */
+function signedVerticality(skeleton: Skeleton, pose: VariantPose): number {
+  const last = skeleton.bones.length - 1;
+  const bone = skeleton.bones[last]!;
+  const o = pose.origins[last]!;
+  const m = pose.rots[last]!;
+  const ende = ff7ToScene([
+    o[0] + m[0]![2]! * bone.length,
+    o[1] + m[1]![2]! * bone.length,
+    o[2] + m[2]![2]! * bone.length,
+  ]) as Vec3;
+  const wurzel = ff7ToScene(pose.origins[0]!) as Vec3;
+  return ende[1] - wurzel[1];
+}
+
+/**
+ * Geodätischer Abstand zweier Bone-Weltrotationen in Grad:
+ * ‖log(R_vᵀ·R_n)‖ = arccos((spur(R_vᵀ·R_n) − 1)/2), wobei spur(R_vᵀ·R_n)
+ * das Frobenius-Skalarprodukt Σ R_v[i][j]·R_n[i][j] ist. FF7-Animationen
+ * sind stetig — falsche Auslegungen erzeugen Spikes (Sichtprüfung: „zuckt").
+ */
+function rotJumpDeg(a: M3, b: M3): number {
+  let spur = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) spur += a[i]![j]! * b[i]![j]!;
+  const cos = Math.min(1, Math.max(-1, (spur - 1) / 2));
+  return Math.acos(cos) / DEG;
+}
+
 /** Ausdehnung für einen konkreten Frame (statt der Bindpose). */
 function extentForFrame(
   skeleton: Skeleton,
   meshesByBone: Map<number, Float32Array[]>,
   mapModel: (v: Vec3) => Vec3,
   frame: AnimationFrame,
+  /** Wurzelrahmen-Korrektur (R4-Fix); Vorgabe = entschiedene Pipeline. */
+  rootFrameFix = true,
 ): Extent {
-  const poses = computePose(skeleton, frame);
+  const poses = computePose(skeleton, frame, rootFrameFix);
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let points = 0;
