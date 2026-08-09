@@ -7,6 +7,27 @@ beim Nutzer (Diagnose-Scan, aggregierte Reports), 🟡-Markierungen vor der
 jeweiligen Session auflösen oder als Restrisiko dokumentieren.
 **Methodik-Standard seit S7: Realdaten-Strukturproben VOR Parserbau.**
 
+> **Stand 2026-08-09 — S13 bis S19 bearbeitet.** S13 ✅ (Kernel-Container +
+> Textdekoder, Zeichentabellen-Versatz aus den Daten abgeleitet) · S14 ✅
+> (Bank-Aliasing korrigiert, eigenes Spielstandsformat; Original-Prüfsumme
+> 🔴 ungeklärt) · S15 ✅ (Dialog-/Textlayout) · S16 🔶 (OGG-Schleifen und
+> Engine stehen; `audio.fmt` und Musikindex sind Negativbefunde) · S17 🔶
+> (Wirkungsmodell + Audio-Ops + Field-Wechsel-Opcode `0x60` identifiziert;
+> Kampf-Opcode 🔴 nicht auffindbar) · S18 ✅ (Import-Zustandsmaschine,
+> Fähigkeitsmatrix, assetfreier Diagnose-Export) · S19 ✅ (Manifest-Validierung
+> + Auflösungskette). Zahlen und Herleitungen in
+> [FINDINGS.md](../tools/realdata-scan/FINDINGS.md).
+>
+> **Zwei methodische Werkzeuge haben diesen Bogen getragen** und lohnen die
+> Wiederverwendung: (1) *Gütefunktion + Koordinatenabstieg*, wenn eine Tabelle
+> gesucht ist — mit eingefrorenen bekannten Werten, sonst überfittet die Suche;
+> (2) *Graph-Symmetrie*, wenn eine Referenz gesucht ist — Verbindungen zwischen
+> Räumen sind gegenseitig, und diese Eigenschaft braucht keine Koordinaten.
+> In beiden Fällen gilt: **ohne Kontrollhypothese ist keine Trefferquote
+> interpretierbar.** Drei Befunde dieses Bogens wären ohne sie falsch
+> ausgelegt worden (Case-Schatten der Textmetrik, leere Slots bei der
+> Savegame-Prüfsumme, überhohe Kontrollquote beim Field-Wechsel-Opcode).
+
 **Thema dieses Bogens:** Vom vertikalen Durchstich (S11/S12) zum spielbaren
 Story-Kern — Dialoge lesbar, Spielstand speicherbar, Musik hörbar, Story
 progressierbar (Battle-Stub, scriptgesteuerte Field-Wechsel) — plus die ersten
