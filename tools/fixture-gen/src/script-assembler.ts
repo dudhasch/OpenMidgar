@@ -158,6 +158,58 @@ export class ScriptAssembler {
     return this.ifOp(0x19, true, true, bank, addr, value, cmp, elseTarget);
   }
 
+  // --- Entität & Bewegung (S12) ---------------------------------------------
+  // Operandenlängen sind realdaten-abgeleitet (Spannen-Abschluss); die
+  // Feldaufteilung spiegelt die Auslegung des Interpreters — bewusst hier
+  // dupliziert, damit Fixtures die Auslegung unabhängig gegenprüfen.
+
+  /** CHAR: bindet die Entität an einen Modellindex des Field-Manifests. */
+  char(modelIndex: number): this {
+    return this.raw(0xa1, modelIndex & 0xff);
+  }
+
+  /** PC: ordnet die Entität einem Partymitglied zu. */
+  pc(member: number): this {
+    return this.raw(0xa0, member & 0xff);
+  }
+
+  /** VISI: Sichtbarkeit. */
+  visi(visible: boolean): this {
+    return this.raw(0xa4, visible ? 1 : 0);
+  }
+
+  /** DFANM (Dauerschleife) bzw. ANIME1 (einmalig). */
+  dfanm(animId: number, speed: number, loop = true): this {
+    return this.raw(loop ? 0xa2 : 0xa3, animId & 0xff, speed & 0xff);
+  }
+
+  /** DIR: Blickrichtung in Grad (Literal). */
+  dir(degrees: number): this {
+    return this.raw(0xab, 0x00, degrees & 0xff, (degrees >> 8) & 0xff);
+  }
+
+  /** XYZI: setzt Position und Walkmesh-Dreieck hart (Literale). */
+  xyzi(x: number, y: number, z: number, triangle: number): this {
+    return this.raw(
+      0xa5,
+      0x00,
+      0x00,
+      x & 0xff,
+      (x >> 8) & 0xff,
+      y & 0xff,
+      (y >> 8) & 0xff,
+      z & 0xff,
+      (z >> 8) & 0xff,
+      triangle & 0xff,
+      (triangle >> 8) & 0xff,
+    );
+  }
+
+  /** MOVE: Bewegungsauftrag an den Solver (Literale); blockiert bis zur Ankunft. */
+  move(x: number, y: number): this {
+    return this.raw(0xa8, 0x00, x & 0xff, (x >> 8) & 0xff, y & 0xff, (y >> 8) & 0xff);
+  }
+
   wait(ticks: number): this {
     return this.raw(0x24, ticks & 0xff, (ticks >> 8) & 0xff);
   }

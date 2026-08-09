@@ -8,3 +8,4 @@ export * from './model-writers.js';
 export * from './background-composer.js';
 export * from './model-loader-composer.js';
 export * from './maplist-composer.js';
+export * from './kernel-composer.js';

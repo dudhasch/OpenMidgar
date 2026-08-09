@@ -39,6 +39,17 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | Tile-Feld u16@20 als paletteId-Kandidat: nur 54 % < Seitenzahl | 🟡 Offset falsch oder zusammengesetzt — bei S9-Rendering kalibrieren (Record roh konserviert) |
 | Sektion 6: variabel 1,2–30 kB, kein Tile-Bezug erkennbar | 🟡 Zweck offen (nicht MVP-blockierend) |
 
+## S12 — Operandenlängen und Bewegungs-Opcodes (2026-08-09)
+
+| Befund | Status |
+|---|---|
+| **Die Operandenlängen sind aus den Daten abgeleitet, nicht abgeschrieben.** Gütefunktion: Jede der 48.041 Script-Spannen ist ein Instruktionsstrom, der beim linearen Durchlaufen **exakt** auf seinem Ende landen muss. Ein Koordinatenabstieg über die Längen 0…16 hebt die Abschlussquote von **43,19 % auf 99,73 %** (unknown 0,04 %, Überlauf 0,23 %) | ✅ Methode + Ergebnis |
+| **Überanpassung ist real**: Ein freier Abstieg über alle 256 Opcodes erreicht zwar 99,65 %, verbiegt dabei aber nachweislich richtige Längen (REQ 2→0, MUL 3→0). Mit eingefrorenen implementierten Opcodes steigt die Quote sogar auf 99,73 % | ⚠️ Lehre: 256 freie Parameter gegen eine Kennzahl lassen sich gegen die Kennzahl optimieren |
+| 48 Längen bleiben **mehrdeutig** (mehrere Werte gleich gut, weil der Opcode zu selten vorkommt) — für den Skip-Pfad brauchbar, nicht als Strukturbeleg | 🟡 einzeln prüfen, wer sie implementiert |
+| Wirkung im Interpreter: **unknown-op-Faults von 7241 auf 0**, Fields ohne jeden Fault von 1 auf **526/702**; Gesamt-Fault-Rate rund **3 %** der Kontexte (S12-Ziel war < 20 %) | ✅ Akzeptanzkriterium erfüllt |
+| **Feldaufteilung XYZI (0xA5) und MOVE (0xA8) bestätigt**: 98,36 % der XYZI-Ziele und 99,66 % der MOVE-Ziele liegen tatsächlich **im Walkmesh** des eigenen Fields. Byteverschobene Kontrolle: 0,50 % bzw. 0,14 %; Kontrolle gegen ein fremdes Field: 42 % bzw. 43 % | ✅ realdaten-validiert (4637 XYZI, 7607 MOVE) |
+| Die vermuteten Bankpaarbytes sind zu 98,3 % exakt 0 („Literal, keine Bank") — dadurch ist die Einzelmetrik „triangleId im Bereich" kein scharfer Test, erst die Kombination mit der Positionsprüfung trägt | ℹ️ Messfallstrick dokumentiert |
+
 ## S11 — Field-Sitzung, Gateway-Bestand, Tiefen-Eichung (2026-08-09)
 
 | Befund | Status |

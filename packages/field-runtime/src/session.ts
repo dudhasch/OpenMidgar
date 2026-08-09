@@ -92,6 +92,8 @@ export interface TickResult {
   pendingDialogs: PendingDialog[];
   /** In diesem Takt beantwortete Dialoge. */
   resolvedDialogs: number[];
+  /** Bewegungsaufträge, die in diesem Takt erfüllt (oder abgebrochen) wurden. */
+  arrivals: number[];
 }
 
 export interface FieldSessionOptions {
@@ -126,6 +128,11 @@ export const SESSION_SCHEMA_VERSION = 1;
 
 const DEFAULT_SPEED = 6;
 
+/** Fortschritt je Takt, unter dem eine Bewegung als blockiert gilt. */
+const MOVE_MIN_PROGRESS = 1e-3;
+/** Takte ohne Fortschritt, nach denen ein Bewegungsauftrag abgebrochen wird. */
+const MOVE_STALL_TICKS = 30;
+
 /**
  * Ein Triggervolumen gilt als belegt, sobald es im Grundriss eine Ausdehnung
  * hat. Dasselbe Erkennungsmerkmal trägt bei Gateways die Austrittslinie —
@@ -157,6 +164,8 @@ export class FieldSession {
   tickCounter = 0;
   private activeTriggers = new Set<number>();
   private prevConfirm = false;
+  /** Takte ohne Bewegungsfortschritt je Entität (Deadlock-Schutz). */
+  private moveStalls = new Map<number, number>();
 
   constructor(
     readonly bundle: FieldBundle,
@@ -265,6 +274,10 @@ export class FieldSession {
       this.player = { ...this.player, moving: false };
     }
 
+    // Skriptgesteuerte Bewegung VOR dem Tick abarbeiten: Der Interpreter
+    // setzt nur den Auftrag; ausgeführt wird er hier mit dem Solver, damit die
+    // Invariante „immer im Mesh" auch für Skript-Entitäten gilt.
+    const arrivals = this.stepScriptedMovement();
     this.runtime?.tick();
 
     const confirmPressed = input.confirm && !this.prevConfirm;
@@ -294,7 +307,85 @@ export class FieldSession {
       confirmPressed,
       pendingDialogs,
       resolvedDialogs,
+      arrivals,
     };
+  }
+
+  /**
+   * Führt alle offenen Bewegungsaufträge um einen Schritt aus.
+   *
+   * Ein Auftrag gilt als erfüllt, sobald das Ziel im Grundriss erreicht ist —
+   * die Höhe ergibt sich aus dem Walkmesh, sie ist kein Bewegungsziel. Bleibt
+   * eine Entität hängen (blockierte Kante, kein Fortschritt), wird der Auftrag
+   * nach `MOVE_STALL_TICKS` erfolglosen Takten abgebrochen und die Ankunft
+   * trotzdem gemeldet. Ohne diesen Abbruch bliebe der Skriptkontext für immer
+   * im Wartezustand — ein stiller Deadlock wäre schlimmer als eine ungenaue
+   * Position.
+   */
+  private stepScriptedMovement(): number[] {
+    const rt = this.runtime;
+    if (!rt || !this.solver) return [];
+    const arrived: number[] = [];
+    for (const [entityIndex, a] of rt.state.actors.entries()) {
+      const target = a.moveTarget;
+      if (!target) continue;
+      if (!a.position) {
+        // Ohne Startposition kann nicht bewegt werden — Auftrag sofort quittieren.
+        a.moveTarget = null;
+        arrived.push(target.requestId);
+        rt.postEvent({ kind: 'movement-arrived', requestId: target.requestId });
+        continue;
+      }
+      // Der per XYZI gesetzte Dreiecksindex ist eine Skriptangabe und kann
+      // nicht zur Position passen (ein inkonsistenter Walkstate lässt den
+      // Solver an Kanten entlangdriften statt sauber zu stoppen). Deshalb wird
+      // er geprüft und im Zweifel neu bestimmt — der Solver hat das letzte Wort.
+      const claimed =
+        a.triangle !== null &&
+        a.triangle >= 0 &&
+        a.triangle < this.solver.tris.length &&
+        this.solver.containsPoint(a.triangle, a.position[0], a.position[1], 0.01)
+          ? { tri: a.triangle, x: a.position[0], y: a.position[1], height: a.position[2] }
+          : null;
+      const state = claimed ?? this.solver.locate(a.position[0], a.position[1]);
+      if (!state) {
+        a.moveTarget = null;
+        arrived.push(target.requestId);
+        rt.postEvent({ kind: 'movement-arrived', requestId: target.requestId });
+        continue;
+      }
+      const dx = target.x - state.x;
+      const dy = target.y - state.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= a.moveSpeed) {
+        // Zielnähe: exakt setzen und quittieren.
+        const final = this.solver.locate(target.x, target.y) ?? state;
+        a.position = [final.x, final.y, final.height];
+        a.triangle = final.tri;
+        a.moveTarget = null;
+        arrived.push(target.requestId);
+        rt.postEvent({ kind: 'movement-arrived', requestId: target.requestId });
+        continue;
+      }
+      const step = this.solver.move(state, (dx / dist) * a.moveSpeed, (dy / dist) * a.moveSpeed);
+      const progressed = Math.hypot(step.state.x - state.x, step.state.y - state.y);
+      a.position = [step.state.x, step.state.y, step.state.height];
+      a.triangle = step.state.tri;
+      a.direction = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (progressed < MOVE_MIN_PROGRESS) {
+        const stalls = (this.moveStalls.get(entityIndex) ?? 0) + 1;
+        this.moveStalls.set(entityIndex, stalls);
+        if (stalls >= MOVE_STALL_TICKS) {
+          this.moveStalls.delete(entityIndex);
+          a.moveTarget = null;
+          arrived.push(target.requestId);
+          rt.postEvent({ kind: 'movement-arrived', requestId: target.requestId });
+        }
+      } else {
+        this.moveStalls.delete(entityIndex);
+      }
+    }
+    return arrived;
   }
 
   /**

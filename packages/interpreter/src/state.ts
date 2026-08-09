@@ -11,11 +11,39 @@ export const BANK_COUNT = 16;
 export const BANK_SIZE = 256;
 
 /**
- * 🟡 `Zu validieren`: welche Bänke savegame-global vs. field-lokal sind.
- * S6-Annahme: 1+2 global, Rest field-lokal/temporär. Nur Scoping-Frage —
- * Snapshots serialisieren immer alle Bänke.
+ * Bank-Aliasing (S14). Die 15 adressierbaren Bänke zeigen **nicht** auf 15
+ * getrennte Speicher: Sie bilden Paare, die dieselbe Region ansprechen. Der
+ * S6-Stand mit 16 unabhängigen Bänken war darin falsch — ein Skript, das über
+ * Bank 1 schreibt und über Bank 2 liest, hätte den Wert nie gesehen.
+ *
+ * Abbildung Bank → Region. Die Paare (1,2), (3,4), (B,C), (D,E), (7,F) teilen
+ * sich je eine persistente 256-B-Region der Savemap; (5,6) ist die temporäre,
+ * field-lokale Region.
+ *
+ * 🟡 Die Paarbildung selbst ist Community-dokumentiert und über die
+ * Zugriffsmuster im Bestand plausibilisiert, aber nicht bewiesen. Sie ist
+ * bewusst als Tabelle geführt, damit sie an genau einer Stelle korrigierbar
+ * bleibt.
  */
-export const GLOBAL_BANKS: readonly number[] = [1, 2];
+export const BANK_REGION: readonly number[] = [
+  // 0 = Literal-Marker (keine Region), danach je Bank die Regionsnummer.
+  -1, 0, 0, 1, 1, 5, 5, 4, -1, -1, -1, 2, 2, 3, 3, 4,
+];
+
+/** Anzahl echter Speicherregionen (5 persistente + 1 temporäre + Reserve). */
+export const REGION_COUNT = 6;
+
+/**
+ * Regionen, die in den Spielstand gehören. Die temporäre Region (Bänke 5/6)
+ * ist field-lokal und wird beim Field-Wechsel verworfen.
+ */
+export const PERSISTENT_REGIONS: readonly number[] = [0, 1, 2, 3, 4];
+export const TEMP_REGION = 5;
+
+/** Rückwärtskompatibler Name aus S6 — jetzt aus dem Regionsmodell abgeleitet. */
+export const GLOBAL_BANKS: readonly number[] = BANK_REGION.map((r, bank) =>
+  r >= 0 && PERSISTENT_REGIONS.includes(r) ? bank : -1,
+).filter((b) => b > 0);
 
 export type WaitState =
   | { kind: 'none' }
@@ -85,6 +113,50 @@ export interface EntityRuntime {
   mainIp: number | null;
 }
 
+/**
+ * Sichtbarer Zustand einer Entität (S12). Die Bewegungs-Opcodes schreiben
+ * ausschließlich hierhin — die eigentliche Bewegung führt der Host mit dem
+ * Walkmesh-Solver aus und meldet die Ankunft als Ereignis zurück. Damit bleibt
+ * der Interpreter ein reiner Zustandsübergang (ADR-006) und der Solver die
+ * einzige Instanz, die über Begehbarkeit entscheidet.
+ */
+export interface ActorRuntime {
+  /** Modellindex aus dem Field-Manifest (CHAR); null = kein Modell gebunden. */
+  modelIndex: number | null;
+  /** Partymitglied-Slot (PC); null = keine Zuordnung. */
+  partyMember: number | null;
+  visible: boolean;
+  /** Grundriss + Höhe im FF7-Raum; null = noch nicht platziert. */
+  position: [number, number, number] | null;
+  /** Walkmesh-Dreieck aus XYZI; null = unbekannt. */
+  triangle: number | null;
+  /** Blickrichtung in Grad (0 = +x); null = unverändert. */
+  direction: number | null;
+  /** Dauerhafte Animation (DFANM) bzw. Einmalanimation (ANIME1). */
+  animation: { id: number; speed: number; loop: boolean } | null;
+  /** Laufender Bewegungsauftrag; der Host arbeitet ihn ab. */
+  moveTarget: { x: number; y: number; requestId: number } | null;
+  /** Bewegungsgeschwindigkeit in Field-Einheiten je Takt (MSPED). */
+  moveSpeed: number;
+}
+
+export function createActor(): ActorRuntime {
+  return {
+    modelIndex: null,
+    partyMember: null,
+    visible: true,
+    position: null,
+    triangle: null,
+    direction: null,
+    animation: null,
+    moveTarget: null,
+    moveSpeed: DEFAULT_MOVE_SPEED,
+  };
+}
+
+/** 🟡 Vorgabe in Field-Einheiten je Takt; MSPED überschreibt sie. */
+export const DEFAULT_MOVE_SPEED = 8;
+
 /** Externe, tick-synchron einsortierte Ereignisse (UI, Solver, …). */
 export type RuntimeEvent =
   | { kind: 'dialogue-resolved'; requestId: number; choice: number }
@@ -102,6 +174,8 @@ export interface FieldRuntimeState {
   nextSeq: number;
   banks: Uint8Array[];
   entities: EntityRuntime[];
+  /** Sichtbarer Entitätszustand, parallel zu `entities` indiziert (S12). */
+  actors: ActorRuntime[];
   eventQueue: RuntimeEvent[];
   /** Telemetrie der UNKNOWN-Politik: op → Übersprung-Zähler. */
   unknownSkips: Record<number, number>;
@@ -115,8 +189,22 @@ export interface FieldRuntimeState {
 
 export const FAULT_LOG_CAP = 200;
 
+/**
+ * Legt die Bankschicht an: `REGION_COUNT` echte Puffer, auf die die 16
+ * Bank-Indizes gemäß `BANK_REGION` zeigen. Gepaarte Bänke teilen sich damit
+ * denselben Speicher — genau das ist die S14-Korrektur.
+ *
+ * Bank 0 und die nicht belegten Indizes bekommen einen eigenen Wegwerfpuffer,
+ * damit ein versehentlicher Zugriff nicht stillschweigend eine echte Region
+ * trifft.
+ */
 export function createBanks(): Uint8Array[] {
-  return Array.from({ length: BANK_COUNT }, () => new Uint8Array(BANK_SIZE));
+  const regions = Array.from({ length: REGION_COUNT }, () => new Uint8Array(BANK_SIZE));
+  const scratch = new Uint8Array(BANK_SIZE);
+  return Array.from({ length: BANK_COUNT }, (_, bank) => {
+    const region = BANK_REGION[bank] ?? -1;
+    return region >= 0 ? regions[region]! : scratch;
+  });
 }
 
 export function readBank(state: FieldRuntimeState, bank: number, addr: number, word: boolean): number {
@@ -128,6 +216,22 @@ export function writeBank(state: FieldRuntimeState, bank: number, addr: number, 
   const b = state.banks[bank & 0xf]!;
   b[addr & 0xff] = value & 0xff;
   if (word) b[(addr + 1) & 0xff] = (value >>> 8) & 0xff;
+}
+
+/**
+ * Die eindeutigen Regionspuffer in stabiler Reihenfolge — für Snapshot und
+ * Spielstand. Über `state.banks` zu serialisieren würde jede Region mehrfach
+ * schreiben und beim Restore die Aliasbindung zerstören.
+ */
+export function regionBuffers(state: FieldRuntimeState): Uint8Array[] {
+  const seen = new Map<Uint8Array, number>();
+  const out: Uint8Array[] = [];
+  for (const bank of state.banks) {
+    if (seen.has(bank)) continue;
+    seen.set(bank, out.length);
+    out.push(bank);
+  }
+  return out;
 }
 
 /** mulberry32 — identisch zur Fixture-PRNG-Konvention des Projekts. */

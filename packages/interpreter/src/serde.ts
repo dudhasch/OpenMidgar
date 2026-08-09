@@ -15,7 +15,14 @@ export interface RuntimeSnapshot {
   state: FieldRuntimeState;
 }
 
-/** Strukturiert klonbare, tiefe Kopie (Uint8Arrays inklusive). */
+/**
+ * Strukturiert klonbare, tiefe Kopie (Uint8Arrays inklusive).
+ *
+ * Wichtig für das Bank-Aliasing (S14): `structuredClone` erhält geteilte
+ * Referenzen innerhalb desselben Klons. Gepaarte Bänke zeigen im Snapshot
+ * also weiterhin auf denselben Puffer — eine feldweise Kopie würde die
+ * Bindung zerreißen und aus jeder Region fünf unabhängige machen.
+ */
 export function snapshotRuntime(state: FieldRuntimeState): RuntimeSnapshot {
   return {
     schemaVersion: RUNTIME_SCHEMA_VERSION,

@@ -118,6 +118,13 @@ describe.skipIf(!available)('Realdaten: Interpreter-Grundgerüst auf echtem Byte
       expect(stats.digestMismatches).toEqual([]);
       expect(stats.fields).toBeGreaterThan(500);
       expect(stats.scrSpanDiagnostics).toBe(0);
+      // S12-Akzeptanzkriterium: Fault-Rate unter 20 % der Kontexte. Mit der
+      // aus den Realdaten abgeleiteten Längentabelle fiel sie von rund 70 %
+      // (7241 unknown-op) auf gemessene ~3 % — die unknown-op-Klasse ist
+      // vollständig verschwunden.
+      const faultTotal = Object.values(stats.faultsByReason).reduce((a, b) => a + b, 0);
+      expect(faultTotal / stats.entitiesTotal).toBeLessThan(0.2);
+      expect(stats.faultsByReason['unknown-op'] ?? 0).toBe(0);
       await dir.closeAll();
     },
   );

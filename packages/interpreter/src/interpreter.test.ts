@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { composeScriptSection, ScriptAssembler } from '@webmidgar/fixture-gen';
 import { parseScriptSection, type FieldDiagnostic } from '@webmidgar/formats-field';
-import { CMP } from './opcodes.js';
+import { CMP, IMPL_OPERAND_LEN, OP_KAWAI, SKIP_OPERAND_LEN } from './opcodes.js';
 import { FieldRuntime } from './runtime.js';
 import { prepareScript, type PreparedScript } from './prepared.js';
 import { readBank } from './state.js';
@@ -179,6 +179,54 @@ describe('Variablen', () => {
     expect(bank(rt, 3, 2)).toBe(0);
     expect(bank(rt, 3, 3)).toBe(7);
     expect(bank(rt, 3, 4)).toBe(9);
+  });
+
+  it('Bank-Aliasing (S14): gepaarte Bänke teilen sich eine Region, ungepaarte nicht', () => {
+    // Bis S13 waren die 16 Bänke unabhängige Puffer. Das war falsch: Ein
+    // Skript, das über Bank 1 schreibt und über Bank 2 liest, hätte den Wert
+    // nie gesehen. Geprüft wird jedes dokumentierte Paar in beide Richtungen.
+    const pairs: [number, number][] = [
+      [1, 2],
+      [3, 4],
+      [0xb, 0xc],
+      [0xd, 0xe],
+      [7, 0xf],
+      [5, 6],
+    ];
+    for (const [a, b] of pairs) {
+      const asm = new ScriptAssembler();
+      asm.setByte(a, 10, 123).setByte(b, 20, 45).ret();
+      const { bytes } = asm.assemble();
+      const rt = new FieldRuntime(prepare([{ name: 'hero', entries: [0] }], bytes), { mainLoop: false });
+      rt.start();
+      rt.tick();
+      expect(bank(rt, b, 10), `Bank ${a} → ${b}`).toBe(123);
+      expect(bank(rt, a, 20), `Bank ${b} → ${a}`).toBe(45);
+    }
+    // Gegenprobe: Bänke aus verschiedenen Paaren dürfen sich NICHT sehen.
+    const asm = new ScriptAssembler();
+    asm.setByte(1, 30, 99).ret();
+    const { bytes } = asm.assemble();
+    const rt = new FieldRuntime(prepare([{ name: 'hero', entries: [0] }], bytes), { mainLoop: false });
+    rt.start();
+    rt.tick();
+    expect(bank(rt, 3, 30)).toBe(0);
+    expect(bank(rt, 5, 30)).toBe(0);
+  });
+
+  it('Bank-Aliasing überlebt Snapshot und Restore', () => {
+    const asm = new ScriptAssembler();
+    asm.setByte(1, 10, 7).ret();
+    const { bytes } = asm.assemble();
+    const prepared = prepare([{ name: 'hero', entries: [0] }], bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+    rt.tick();
+    const restored = restoreRuntime(snapshotRuntime(rt.state), prepared);
+    // Nach dem Restore muss die Aliasbindung noch stehen: ein Schreibzugriff
+    // über Bank 2 muss weiterhin über Bank 1 sichtbar sein.
+    restored.state.banks[2]![10] = 42;
+    expect(restored.state.banks[1]![10]).toBe(42);
   });
 
   it('RANDOM ist deterministisch pro Seed', () => {
@@ -363,25 +411,46 @@ describe('Budget-Eskalation & UNKNOWN-Politik', () => {
     expect(bank(rt, 3, 1)).toBe(6); // calm lief die ganze Zeit
   });
 
-  it('UNKNOWN mit bekannter Länge wird übersprungen und gezählt; ohne Länge → strukturierter Fault', () => {
+  it('UNKNOWN mit bekannter Länge wird übersprungen und gezählt, der Kontext läuft weiter', () => {
     const asm = new ScriptAssembler();
-    // 0xF0 (MUSIC, Skip-Tabelle, 1 Operand) + 0xFF (unbekannt).
-    asm.raw(0xf0, 0x07).setByte(3, 0, 1).raw(0xff).setByte(3, 0, 2).ret();
+    // 0xF0 (MUSIC, Skip-Tabelle, 1 Operand) — nicht implementiert, aber Länge bekannt.
+    asm.raw(0xf0, 0x07).setByte(3, 0, 1).raw(0xf0, 0x08).setByte(3, 0, 2).ret();
     const { bytes } = asm.assemble();
     const trace = new RingTrace(16);
     const rt = new FieldRuntime(prepare([{ name: 'hero', entries: [0] }], bytes), { mainLoop: false, trace });
     rt.start();
     rt.tick();
-    expect(rt.state.unknownSkips[0xf0]).toBe(1);
-    expect(bank(rt, 3, 0)).toBe(1); // bis zum unbekannten Op gekommen
+    expect(rt.state.unknownSkips[0xf0]).toBe(2);
+    expect(bank(rt, 3, 0)).toBe(2); // beide Zuweisungen erreicht
+    const last = trace.last(1)[0]!;
+    expect(last.category).not.toBe('unknown-fault');
+  });
+
+  it('die Längentabelle deckt alle 256 Opcodes ab — der UNKNOWN-Fault ist damit unerreichbar', () => {
+    // Seit S12 ist die Tabelle aus den Realdaten abgeleitet und vollständig
+    // (Spannen-Abschluss 99,73 %). Der Fault-Zweig der UNKNOWN-Politik bleibt
+    // als Sicherung bestehen, kann aber von keinem Opcode mehr ausgelöst
+    // werden. Fällt diese Zusicherung, ist die Tabelle beschädigt.
+    const missing: number[] = [];
+    for (let op = 0; op < 256; op++) {
+      if (op === OP_KAWAI) continue; // variabel lang, gesondert behandelt
+      if (IMPL_OPERAND_LEN[op] === undefined && SKIP_OPERAND_LEN[op] === undefined) missing.push(op);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('Fault-Journal + Slot-Isolation greifen bei einem Laufzeitfault (Masterplan 4.3)', () => {
+    const asm = new ScriptAssembler();
+    // Unbekannter Vergleichsoperator (15) → strukturierter Fault statt Raten.
+    asm.setByte(3, 0, 1).ifub(3, 0, 1, 15, 'ende').label('ende').ret();
+    const { bytes } = asm.assemble();
+    const rt = new FieldRuntime(prepare([{ name: 'hero', entries: [0] }], bytes), { mainLoop: false });
+    rt.start();
+    rt.tick();
     const entity = rt.state.entities[0]!;
     expect(entity.context).toBeNull(); // Fault beendet den Kontext
-    const last = trace.last(1)[0]!;
-    expect(last.category).toBe('unknown-fault');
-    expect(last.op).toBe(0xff);
-    // Fault-Journal + Slot-Isolation (Masterplan 4.3).
     expect(rt.state.faultCount).toBe(1);
-    expect(rt.state.faults[0]).toMatchObject({ reason: 'unknown-op', op: 0xff });
+    expect(rt.state.faults[0]).toMatchObject({ reason: 'unknown-comparison' });
     expect(entity.disabledSlots).toContain(0);
     expect(rt.enqueueRequest(0, 0, 1, 'async')).toBe(false); // Slot gesperrt
   });

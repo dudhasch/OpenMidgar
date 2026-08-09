@@ -1,9 +1,11 @@
 import { CMP, evalComparison, IMPL_OPERAND_LEN, OP, OP_KAWAI, SKIP_OPERAND_LEN, type OpCategory } from './opcodes.js';
 import type { PreparedScript } from './prepared.js';
 import {
+  createActor,
   nextRandom,
   readBank,
   writeBank,
+  type ActorRuntime,
   type FieldRuntimeState,
   type ScriptContext,
 } from './state.js';
@@ -46,6 +48,20 @@ export function unpackRequestOperand(byte: number): { priority: number; slot: nu
 }
 
 const asSigned16 = (v: number): number => (v << 16) >> 16;
+const signed16 = asSigned16;
+
+/**
+ * Actor-Zustand der ausfuehrenden Entitaet; wird bei Bedarf angelegt, damit
+ * aeltere Snapshots ohne `actors`-Feld weiterhin restaurierbar bleiben.
+ */
+function actor(rt: FieldRuntimeState, ctx: ScriptContext): ActorRuntime {
+  rt.actors ??= [];
+  const existing = rt.actors[ctx.entityIndex];
+  if (existing) return existing;
+  const fresh = createActor();
+  rt.actors[ctx.entityIndex] = fresh;
+  return fresh;
+}
 
 export function stepInstruction(
   rt: FieldRuntimeState,
@@ -205,6 +221,74 @@ export function stepInstruction(
       // Dialog-Stub: Fensterverwaltung ist UI-Sache — hier nur Trace, kein Yield.
       ctx.ip = next;
       return { kind: 'continue' };
+
+    // --- Entität & Bewegung (S12) --------------------------------------------
+    // Alle diese Ops schreiben ausschließlich in den Actor-Zustand. Wo eine
+    // Bewegung ausgeführt werden muss, setzt der Interpreter nur den Auftrag
+    // und wartet; ausgeführt wird sie vom Host mit dem Walkmesh-Solver. So
+    // bleibt der Solver die einzige Instanz, die über Begehbarkeit urteilt.
+    case OP.PC: {
+      actor(rt, ctx).partyMember = u8(0);
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.CHAR: {
+      actor(rt, ctx).modelIndex = u8(0);
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.VISI: {
+      actor(rt, ctx).visible = u8(0) !== 0;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.DFANM:
+    case OP.ANIME1: {
+      // 🟡 Operanden: Animations-ID, Geschwindigkeit (`Zu validieren`).
+      actor(rt, ctx).animation = { id: u8(0), speed: u8(1), loop: op === OP.DFANM };
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.DIR: {
+      // 🟡 Operanden: Bankpaar + i16-Richtung in Grad.
+      const bankPair = u8(0);
+      const raw = u16(1);
+      const value = srcValue((bankPair >> 4) & 0xf, raw, true);
+      actor(rt, ctx).direction = ((value % 360) + 360) % 360;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.XYZI: {
+      // 🟡 Feldaufteilung: 2 Bankpaarbytes, i16 x/y/z, u16 Dreiecksindex.
+      // Realdaten-geprüft über „Dreiecksindex muss im Walkmesh existieren".
+      const bp1 = u8(0);
+      const bp2 = u8(1);
+      const a = actor(rt, ctx);
+      a.position = [
+        signed16(srcValue((bp1 >> 4) & 0xf, u16(2), true)),
+        signed16(srcValue(bp1 & 0xf, u16(4), true)),
+        signed16(srcValue((bp2 >> 4) & 0xf, u16(6), true)),
+      ];
+      a.triangle = srcValue(bp2 & 0xf, u16(8), true);
+      // Ein Sprung an eine feste Position beendet einen laufenden Auftrag.
+      a.moveTarget = null;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.MOVE: {
+      // 🟡 Feldaufteilung: Bankpaar + i16 x + i16 y.
+      const bankPair = u8(0);
+      const a = actor(rt, ctx);
+      const requestId = rt.nextRequestId++;
+      a.moveTarget = {
+        x: signed16(srcValue((bankPair >> 4) & 0xf, u16(1), true)),
+        y: signed16(srcValue(bankPair & 0xf, u16(3), true)),
+        requestId,
+      };
+      ctx.ip = next;
+      ctx.waitState = { kind: 'movement', requestId };
+      return { kind: 'yield' };
+    }
     default:
       break;
   }

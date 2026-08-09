@@ -17,6 +17,8 @@
       "@webmidgar/convert": ["./packages/convert/src/index.ts"],
       "@webmidgar/walkmesh": ["./packages/walkmesh/src/index.ts"],
       "@webmidgar/field-runtime": ["./packages/field-runtime/src/index.ts"],
+      "@webmidgar/formats-kernel": ["./packages/formats-kernel/src/index.ts"],
+      "@webmidgar/formats-save": ["./packages/formats-save/src/index.ts"],
       "@webmidgar/interpreter": ["./packages/interpreter/src/index.ts"],
       "@webmidgar/formats-model": ["./packages/formats-model/src/index.ts"],
       "@webmidgar/render-actor": ["./packages/render-actor/src/index.ts"],

@@ -1,5 +1,6 @@
 import { spanEnd, type PreparedScript } from './prepared.js';
 import {
+  createActor,
   createBanks,
   writeBank,
   FAULT_LOG_CAP,
@@ -97,6 +98,7 @@ export class FieldRuntime {
       nextRequestId: 1,
       nextSeq: 1,
       banks: createBanks(),
+      actors: script.entities.map(() => createActor()),
       entities: script.entities.map((): EntityRuntime => ({
         context: null,
         suspended: [],
