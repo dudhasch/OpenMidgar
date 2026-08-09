@@ -155,7 +155,36 @@ Zufallskämpfe nötig. Standardverfahren: Accounting plus die Strukturkarte
 „Wertevielfalt je Byteposition", also das Verfahren, das bei `audio.fmt` die
 Eintragsgröße freigelegt hat.
 
-## O9 — Operandenlängentabelle systematisch abgleichen (Ziel: S20)
+## O9 — Operandenlängen ✅ gelöst (2026-08-10)
+
+**Ergebnis.** 16 von 103 abweichenden Längen übernommen, der Rest verworfen.
+Spannen-Abschluss **99,73 % → 99,92 %**, Overrun **0,23 % → 0,06 %**. Ein
+erneuter Lauf übernimmt nichts mehr — die Tabelle ist ein Fixpunkt.
+
+**Die Referenz pauschal zu übernehmen wäre ein Absturz gewesen: 86,77 %.**
+Der Projektstandard „Referenz ist Hypothese, nicht Autorität" hat hier keine
+Zeremonie erspart, sondern 13 Prozentpunkte.
+
+**Der eigentliche Fund war kein Tabelleneintrag, sondern ein Lesefehler.**
+Bei den Wort-Varianten der IF-Familie ist auch die **linke** Adresse zwei Byte
+breit; die VM las ein Byte, wodurch Vergleichsoperator und Sprungziel
+verrutschten. Kontrolle: dieselben vier Opcodes je ein Byte zu weit gesetzt
+liefern 99,52 % — die Gütefunktion misst also nicht bloß „länger ist besser".
+
+**Und O9 hat einen zweiten, unabhängigen Fehler aufgedeckt:** Der
+Sitzungs-Snapshot führte die Stillstandszähler der Bewegungsaufträge nicht
+mit. Das brach Snapshot/Restore in 3 von 702 Fields — und war vorher
+unerreichbar, weil zu wenige Fields überhaupt bis zu den Bewegungs-Opcodes
+kamen. **Lehre: Nach einer Formatkorrektur die gesamte Realdatensuite laufen
+lassen, nicht nur die betroffene Probe.**
+
+**Offen geblieben:** 3 der 16 Übernahmen sind nicht *strikt* besser als
+`ref±1` (0xc1, 0xe7, 0xfc) und bleiben 🟡; 0x18/0x19 sind aus Formgleichheit
+übernommen, nicht aus der Messung. Weiterzukommen bräuchte einen **zweiten,
+unmodifizierten** Datensatz — die zweite `flevel.lgp` der Installation gehört
+zu einem 7th-Heaven-Overlay und ist keine unabhängige Stichprobe.
+
+## O9-alt — der Weg dorthin (historisch)
 
 **Neu aufgetaucht.** Die aus den Realdaten abgeleitete Längentabelle (S12,
 99,73 % Spannen-Abschluss) hat Lücken. Gegen die Strukturgrößen aus Makou

@@ -164,10 +164,28 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * beiden V8-Ständen bitweise unterscheidet. Eine erneute Abweichung ist kein
  * Testartefakt, sondern genau der Befund, den R9 sucht.
  */
+/**
+ * **Fortschreibung 2026-08-10 (O9).** Alle drei Werte haben sich geändert.
+ * Das ist ein bewusster `engineCompat`-Schritt, kein maskierter Rückschritt —
+ * die beiden Ursachen sind benannt und einzeln nachvollziehbar:
+ *
+ *  1. **Operandenlängen.** Die vier Wort-Varianten der IF-Familie tragen eine
+ *     zwei Byte breite linke Adresse; vorher wurde ein Byte gelesen und alles
+ *     danach verrutschte. Betrifft direkt nur `skript`.
+ *  2. **Sitzungsschema 1 → 2.** Der Snapshot führt jetzt die
+ *     Stillstandszähler mit. Der Digest läuft über den Snapshot, also ändert
+ *     ein zusätzliches Feld **jeden** Vektor — auch `diagonal` und `gleiten`,
+ *     die gar kein Script ausführen. Wären diese beiden *nicht*
+ *     mitgewandert, wäre das der eigentliche Alarm gewesen.
+ *
+ * Vorherige Werte (Stand nach der R9-Härtung, zum Nachvollziehen):
+ * `diagonal 8f3579c8c25b109d`, `gleiten 3e159880012168ad`,
+ * `skript f7a597e17a462ee8`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: '8f3579c8c25b109d',
-  gleiten: '3e159880012168ad',
-  skript: 'f7a597e17a462ee8',
+  diagonal: 'd3db5a117a435444',
+  gleiten: 'c004f67d35b3e19c',
+  skript: '81dc6abb5d5e9311',
 };
 
 export interface VektorVergleich {

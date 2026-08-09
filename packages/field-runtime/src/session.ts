@@ -115,16 +115,29 @@ export interface FieldSessionOptions {
 }
 
 export interface FieldSessionSnapshot {
-  schemaVersion: 1;
+  schemaVersion: 2;
   fieldId: string;
   tick: number;
   player: PlayerState | null;
   activeTriggers: number[];
   prevConfirm: boolean;
+  /**
+   * Stillstandszähler je Entität, als sortierte Paare — Reihenfolge muss
+   * deterministisch sein, sonst wandert sie in den Digest.
+   *
+   * **Warum das hier steht (Schema 1 → 2):** Es fehlte. Eine Sitzung, die
+   * mitten in einem blockierten Bewegungsauftrag gesichert wurde, verlor beim
+   * Wiederherstellen ihren Zähler und brach die Bewegung später ab als der
+   * ununterbrochene Lauf. Aufgefallen ist es erst durch O9: Mit korrigierten
+   * Operandenlängen erreichen mehr Fields überhaupt Bewegungs-Opcodes, und
+   * 3 von 702 Sitzungen liefen dadurch auseinander. Der Fehler war vorher da,
+   * nur unerreichbar.
+   */
+  moveStalls: Array<[number, number]>;
   runtime: RuntimeSnapshot | null;
 }
 
-export const SESSION_SCHEMA_VERSION = 1;
+export const SESSION_SCHEMA_VERSION = 2;
 
 const DEFAULT_SPEED = 6;
 
@@ -465,6 +478,7 @@ export class FieldSession {
       player: this.player ? { walk: { ...this.player.walk }, facing: this.player.facing, moving: this.player.moving } : null,
       activeTriggers: [...this.activeTriggers].sort((a, b) => a - b),
       prevConfirm: this.prevConfirm,
+      moveStalls: [...this.moveStalls.entries()].sort((a, b) => a[0] - b[0]),
       runtime: this.runtime ? snapshotRuntime(this.runtime.state) : null,
     };
   }
@@ -496,6 +510,7 @@ export class FieldSession {
     this.tickCounter = snapshot.tick;
     this.activeTriggers = new Set(snapshot.activeTriggers);
     this.prevConfirm = snapshot.prevConfirm;
+    this.moveStalls = new Map(snapshot.moveStalls);
     return { ok: true, warnings };
   }
 

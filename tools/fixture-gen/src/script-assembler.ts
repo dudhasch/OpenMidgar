@@ -109,7 +109,10 @@ export class ScriptAssembler {
     cmp: number,
     elseTarget: string,
   ): this {
-    const size = 1 + (word ? 4 : 3) + 1 + (wide ? 2 : 1);
+    // O9: Bei den Wort-Varianten ist auch die linke Adresse zwei Byte breit —
+    // Bankpaar (1) + Adresse (1 oder 2) + Wert (1 oder 2) + Vergleich (1) +
+    // Sprung (1 oder 2).
+    const size = 1 + 1 + (word ? 2 : 1) + (word ? 2 : 1) + 1 + (wide ? 2 : 1);
     return this.emit(size, (out, pos, labels) => {
       const dest = labels.get(elseTarget);
       if (dest === undefined) throw new Error(`Unbekanntes Label: ${elseTarget}`);
@@ -117,11 +120,15 @@ export class ScriptAssembler {
       out[pos + 1] = bankPairOf(bank, value);
       out[pos + 2] = addr & 0xff;
       const raw = rawOf(value);
-      out[pos + 3] = raw & 0xff;
-      let cmpAt = pos + 4;
+      let cmpAt: number;
       if (word) {
-        out[pos + 4] = (raw >> 8) & 0xff;
-        cmpAt = pos + 5;
+        out[pos + 3] = (addr >> 8) & 0xff;
+        out[pos + 4] = raw & 0xff;
+        out[pos + 5] = (raw >> 8) & 0xff;
+        cmpAt = pos + 6;
+      } else {
+        out[pos + 3] = raw & 0xff;
+        cmpAt = pos + 4;
       }
       out[cmpAt] = cmp;
       const argPos = cmpAt + 1;

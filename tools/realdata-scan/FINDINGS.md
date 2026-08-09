@@ -321,3 +321,56 @@ animierte Frames kippen (R4-B2, bisher 10/76 aufrecht). **Sie ist widerlegt.**
 |---|---|
 | Landscaper, PyFF7, Makou Reactor und WebMidgar lesen das 1-Byte-Feld je TOC-Eintrag und **verwenden es nicht**. Keine der vier Quellen nennt eine Bedeutung | 🔴 Recherche erschöpft |
 | **Konsequenz:** O5 ist keine Recherche-, sondern eine Messfrage. Die geplante Doppelmessung (Prüfwert über Name/Inhalt gegen Ordnungshinweis über Position) bleibt der einzige Weg — die beiden Hypothesen machen gegensätzliche Vorhersagen, eine muss durchfallen | 🔵 Vorgehen bestätigt |
+
+## O9 — Operandenlängen gegen die Referenz (2026-08-10)
+
+Makou Reactor führt eine vollständige Längentabelle (`Opcode::length[257]`,
+Gesamtlänge inkl. Opcode-Byte). Sie wurde **nicht übernommen**, sondern posten
+für posten gegen die eigenen Daten gemessen.
+
+| Variante | Spannen-Abschluss | Overrun | Abbruch |
+|---|---|---|---|
+| A unsere Tabelle (Ausgangslage S12) | 99,73 % | 0,23 % | 0,04 % |
+| B Referenz **pauschal** übernommen | **86,77 %** | 0,01 % | 13,23 % |
+| C Referenz + variable Längen | 86,78 % | 0,00 % | 13,22 % |
+| **D selektiv übernommen** | **99,92 %** | **0,06 %** | **0,01 %** |
+
+| Befund | Status |
+|---|---|
+| **Die Referenz pauschal zu übernehmen wäre ein schwerer Rückschritt gewesen** — 86,77 % gegen 99,73 %. Die Vorsicht des Projektstandards war hier nicht Zeremonie, sondern hat einen 13-Punkte-Absturz verhindert | ✅ Verfahren belegt |
+| **16 von 103 abweichenden Längen übernommen**, der Rest verworfen. Overrun-Quote 0,23 % → **0,06 %**, also gut ein Viertel des Ausgangswerts | ✅ gemessen |
+| **Der Abstieg ist ordnungsabhängig.** Runde 2 fand drei weitere Übernahmen, darunter die häufigste überhaupt (0x33, n=7466) — eine übernommene Länge resynchronisiert den Durchlauf und macht eine zuvor verworfene lohnend. Ein einzelner Durchgang hätte sie übersehen | ⚠️ methodische Lehre |
+| **Nach der Übernahme ist die Tabelle ein Fixpunkt:** Ein erneuter Lauf übernimmt **nichts** mehr | ✅ konvergiert |
+| **Nachbarkontrolle:** Bei 3 der 16 Übernahmen ist der Referenzwert *nicht strikt* besser als `ref±1` (0xc1, 0xe7, 0xfc). Diese bleiben 🟡 — sie sind einer von mehreren gleich guten Werten, kein belegter | 🟡 offen markiert |
+| **Phantom-Gegenprobe:** Vorkommenszahlen sind selbst tabellenabhängig. Unter der besseren Tabelle verschwinden 0x0b (328 → 78) und 0x1b (92 → 18) weitgehend — sie waren überwiegend Artefakte eines fehllaufenden Durchlaufs. Alle übrigen verworfenen Opcodes bleiben häufig, sind also echt | ✅ Kontrolle |
+
+### Der eigentliche Fund: ein Lesefehler, keine Tabellenfrage
+
+| Befund | Status |
+|---|---|
+| **Bei den Wort-Varianten der IF-Familie ist auch die LINKE Adresse zwei Byte breit.** Die VM las dort ein Byte, wodurch Vergleichsoperator und Sprungziel um eine Stelle verrutschten. Betrifft 0x16 (n=4733) und 0x17 (n=300) messbar | 🔴 echter Fehler, behoben |
+| 0x18/0x19 sind auf der Gütefunktion **indifferent** und wurden aus **Formgleichheit** mitgezogen — dieselbe Instruktionsform muss dieselbe Länge haben. Als 🟡 markiert, weil das ein Formargument ist, kein Messergebnis | 🟡 begründet übernommen |
+| **Kontrolle:** Dieselben vier je ein Byte zu weit gesetzt → 99,52 % gegen 99,92 %. Die Gütefunktion misst also nicht bloß „länger ist besser" | ✅ Kontrolle fällt durch |
+
+### Was O9 nebenbei aufgedeckt hat
+
+| Befund | Status |
+|---|---|
+| **Der Sitzungs-Snapshot war unvollständig.** Die Stillstandszähler der Bewegungsaufträge fehlten. Eine mitten in einem blockierten Auftrag gesicherte Sitzung brach die Bewegung nach dem Wiederherstellen später ab als der ununterbrochene Lauf — **3 von 702** Fields. Schema 1 → 2, behoben, `restoreMismatch` wieder 0 | 🔴 latenter Fehler, behoben |
+| **Der Fehler war vorher unerreichbar.** Erst mit korrigierten Operandenlängen erreichen genug Fields überhaupt Bewegungs-Opcodes. Eine Korrektur an einer Stelle macht Fehler an einer ganz anderen sichtbar — das ist ein Argument dafür, nach jeder Formatkorrektur die **gesamte** Realdatensuite laufen zu lassen, nicht nur die betroffene Probe | ⚠️ methodische Lehre |
+| **Alle drei R9-Replay-Digests haben sich geändert** — auch `diagonal` und `gleiten`, die kein Script ausführen. Ursache: Der Digest läuft über den Snapshot, und der hat ein Feld dazubekommen. Wären diese beiden *nicht* mitgewandert, wäre **das** der Alarm gewesen | ✅ bewusster engineCompat-Schritt |
+
+### Was die Gütefunktion nicht kann
+
+Der Spannen-Abschluss ist gegenüber falscher **Semantik** vollständig
+invariant: Er belegt, dass die Längen aufgehen, nicht dass ein Opcode das
+Richtige tut. Zwei Opcodes mit vertauschten Längen liefern denselben
+Abschluss, solange ihre Summe stimmt. Das ist die „blinde Gütefunktion" aus
+dem Methodenkatalog — hier struktureller Natur und nicht behebbar. Deshalb
+bleiben die 0,06 % Rest und die drei nicht-strikten Übernahmen 🟡.
+
+**Was fehlt, um weiterzukommen:** ein **zweiter, unmodifizierter** Datensatz.
+Die Installation enthält zwar eine zweite `flevel.lgp`, die gehört aber zu
+einem 7th-Heaven-Overlay und ist vom Original abgeleitet — also keine
+unabhängige Stichprobe. Eine Installation eines anderen Release oder einer
+anderen Sprachfassung wäre eine.
