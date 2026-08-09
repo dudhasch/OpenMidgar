@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "composite": true,
+    "paths": {
+      "@webmidgar/formats-lgp": ["./packages/formats-lgp/src/index.ts"],
+      "@webmidgar/formats-field": ["./packages/formats-field/src/index.ts"],
+      "@webmidgar/convert": ["./packages/convert/src/index.ts"],
+      "@webmidgar/walkmesh": ["./packages/walkmesh/src/index.ts"],
+      "@webmidgar/interpreter": ["./packages/interpreter/src/index.ts"],
+      "@webmidgar/formats-model": ["./packages/formats-model/src/index.ts"],
+      "@webmidgar/render-actor": ["./packages/render-actor/src/index.ts"],
+      "@webmidgar/interpreter-debug": ["./packages/interpreter-debug/src/index.ts"],
+      "@webmidgar/render-field": ["./packages/render-field/src/index.ts"],
+      "@webmidgar/pipeline": ["./packages/pipeline/src/index.ts"],
+      "@webmidgar/telemetry": ["./packages/telemetry/src/index.ts"],
+      "@webmidgar/io": ["./packages/io/src/index.ts"],
+      "@webmidgar/cache": ["./packages/cache/src/index.ts"],
+      "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"]
+    }
+  }
+}

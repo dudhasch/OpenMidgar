@@ -1,0 +1,149 @@
+import * as THREE from 'three';
+import { ff7DirToScene } from '@webmidgar/convert';
+import { texToRgba, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource } from '@webmidgar/formats-model';
+import { EULER_ORDER } from './pose.js';
+
+/**
+ * GPU-Adapter der Modellkette: Skeleton → Three-Bone-Hierarchie mit starren
+ * Segment-Meshes (FF7-Field-Modelle sind rigid-segmentiert, kein Skinning).
+ *
+ * Aufbau: `root` (Scene-Space-Wrapper — trägt als EINZIGE Stelle die zentrale
+ * FF7→Scene-Basis aus packages/convert, ADR-009) → `model` (FF7-Modellraum,
+ * erhält Wurzeltranslation/-rotation je Frame) → Bone-Gruppen (Kindversatz
+ * (0,0,parentLength), Eulerorder 'YXZ' — Referenzmathematik in pose.ts).
+ */
+
+export interface ActorMeshBundle {
+  mesh: MeshSource;
+  /** Je RSD-Texturslot eine Textur oder null (→ Platzhalter). */
+  textures: (TextureSource | null)[];
+}
+
+export interface Actor {
+  root: THREE.Group;
+  model: THREE.Group;
+  boneGroups: THREE.Group[];
+}
+
+/** Wrapper-Rotation aus der zentralen Konvertierung (keine lokalen Flips). */
+export function sceneBasisMatrix(): THREE.Matrix4 {
+  const x = ff7DirToScene([1, 0, 0]);
+  const y = ff7DirToScene([0, 1, 0]);
+  const z = ff7DirToScene([0, 0, 1]);
+  return new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(...x),
+    new THREE.Vector3(...y),
+    new THREE.Vector3(...z),
+  );
+}
+
+const PLACEHOLDER_COLOR = 0xff00ff; // Magenta-Platzhalter (Debug-Konvention)
+
+function buildTexture(tex: TextureSource): THREE.DataTexture {
+  const texture = new THREE.DataTexture(texToRgba(tex), tex.width, tex.height, THREE.RGBAFormat);
+  texture.magFilter = THREE.NearestFilter; // authentischer Look, keine Palettensäume
+  texture.minFilter = THREE.NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function buildMeshObject(bundle: ActorMeshBundle): THREE.Mesh {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(bundle.mesh.positions, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(bundle.mesh.normals, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(bundle.mesh.uvs, 2));
+  geometry.setAttribute('color', new THREE.BufferAttribute(bundle.mesh.colors, 4, true));
+  geometry.setIndex(new THREE.BufferAttribute(bundle.mesh.indices, 1));
+
+  const materials: THREE.Material[] = [];
+  bundle.mesh.submeshes.forEach((sub, s) => {
+    geometry.addGroup(sub.start, sub.count, s);
+    if (sub.textured) {
+      const tex = bundle.textures[sub.textureIndex];
+      materials.push(
+        tex
+          ? new THREE.MeshBasicMaterial({ map: buildTexture(tex) })
+          : new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR }),
+      );
+    } else {
+      materials.push(new THREE.MeshBasicMaterial({ vertexColors: true }));
+    }
+  });
+  const mesh = new THREE.Mesh(geometry, materials);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/**
+ * Actor aus Skeleton + aufgelösten Ressourcen bauen. `resolve` liefert je
+ * Bone die Mesh-/Texturbündel (leer = reines Gelenk).
+ */
+export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => ActorMeshBundle[]): Actor {
+  const root = new THREE.Group();
+  root.name = `actor:${skeleton.name}`;
+  root.quaternion.setFromRotationMatrix(sceneBasisMatrix());
+
+  const model = new THREE.Group();
+  model.name = 'model';
+  model.rotation.order = EULER_ORDER;
+  root.add(model);
+
+  const boneGroups: THREE.Group[] = [];
+  skeleton.bones.forEach((bone, i) => {
+    const group = new THREE.Group();
+    group.name = `bone:${bone.name}#${i}`;
+    group.rotation.order = EULER_ORDER;
+    if (bone.parentIndex < 0) {
+      model.add(group);
+    } else {
+      group.position.set(0, 0, skeleton.bones[bone.parentIndex]!.length);
+      boneGroups[bone.parentIndex]!.add(group);
+    }
+    for (const bundle of resolve(i)) group.add(buildMeshObject(bundle));
+    boneGroups.push(group);
+  });
+  return { root, model, boneGroups };
+}
+
+const DEG2RAD = Math.PI / 180;
+
+/** Frame anwenden — exakt die Konventionen der Referenzmathematik (pose.ts). */
+export function applyFrame(actor: Actor, skeleton: Skeleton, frame: AnimationFrame): void {
+  actor.model.position.set(...frame.rootTranslation);
+  actor.model.rotation.set(
+    frame.rootRotation[0] * DEG2RAD,
+    frame.rootRotation[1] * DEG2RAD,
+    frame.rootRotation[2] * DEG2RAD,
+    EULER_ORDER,
+  );
+  skeleton.bones.forEach((bone, i) => {
+    const rx = frame.rotations[bone.fileOrder * 3] ?? 0;
+    const ry = frame.rotations[bone.fileOrder * 3 + 1] ?? 0;
+    const rz = frame.rotations[bone.fileOrder * 3 + 2] ?? 0;
+    actor.boneGroups[i]!.rotation.set(rx * DEG2RAD, ry * DEG2RAD, rz * DEG2RAD, EULER_ORDER);
+  });
+}
+
+/** Bone-Matrix im FF7-Modellraum (Wrapper herausgerechnet) — für Tests/Debug. */
+export function boneModelMatrix(actor: Actor, boneIndex: number): THREE.Matrix4 {
+  actor.root.updateMatrixWorld(true);
+  const rootInverse = actor.root.matrixWorld.clone().invert();
+  return rootInverse.multiply(actor.boneGroups[boneIndex]!.matrixWorld);
+}
+
+/** Kapsel-Platzhalter (E-HRC-Fallback laut Validierungsmatrix). */
+export function buildFallbackActor(height = 20): Actor {
+  const root = new THREE.Group();
+  root.name = 'actor:fallback';
+  root.quaternion.setFromRotationMatrix(sceneBasisMatrix());
+  const model = new THREE.Group();
+  root.add(model);
+  const capsule = new THREE.Mesh(
+    new THREE.CapsuleGeometry(height / 4, height / 2, 4, 8),
+    new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR, wireframe: true }),
+  );
+  capsule.position.z = height / 2;
+  capsule.rotation.x = Math.PI / 2; // Kapselachse auf Modell-Z (Höhenachse)
+  model.add(capsule);
+  return { root, model, boneGroups: [] };
+}

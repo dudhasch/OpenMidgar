@@ -1,0 +1,14 @@
+{
+  "name": "@webmidgar/realdata-scan",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@webmidgar/cache": "*",
+    "@webmidgar/formats-field": "*",
+    "@webmidgar/formats-lgp": "*",
+    "@webmidgar/io": "*",
+    "@webmidgar/render-field": "*",
+    "@webmidgar/walkmesh": "*"
+  }
+}

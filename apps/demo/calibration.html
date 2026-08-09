@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S4 Kamera-Kalibrierung</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 62rem; padding: 0 1rem; }
+    canvas { border: 1px solid #888; image-rendering: pixelated; display: block; margin: .5rem 0; }
+    button, select { font: inherit; padding: .3rem .8rem; margin-right: .4rem; }
+    .pass { color: #0a7a2f; font-weight: 600; }
+    .fail { color: #b00020; font-weight: 600; }
+    #checks li { font-family: ui-monospace, monospace; font-size: 12px; }
+    .row { margin: .6rem 0; }
+  </style>
+</head>
+<body>
+  <h1>S4: Achsenkreuz-Referenzszene</h1>
+  <p>
+    Überkopfkamera (C_ff7 = (0,0,1000), zoom 400) über Fixture-Walkmesh; rote Figur
+    (Deckfläche bei Sichtdistanz 850) zwischen grünem Vordergrund-Tile (800) und
+    orangem Tile (950); blaues Vollbild-Tile (5000) dahinter.
+  </p>
+  <div class="row">
+    Canvas:
+    <button data-size="640x480">640×480 (4:3)</button>
+    <button data-size="800x480">800×480 (Pillarbox)</button>
+    <button data-size="640x600">640×600 (Letterbox)</button>
+    FOV-Basis:
+    <select id="fovBase"><option value="240" selected>240</option><option value="224">224</option></select>
+  </div>
+  <canvas id="view" width="640" height="480"></canvas>
+  <div class="row">
+    <button id="runChecks">Checks ausführen (Verdeckung + Resize + Golden)</button>
+  </div>
+  <ul id="checks"><li>—</li></ul>
+  <script type="module" src="/src/calibration.ts"></script>
+</body>
+</html>
