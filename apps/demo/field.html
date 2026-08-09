@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S11 Field-Durchstich</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem; }
+    canvas { border: 1px solid #888; image-rendering: pixelated; display: block; }
+    button, select { font: inherit; padding: .3rem .8rem; margin-right: .4rem; }
+    .hint { background: #fff6d8; border: 1px solid #d8c26a; padding: .6rem .9rem; border-radius: 4px; }
+    .row { margin: .6rem 0; display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+    .cols { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+    .col { flex: 0 0 auto; }
+    .stage { position: relative; width: 640px; height: 480px; }
+    #readout { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #f4f4f4; border: 1px solid #ccc; padding: .6rem; overflow-x: auto; min-width: 26rem; }
+    #status { font-family: ui-monospace, monospace; font-size: 12px; }
+    .banner { display: none; background: #ffe1e1; border: 1px solid #c94b4b; padding: .5rem .8rem; border-radius: 4px; margin: .6rem 0; }
+    .banner.visible { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+    #dialogOverlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: flex-end;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #dialogOverlay.visible { display: flex; }
+    #dialogOverlay .box {
+      margin-bottom: 1rem;
+      background: rgba(0, 0, 20, 0.85);
+      color: #fff;
+      border: 2px solid #fff;
+      border-radius: 4px;
+      padding: .8rem 1.2rem;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      max-width: 90%;
+    }
+    .controls-help { font-family: ui-monospace, monospace; font-size: 12px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>S11: Field-Durchstich — echtes Field begehen</h1>
+  <p class="hint">
+    Originaldaten werden ausschließlich lokal im Browser gelesen und niemals
+    hochgeladen; im Repository liegen keine Originaldaten. Die Verzeichniswahl
+    unten erfordert zwingend eine Nutzergeste (Browser-Sicherheitsvorgabe für
+    <code>showDirectoryPicker</code>) und kann deshalb nicht automatisiert
+    werden — der übrige Ablauf ist über <code>window.fieldDemoDebug</code>
+    prüfbar.
+  </p>
+
+  <div class="row">
+    <button id="pick">Installationsverzeichnis wählen</button>
+    <span id="status">— noch kein Verzeichnis gewählt —</span>
+  </div>
+
+  <div class="row">
+    <label for="fieldSelect">Field:</label>
+    <select id="fieldSelect" disabled></select>
+    <button id="enter" disabled>Betreten</button>
+  </div>
+
+  <div class="row">
+    <button id="snapshot">Snapshot</button>
+    <button id="restore">Wiederherstellen</button>
+    <button id="record">Aufzeichnung starten</button>
+    <button id="replay">Replay prüfen</button>
+  </div>
+
+  <div id="fieldChangeBanner" class="banner">
+    <span id="fieldChangeText"></span>
+    <button id="gotoTarget">Zum Zielfield</button>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="stage">
+        <canvas id="view" width="640" height="480"></canvas>
+        <div id="dialogOverlay"><div class="box">[Platzhalter-Dialog — Bestätigung erkannt]</div></div>
+      </div>
+      <p class="controls-help">Steuerung: WASD/Pfeiltasten bewegen, Leertaste bestätigt (Dialog ein-/ausblenden).</p>
+    </div>
+    <div class="col">
+      <div id="readout">—</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/field-demo.ts"></script>
+</body>
+</html>

@@ -27,7 +27,8 @@ export type FieldDiagnosticCode =
   | 'E-MDL-SIZE' // Model-Loader: Accounting geht nicht auf — Sektion unbrauchbar
   | 'E-MDL-COUNT' // Model-Loader: Modell-/Animationszähler unplausibel
   | 'W-MDL-NAME' // Model-Loader: Dateifeld ohne verwertbaren Modellnamen
-  | 'W-MDL-SCALE'; // Model-Loader: Skalatext nicht als Zahl lesbar
+  | 'W-MDL-SCALE' // Model-Loader: Skalatext nicht als Zahl lesbar
+  | 'E-MAPLIST-SIZE'; // maplist: Zähler passt nicht zur Eintragslänge
 
 export type FieldSeverity = 'fatal' | 'error' | 'warning';
 

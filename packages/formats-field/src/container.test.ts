@@ -55,7 +55,7 @@ function fullFieldSpec(): FieldContainerSpec {
         cameraFocusHeight: -50,
         cameraRange: [-160, -120, 160, 120],
         gateways: [
-          { exitLine: [[0, 0, 0], [0, 100, 0]], destination: [500, 500, 0], destFieldId: 123 },
+          { exitLine: [[0, 0, 0], [0, 100, 0]], destMaplistIndex: 123 },
         ],
         triggers: [{ corners: [[10, 10, 0], [20, 20, 10]], bgGroup: 2, bgFrame: 1, behavior: 3, soundId: 4 }],
       }),
@@ -92,14 +92,13 @@ describe('Field-Container: Golden Roundtrip', () => {
     expect(cams[1]!.orthonormal).toBe(true);
     expect(cams[1]!.axesRaw[0]![0]).toBe(Math.round(cos30 * 4096));
 
-    // Trigger: aktiver Gateway + Sentinel-Inaktive.
+    // Trigger: belegter Gateway-Slot; ungenutzte sind genullt.
     const trg = b.triggers!;
     expect(trg.name).toBe('fixture');
     expect(trg.cameraRange).toEqual([-160, -120, 160, 120]);
-    expect(trg.gateways[0]!.active).toBe(true);
-    expect(trg.gateways[0]!.destFieldId).toBe(123);
-    expect(trg.gateways[0]!.destination).toEqual([500, 500, 0]);
-    expect(trg.gateways.filter((g) => g.active)).toHaveLength(1);
+    expect(trg.gateways[0]!.used).toBe(true);
+    expect(trg.gateways[0]!.destMaplistIndex).toBe(123);
+    expect(trg.gateways.filter((g) => g.used)).toHaveLength(1);
     expect(trg.triggers[0]!.behavior).toBe(3);
 
     // Script: Spans aus Entry-Points, Stringindex vollständig.

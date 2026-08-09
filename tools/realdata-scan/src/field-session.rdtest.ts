@@ -2,7 +2,14 @@ import 'fake-indexeddb/auto';
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { IndexService } from '@webmidgar/io';
-import { parseFieldEntry, type FieldBundle } from '@webmidgar/formats-field';
+import {
+  parseFieldEntry,
+  parseMaplist,
+  resolveMaplistTarget,
+  type FieldBundle,
+  type FieldDiagnostic,
+  type FieldMaplist,
+} from '@webmidgar/formats-field';
 import { FieldSession, InputRecorder, replayInputs, type FieldInput } from '@webmidgar/field-runtime';
 import { NodeDirectorySource } from './node-source.js';
 
@@ -64,31 +71,58 @@ describe.skipIf(!available)('Realdaten: Field-Sitzung (S11)', () => {
       }
     }
 
-    // --- A) Gateway-Graph ------------------------------------------------------
-    // Die destFieldId ist ein Index in die Field-Liste des Archivs.
+    // --- A) Gateway-Graph über die maplist auflösen ----------------------------
+    // `destMaplistIndex` (u16@14) ist belegt: 0-basierter Index in die maplist.
+    // Hier wird geprüft, dass der Graph als Ganzes trägt — jede Kante muss auf
+    // ein existierendes Field zeigen, und die Rückkantenquote muss hoch sein.
     const fieldCount = bundles.length;
+    const byName = new Map(bundles.map((b) => [b.fieldId.toLowerCase(), b]));
+    const maplistDiag: FieldDiagnostic[] = [];
+    let maplist: FieldMaplist | null = null;
+    for (const entry of index.listEntries('flevel')) {
+      if (entry.name.toLowerCase() !== 'maplist') continue;
+      maplist = parseMaplist(await index.readEntry(entry.canonicalId), 'maplist', maplistDiag);
+    }
+
     const gw = {
       total: 0,
-      active: 0,
-      inRange: 0,
-      selfLoop: 0,
-      outOfRange: [] as number[],
+      used: 0,
+      resolvable: 0,
+      leereSlots: 0,
+      unbekanntesField: 0,
+      selbstbezug: 0,
+      rueckkanten: 0,
       fieldsWithoutExit: 0,
       maxPerField: 0,
     };
+    const edges = new Set<string>();
+    const directed: [string, string][] = [];
     for (const bundle of bundles) {
-      const gateways = bundle.triggers?.gateways ?? [];
       let activeHere = 0;
-      for (const g of gateways) {
+      for (const g of bundle.triggers?.gateways ?? []) {
         gw.total++;
-        if (!g.active) continue;
-        gw.active++;
+        if (!g.used) continue;
+        gw.used++;
         activeHere++;
-        if (g.destFieldId >= 0 && g.destFieldId < fieldCount) gw.inRange++;
-        else if (gw.outOfRange.length < 12) gw.outOfRange.push(g.destFieldId);
+        const target = maplist ? resolveMaplistTarget(maplist, g.destMaplistIndex) : null;
+        if (!target) {
+          gw.leereSlots++;
+          continue;
+        }
+        if (!byName.has(target)) {
+          gw.unbekanntesField++;
+          continue;
+        }
+        gw.resolvable++;
+        if (target === bundle.fieldId.toLowerCase()) gw.selbstbezug++;
+        edges.add(`${bundle.fieldId.toLowerCase()}>${target}`);
+        directed.push([bundle.fieldId.toLowerCase(), target]);
       }
       gw.maxPerField = Math.max(gw.maxPerField, activeHere);
       if (activeHere === 0) gw.fieldsWithoutExit++;
+    }
+    for (const [from, to] of directed) {
+      if (edges.has(`${to}>${from}`)) gw.rueckkanten++;
     }
 
     // --- B) Determinismus + Snapshot/Restore -----------------------------------
@@ -149,11 +183,15 @@ describe.skipIf(!available)('Realdaten: Field-Sitzung (S11)', () => {
           fields: fieldCount,
           gatewayGraph: {
             gesamt: gw.total,
-            aktiv: gw.active,
-            zielImBereich: `${gw.inRange}/${gw.active}`,
-            zieleAusserhalb: gw.outOfRange,
+            belegt: gw.used,
+            maplistGeladen: maplist !== null ? maplist.names.length : null,
+            aufgeloest: `${gw.resolvable}/${gw.used}`,
+            leereZielslots: gw.leereSlots,
+            unbekanntesField: gw.unbekanntesField,
+            selbstbezug: gw.selbstbezug,
+            rueckkantenquote: `${((gw.rueckkanten / Math.max(1, directed.length)) * 100).toFixed(1)}%`,
             fieldsOhneAusgang: gw.fieldsWithoutExit,
-            maxAktiveJeField: gw.maxPerField,
+            maxBelegtJeField: gw.maxPerField,
           },
           determinismus: det,
           ticksJeSitzung: TICKS,
@@ -169,6 +207,11 @@ describe.skipIf(!available)('Realdaten: Field-Sitzung (S11)', () => {
     expect(det.restoreMismatch).toBe(0);
     expect(det.restoreRejected).toBe(0);
     expect(det.outOfMesh).toBe(0);
+    // Gateway-Graph: die maplist-Auflösung muss den Großteil der Kanten tragen,
+    // und die Rückkantenquote belegt, dass es ein echter Graph ist.
+    expect(maplist).not.toBeNull();
+    expect(gw.resolvable / gw.used).toBeGreaterThan(0.8);
+    expect(gw.rueckkanten / Math.max(1, directed.length)).toBeGreaterThan(0.6);
     await dir.closeAll();
   });
 });

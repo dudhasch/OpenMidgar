@@ -7,7 +7,7 @@ import {
   TRG_GATEWAY_COUNT,
   TRG_GATEWAY_LEN,
   TRG_HEADER_LEN,
-  TRG_INACTIVE_FIELD,
+
   TRG_NAME_LEN,
   TRG_SECTION_LEN,
   TRG_TRIGGER_COUNT,
@@ -117,10 +117,15 @@ export function composeCameraSection(cameras: CameraSpec[]): Uint8Array {
 
 // --- Trigger ----------------------------------------------------------------
 
+/**
+ * Gateway-Spezifikation. Die Zielangaben heißen bewusst „Kandidat": ihre
+ * Lage im 24-B-Record ist realdaten-seitig NICHT belegt (siehe
+ * `sections/triggers.ts`). Der Composer schreibt sie an die aktuell
+ * angenommenen Offsets, damit Roundtrips stabil sind — mehr behauptet er nicht.
+ */
 export interface GatewaySpec {
   exitLine: [Vec3, Vec3];
-  destination: Vec3;
-  destFieldId: number;
+  destMaplistIndex: number;
 }
 
 export interface TriggerVolumeSpec {
@@ -163,11 +168,10 @@ export function composeTriggersSection(spec: TriggersSpec): Uint8Array {
     if (gw) {
       writeVec3(o, gw.exitLine[0]);
       writeVec3(o + 6, gw.exitLine[1]);
-      writeVec3(o + 12, gw.destination);
-      view.setUint16(o + 18, gw.destFieldId, true);
-    } else {
-      view.setUint16(o + 18, TRG_INACTIVE_FIELD, true);
+      view.setUint16(o + 14, gw.destMaplistIndex, true);
     }
+    // Ungenutzte Slots bleiben komplett genullt — genau daran erkennt der
+    // Parser sie (entartete Austrittslinie), nicht an einem Sentinel-Wert.
   }
   const trBase = TRG_HEADER_LEN + TRG_GATEWAY_COUNT * TRG_GATEWAY_LEN;
   for (let t = 0; t < TRG_TRIGGER_COUNT; t++) {

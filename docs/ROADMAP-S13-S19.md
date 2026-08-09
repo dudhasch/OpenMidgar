@@ -152,17 +152,10 @@ nur `packages/io`); S19 ist ab S9/S11 startbar und mit S15–S17 parallelisierba
 - **ADR-008**: Savegames (S14) und Mod-Cache (S19) übernehmen das Key-Schema;
   Replay-/Digest-Metadaten tragen ab S19 die Mod-Lage.
 
-## Ausblick — Bogen S20+ (unpriorisiert)
+## Ausblick — Bogen S20+
 
-- **Menü-Grundmodul** (Menü-LGP-Assets als UI, lesende Status-/Party-/
-  Item-Ansichten; nach S13/S14/S15)
-- **Save/Load-UI & New Game** (Slot-UI mit Preview-Block, KernelInitData-Start,
-  Namenseingabe; nach S14/S15)
-- **Modding II**: Script-Patches + Dialog-Ersetzungen (engine-seitiger
-  Mnemonic-Assembler, guardHash, Anker-Matching, Mod-Doktor; adressiert R10)
-- **Audio-Feinsemantik**: AKAO-Familie, Kanal-/Lock-Zustände vollständig
-- **Härtung & Beta-Gate**: NFR-Messkampagne (TTFF cold/warm, GPU-Upload-Budget,
-  Heap, Soak-Test 500 Field-Wechsel), R5-Fingerprint-Matrix via Community-Beta
-  mit dem asset-freien S18-Diagnose-Export, R9-Cross-Browser-Replays,
-  ADR-010-Entscheid, Mobile-Profiling (R7)
-- **Eigene Bögen danach**: Weltkarte, echtes Battle-Modul
+Der Bogen S20–S26 ist ausgearbeitet in
+[ROADMAP-S20-S26.md](ROADMAP-S20-S26.md): Härtung & Beta-Gate (S20),
+Menü-Grundmodul (S21), Modding II (S22), Audio-Feinsemantik (S23),
+Save/Load-UI & New Game (S24), Modding II+ mit field-add/KTX2 (S25),
+Final-Härtung & 1.0-Politur (S26).

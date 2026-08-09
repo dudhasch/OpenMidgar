@@ -193,14 +193,14 @@ describe('Gateway-/Trigger-Querung', () => {
     const section = composeTriggersSection({
       name: 'gwtest',
       gateways: [
-        { exitLine: [[100, -50, 0], [100, 50, 0]], destination: [0, 0, 0], destFieldId: 7 },
-        { exitLine: [[200, -50, 0], [200, 50, 0]], destination: [0, 0, 0], destFieldId: 8 },
+        { exitLine: [[100, -50, 0], [100, 50, 0]], destMaplistIndex: 7 },
+        { exitLine: [[200, -50, 0], [200, 50, 0]], destMaplistIndex: 8 },
       ],
     });
     const triggers = parseTriggersSection(section, 'gwtest', [])!;
     // Schritt quert BEIDE Linien: Reihenfolge nach t (erst Feld 7, dann 8).
     const both = detectGatewayCrossings({ x: 50, y: 0 }, { x: 250, y: 0 }, triggers);
-    expect(both.map((e) => e.gateway.destFieldId)).toEqual([7, 8]);
+    expect(both.map((e) => e.gateway.destMaplistIndex)).toEqual([7, 8]);
     // Schritt ohne Querung: nichts feuert (inaktive Slots ebenfalls nicht).
     expect(detectGatewayCrossings({ x: 110, y: 0 }, { x: 190, y: 0 }, triggers)).toHaveLength(0);
     // Hin und zurück: je Querung genau ein Ereignis.

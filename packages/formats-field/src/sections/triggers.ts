@@ -27,8 +27,14 @@ export const TRG_HEADER_LEN = TRG_NAME_LEN + 1 + 2 + 8 + TRG_BG_PARAMS_LEN; // 3
 export const TRG_SECTION_LEN =
   TRG_HEADER_LEN + TRG_GATEWAY_COUNT * TRG_GATEWAY_LEN + TRG_TRIGGER_COUNT * TRG_TRIGGER_LEN; // 516
 
-/** 🟡 Ziel-Field-ID inaktiver Gateway-Slots (Zu validieren). */
-export const TRG_INACTIVE_FIELD = 0x7fff;
+/**
+ * Ungenutzte Gateway- und Trigger-Slots erkennt man an entarteter Geometrie,
+ * nicht an einem Sentinel-Wert (S11-Probe über 8424 Gateway-Records).
+ */
+export function isDegenerateLine(line: readonly [Vec3, Vec3]): boolean {
+  const [a, b] = line;
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+}
 
 export function parseTriggersSection(
   data: Uint8Array,
@@ -69,13 +75,15 @@ export function parseTriggersSection(
   const gateways: FieldGateway[] = [];
   for (let g = 0; g < TRG_GATEWAY_COUNT; g++) {
     const o = gwBase + g * TRG_GATEWAY_LEN;
-    const destFieldId = view.getUint16(o + 18, true);
+    const exitLine: [Vec3, Vec3] = [readVec3(o), readVec3(o + 6)];
     gateways.push({
-      exitLine: [readVec3(o), readVec3(o + 6)],
-      destination: readVec3(o + 12),
-      destFieldId,
-      active: destFieldId !== TRG_INACTIVE_FIELD,
-      unknownRaw: [...data.subarray(o + 20, o + TRG_GATEWAY_LEN)],
+      exitLine,
+      // Belegungsmerkmal: entartete Austrittslinie = nie beschriebener Slot.
+      // Der frühere Sentinel-Test (destFieldId !== 0x7FFF) griff nicht: über
+      // 8424 Records taucht 0x7FFF nie auf, während 7329 Slots entartet sind.
+      used: !isDegenerateLine(exitLine),
+      destMaplistIndex: view.getUint16(o + 14, true),
+      raw: data.slice(o, o + TRG_GATEWAY_LEN),
     });
   }
 
@@ -83,8 +91,11 @@ export function parseTriggersSection(
   const triggers: FieldTriggerVolume[] = [];
   for (let t = 0; t < TRG_TRIGGER_COUNT; t++) {
     const o = trBase + t * TRG_TRIGGER_LEN;
+    const corners: [Vec3, Vec3] = [readVec3(o), readVec3(o + 6)];
     triggers.push({
-      corners: [readVec3(o), readVec3(o + 6)],
+      corners,
+      // Auch hier führt die Sektion immer 12 Slots; ungenutzte sind genullt.
+      used: !isDegenerateLine(corners),
       bgGroup: view.getUint8(o + 12),
       bgFrame: view.getUint8(o + 13),
       behavior: view.getUint8(o + 14),

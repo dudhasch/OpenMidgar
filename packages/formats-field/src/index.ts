@@ -2,6 +2,7 @@ export * from './diagnostics.js';
 export * from './lzs.js';
 export * from './nam.js';
 export * from './container.js';
+export * from './maplist.js';
 export * from './sections/walkmesh.js';
 export * from './sections/camera.js';
 export * from './sections/triggers.js';

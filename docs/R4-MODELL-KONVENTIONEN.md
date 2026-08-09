@@ -47,10 +47,31 @@ Die Voraussetzung für B1–B4 ist geschaffen, die Sichtprüfung selbst steht no
   Aufteilung der drei Lichteinheiten nicht. Erst anwenden, wenn die
   Sichtprüfung sie bestätigt.
 
+## Warum B1 und B4 sich der Automatisierung entziehen (Versuch in S11)
+
+Ein Automatisierungsversuch ist bewusst gescheitert und wird hier festgehalten,
+damit ihn niemand wiederholt:
+
+- **B1 über die Bindpose messen geht nicht.** Der Gedanke war: „eine Figur ist
+  höher als breit". In der Bindpose sind aber alle Rotationen 0, und weil
+  FF7-Feldmodelle starr segmentiert sind, entsteht dabei eine *gerade Kette*
+  entlang der Bone-Achse — Breite exakt 0 bei allen 280 gemessenen Modellen.
+  Die Aufrechtigkeit steckt nicht im Skelett, sondern in der Mesh-Geometrie.
+  Ein tragfähiger automatischer Test müsste die `.p`-Segmente über die
+  Bone-Matrizen transformieren und deren Bounding-Box messen.
+- **B4 über die Posengröße messen geht nicht.** Gemessen wurde die
+  Ausdehnung der animierten Pose gegen die Bindpose, mit zyklisch
+  verschobener Bone-Zuordnung als Kontrolle. Ergebnis: die *falsche*
+  Zuordnung ergab eine kleinere Ausdehnung (Median 1,26 gegen 1,52) — das Maß
+  ist von der Wurzeltranslation dominiert und trennt die Hypothesen nicht.
+
+Beide Annahmen bleiben damit auf die Sichtprüfung angewiesen; die Demoseite
+`apps/demo/field-model.html` hält die Vergleichsschalter dafür bereit.
+
 ## Nächste Schritte
 
 1. B1–B4 an einem Referenzmodell (aufrechte Idle-Pose) sichtprüfen —
-   die Demoseite dafür steht, die Prüfung selbst gehört in S11.
+   die Demoseite dafür steht, die Prüfung selbst braucht ein Auge.
 2. B5/B6 über ein texturiertes Modell mit bekannter Farbverteilung prüfen.
 3. Renderstate-Blöcke (100 B): abgesicherte Flags (Blend/Cull/Lit) mappen —
    bisher roh konserviert.

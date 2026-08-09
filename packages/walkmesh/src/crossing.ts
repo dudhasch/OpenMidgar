@@ -47,7 +47,7 @@ export function detectGatewayCrossings(
 ): GatewayEvent[] {
   const events: GatewayEvent[] = [];
   triggers.gateways.forEach((gateway, gatewayIndex) => {
-    if (!gateway.active) return;
+    if (!gateway.used) return;
     const a = { x: gateway.exitLine[0][0], y: gateway.exitLine[0][1] };
     const b = { x: gateway.exitLine[1][0], y: gateway.exitLine[1][1] };
     const hit = segmentsIntersect(prev, next, a, b);

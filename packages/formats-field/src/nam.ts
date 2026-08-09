@@ -41,17 +41,44 @@ export interface FieldCameraSet {
   cameras: FieldCamera[];
 }
 
+/**
+ * Gateway-Record (24 B). Jede Triggersektion führt 12 Slots; belegt sind im
+ * Gesamtbestand nur 1095 davon.
+ *
+ * ✅ Belegt: `exitLine` @0…@11 und das Belegungsmerkmal — ein ungenutzter Slot
+ *   hat eine entartete (punktförmige) Austrittslinie. Über 8424 Records
+ *   trennt das sauber: alle 740 Records mit auffälligem Zielfeld-Wert sind
+ *   nicht entartet, alle 7329 entarteten tragen den Nullwert.
+ * ✅ Belegt: `destMaplistIndex` = u16@14 ist ein **0-basierter Index in die
+ *   `maplist`** (nicht in die Archivreihenfolge). Nachgewiesen über
+ *   Graph-Symmetrie: Fasst man die Ziele als gerichteten Graphen auf, haben
+ *   **78,8 %** der Kanten eine Gegenkante — gegen ein Kontrollniveau von
+ *   **0,2 %** bei verwürfelten Zielen. Alle anderen Offsets und
+ *   Indexdeutungen bleiben unter 3 %.
+ * 🔴 **Der Zielpunkt steht NICHT im Record** — das ist gemessen, nicht
+ *   vermutet: Alle prüfbaren Vec3-i16-Offsets (@12, @16, @18) liegen mit
+ *   34,3 % / 14,4 % / 12,0 % Treffern *unter* ihrer jeweiligen Kontrollquote
+ *   (36,8 % / 17,3 % / 14,2 %), und die Fehlschläge liegen im Median 99
+ *   Einheiten neben der Ziel-Bounding-Box — also kein Skalierungsproblem.
+ *   Die Ankunftsposition wird deshalb aus dem **Gegen-Gateway** des
+ *   Zielfields abgeleitet (`planTransition` in `@webmidgar/field-runtime`).
+ *   Die verbleibenden Bytes bleiben in `raw`; @16/@18 tragen identische
+ *   Verteilungen und sehen nach Flags aus, nicht nach Koordinaten.
+ */
 export interface FieldGateway {
   exitLine: [Vec3, Vec3];
-  destination: Vec3;
-  destFieldId: number;
-  active: boolean;
-  /** Nicht zugeordnete Bytes des Records — roh konserviert (🟡). */
-  unknownRaw: number[];
+  /** false = ungenutzter Slot (entartete Austrittslinie). */
+  used: boolean;
+  /** u16@14 — 0-basierter Index in die `maplist`. ✅ */
+  destMaplistIndex: number;
+  /** Vollständiger 24-B-Record (die nicht zugeordneten Bytes inklusive). */
+  raw: Uint8Array;
 }
 
 export interface FieldTriggerVolume {
   corners: [Vec3, Vec3];
+  /** false = ungenutzter Slot (genullte Ecken) — sonst Phantomtrigger bei (0,0). */
+  used: boolean;
   bgGroup: number;
   bgFrame: number;
   behavior: number;

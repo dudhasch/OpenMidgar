@@ -39,6 +39,19 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | Tile-Feld u16@20 als paletteId-Kandidat: nur 54 % < Seitenzahl | 🟡 Offset falsch oder zusammengesetzt — bei S9-Rendering kalibrieren (Record roh konserviert) |
 | Sektion 6: variabel 1,2–30 kB, kein Tile-Bezug erkennbar | 🟡 Zweck offen (nicht MVP-blockierend) |
 
+## S11 — Field-Sitzung, Gateway-Bestand, Tiefen-Eichung (2026-08-09)
+
+| Befund | Status |
+|---|---|
+| **Determinismus der Integration**: 702 Fields × 240 Takte mit Solver, Triggern und mitlaufendem Interpreter — **0 Digest-Abweichungen** beim Eingabe-Replay, **0 Abweichungen** nach Snapshot/Restore mitten im Lauf, 0 Mesh-Verletzungen | ✅ Kernzusicherung realdaten-validiert |
+| **Field-Wechsel-Budget** (Container entpacken + parsen, Sitzung aufbauen, Kachelatlas auflösen): Median **5,1 ms**, p95 9,9 ms, Maximum 17,7 ms — die NFR-Vorgabe von 500 ms wird von **0/702** Fields verletzt | ✅ NFR eingehalten (Node-Messung, ohne GPU-Upload) |
+| **Ungenutzte Gateway-Slots erkennt man an entarteter Austrittslinie**, nicht am Sentinel: Von 8424 Records (702 × 12) sind nur **1095 belegt**. Der bisherige Test `destFieldId !== 0x7FFF` griff nie — der Wert 0x7FFF kommt im Bestand überhaupt nicht vor | ✅ **Formatkorrektur** (gleiches Muster bei Triggervolumen: genullte Ecken) |
+| **Zielfield = u16@14, 0-basierter Index in die `maplist`.** Gefunden über **Graph-Symmetrie** statt über Koordinaten: Fasst man die Ziele als gerichteten Graphen auf, haben **78,8 %** der Kanten eine Gegenkante — gegen **0,2 %** Kontrollniveau bei verwürfelten Zielen. Alle anderen Offsets und Indexdeutungen (1-basiert, Archivreihenfolge, alphabetisch) bleiben unter 3 % | ✅ **Blocker gelöst** |
+| `maplist` erschlossen: u16 Anzahl (788) + 32-B-Namen, unkomprimiert; 787 auf einen Fieldnamen auflösbar. Über den Gesamtbestand lösen **978/1095** Gateway-Kanten auf, 0 Selbstbezüge | ✅ Formatfakt (`packages/formats-field/src/maplist.ts`) |
+| **Der Zielpunkt steht NICHT im Record.** Mit der korrekten Ziel-ID nachgemessen: Alle prüfbaren Vec3-i16-Offsets liegen *unter* ihrer Kontrollquote — @12: 34,3 % gegen 36,8 %, @16: 14,4 % gegen 17,3 %, @18: 12,0 % gegen 14,2 %. Die Fehlschläge liegen im Median 99 Einheiten neben der Ziel-Bounding-Box, sind also kein Skalierungsfehler | 🔴 **belastbarer Negativbefund** |
+| **Ankunft daher über das Gegen-Gateway** (`planTransition`): Austrittslinie des Rückwegs abtasten, lotrecht einrücken, Solver bestätigen lässt. Ergebnis über alle Kanten: **510/1095 (46,6 %)** exakte Ankunft, davon **0**, die beim ersten Schritt sofort wieder feuern. Rest fällt auf den Meshschwerpunkt zurück (207 Kanten ohne Gegen-Gateway, 261 mit Gegen-Gateway abseits des Meshs) | ✅ tragfähig, ausschließlich auf belegten Daten |
+| **Tiefen-Eichung K7**: Aus der Ordnungsbedingung (Layer 0 trägt immer z = 4095 und liegt hinter allem Begehbaren) folgt `zScale > max(vz)/4095`. Nötig: Median 0,66, p99 3,31, **Maximum 3,77** — bei zScale 1 erfüllen nur 476/702 Fields die Bedingung, bei **4** alle | 🟡 belegte untere Schranke, kein Beweis — Sichtprüfung entscheidet |
+
 ## S10 — Model-Loader-Sektion 3 (2026-08-09)
 
 Über die Sektion war nichts belegt. Fünf Probeniterationen: Längen-/Kopfprofil →
@@ -140,5 +153,17 @@ Offene Semantikfragen (Achsen, Eulerorder, BGRA, …): [R4-Notiz](../../docs/R4-
    `stringTableOffset` — der bekannte Sentinel „ungenutzter Slot wiederholt
    letzten Entry ans Bytecode-Ende". Parser akzeptiert `== stringTableOffset`
    jetzt als leeren Span; Realdaten-Sweep ist damit E-SCR-SPAN-frei.
-3. Die FOV-Basis-Entscheidung (R2) kann jetzt mit echten Kameras + Backgrounds
-   kalibriert werden, sobald der Background-Parser existiert.
+3. ~~Die FOV-Basis-Entscheidung (R2) kann jetzt mit echten Kameras +
+   Backgrounds kalibriert werden~~ **Erledigt (S9): FOV-Basis = 240**, siehe
+   [CALIBRATION.md](../calibration/CALIBRATION.md).
+4. ~~Offen und blockierend für den Field-Wechsel~~ **Gelöst (S11):** Zielfield
+   = u16@14 als maplist-Index; die Ankunft kommt aus dem Gegen-Gateway, weil
+   der Zielpunkt nachweislich nicht im Record steht.
+
+   **Methodische Lehre — die wichtigste dieser Session:** Der Durchbruch kam,
+   als die Suche das Koordinatensystem verließ. Solange nach dem Zielpunkt
+   gesucht wurde, prüfte jede Hypothese *zwei* unbekannte Felder gleichzeitig
+   und scheiterte an beiden. Die Rückkantenprobe testet dagegen nur EINE
+   Unbekannte und nutzt eine Eigenschaft, die keine Koordinate braucht: dass
+   Verbindungen zwischen Räumen gegenseitig sind. Wenn eine Messung nicht
+   greift, lohnt der Blick, ob sie zu viele Unbekannte auf einmal prüft.

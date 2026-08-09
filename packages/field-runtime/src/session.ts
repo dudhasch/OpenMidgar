@@ -54,10 +54,30 @@ export interface TriggerEvent {
   kind: 'enter' | 'leave';
 }
 
+/**
+ * Ein gequertes Gateway. `destMaplistIndex` ist belegt (0-basierter Index in
+ * die `maplist`, nachgewiesen über 78,8 % Rückkantenquote gegen 0,2 %
+ * Kontrollniveau) — der Host löst ihn über `resolveMaplistTarget` zu einem
+ * Fieldnamen auf. Der Zielpunkt bleibt dagegen ein 🟡 Kandidat; bis zu seiner
+ * Bestätigung setzt man die Figur im Zielfield besser über die Rückrichtung
+ * (das Gegen-Gateway) statt über diese Koordinate.
+ */
 export interface FieldChange {
   gatewayIndex: number;
-  destFieldId: number;
-  destination: Vec3;
+  destMaplistIndex: number;
+}
+
+/**
+ * Offene Dialoganfrage eines Skriptkontextes. Der Interpreter hält den Kontext
+ * an, bis der Host antwortet — im Durchstich löst die Bestätigungstaste auf,
+ * ab S13 das echte Fenstersystem.
+ */
+export interface PendingDialog {
+  entityIndex: number;
+  slot: number;
+  requestId: number;
+  /** Gesetzt, wenn das Skript eine Auswahl erwartet (ASK). */
+  choice: { bank: number; addr: number } | null;
 }
 
 export interface TickResult {
@@ -68,6 +88,10 @@ export interface TickResult {
   /** Gesetzt, sobald ein Gateway gequert wurde — der Host lädt das Zielfield. */
   fieldChange: FieldChange | null;
   confirmPressed: boolean;
+  /** Kontexte, die auf eine Dialogantwort warten (stabil sortiert). */
+  pendingDialogs: PendingDialog[];
+  /** In diesem Takt beantwortete Dialoge. */
+  resolvedDialogs: number[];
 }
 
 export interface FieldSessionOptions {
@@ -79,6 +103,13 @@ export interface FieldSessionOptions {
   /** Interpreter mitlaufen lassen (Standard: ja, wenn ein Script vorliegt). */
   runScript?: boolean | undefined;
   interpreterBudget?: number | undefined;
+  /**
+   * Wie offene Dialoganfragen aufgelöst werden:
+   *  - `confirm` (Standard): auf Tastendruck, ein Dialog je Takt
+   *  - `auto`: sofort im selben Takt (Testläufe, Sweeps)
+   *  - `manual`: gar nicht — der Host ruft `resolveDialog` selbst
+   */
+  dialogMode?: 'confirm' | 'auto' | 'manual' | undefined;
 }
 
 export interface FieldSessionSnapshot {
@@ -95,6 +126,16 @@ export const SESSION_SCHEMA_VERSION = 1;
 
 const DEFAULT_SPEED = 6;
 
+/**
+ * Ein Triggervolumen gilt als belegt, sobald es im Grundriss eine Ausdehnung
+ * hat. Dasselbe Erkennungsmerkmal trägt bei Gateways die Austrittslinie —
+ * ungenutzte Slots sind in beiden Fällen schlicht genullt (realdaten-belegt).
+ */
+function isUsedVolume(v: FieldTriggerVolume): boolean {
+  const [a, b] = v.corners;
+  return a[0] !== b[0] || a[1] !== b[1];
+}
+
 function insideVolume(v: FieldTriggerVolume, x: number, y: number): boolean {
   const [a, b] = v.corners;
   const x0 = Math.min(a[0], b[0]);
@@ -110,6 +151,7 @@ export class FieldSession {
   readonly script: PreparedScript | null;
   readonly runtime: FieldRuntime | null;
   readonly speed: number;
+  readonly dialogMode: 'confirm' | 'auto' | 'manual';
 
   player: PlayerState | null = null;
   tickCounter = 0;
@@ -122,6 +164,7 @@ export class FieldSession {
   ) {
     this.fieldId = bundle.fieldId;
     this.speed = options.speed ?? DEFAULT_SPEED;
+    this.dialogMode = options.dialogMode ?? 'confirm';
     this.solver = bundle.walkmesh ? new WalkmeshSolver(bundle.walkmesh) : null;
 
     const scriptSection = bundle.rawSections[1];
@@ -132,6 +175,10 @@ export class FieldSession {
         ...(options.seed !== undefined ? { seed: options.seed } : {}),
         ...(options.interpreterBudget !== undefined ? { budget: options.interpreterBudget } : {}),
       });
+      // Ohne `start()` wird kein Slot-0-Request eingereiht — die Skripte
+      // liefen sonst nie an und `tick()` wäre stillschweigend wirkungslos.
+      // Beim Restore wird der Zustand ersetzt, dort NICHT erneut starten.
+      this.runtime.start();
     } else {
       this.script = null;
       this.runtime = null;
@@ -161,7 +208,9 @@ export class FieldSession {
     const volumes = this.bundle.triggers?.triggers ?? [];
     const hit: number[] = [];
     volumes.forEach((v, i) => {
-      if (insideVolume(v, x, y)) hit.push(i);
+      // Die Sektion führt immer 12 Slots; ungenutzte sind auf (0,0,0)–(0,0,0)
+      // genullt. Ohne diese Prüfung feuerte am Weltursprung ein Phantomtrigger.
+      if (isUsedVolume(v) && insideVolume(v, x, y)) hit.push(i);
     });
     return hit;
   }
@@ -196,8 +245,7 @@ export class FieldSession {
         if (first) {
           fieldChange = {
             gatewayIndex: first.gatewayIndex,
-            destFieldId: first.gateway.destFieldId,
-            destination: first.gateway.destination,
+            destMaplistIndex: first.gateway.destMaplistIndex,
           };
         }
       }
@@ -221,8 +269,59 @@ export class FieldSession {
 
     const confirmPressed = input.confirm && !this.prevConfirm;
     this.prevConfirm = input.confirm;
+
+    // Dialoge werden NACH dem Tick betrachtet: die Antwort wirkt dann im
+    // nächsten Takt — genau wie jedes andere Ereignis (ADR-006, Staging).
+    let pendingDialogs = this.pendingDialogs();
+    const resolvedDialogs: number[] = [];
+    if (this.dialogMode !== 'manual' && pendingDialogs.length > 0) {
+      const answer = this.dialogMode === 'auto' || confirmPressed;
+      if (answer) {
+        const first = pendingDialogs[0]!;
+        this.resolveDialog(first.requestId, 0);
+        resolvedDialogs.push(first.requestId);
+        pendingDialogs = pendingDialogs.slice(1);
+      }
+    }
+
     this.tickCounter++;
-    return { tick: this.tickCounter, moveEvents, gateways, triggers, fieldChange, confirmPressed };
+    return {
+      tick: this.tickCounter,
+      moveEvents,
+      gateways,
+      triggers,
+      fieldChange,
+      confirmPressed,
+      pendingDialogs,
+      resolvedDialogs,
+    };
+  }
+
+  /**
+   * Alle Kontexte, die auf eine Dialogantwort warten — nach Entität und Slot
+   * sortiert, damit die Reihenfolge unabhängig von der Iterationsreihenfolge
+   * des Schedulers ist (Determinismus).
+   */
+  pendingDialogs(): PendingDialog[] {
+    const out: PendingDialog[] = [];
+    for (const [entityIndex, entity] of (this.runtime?.state.entities ?? []).entries()) {
+      const contexts = [entity.context, ...entity.suspended];
+      for (const ctx of contexts) {
+        if (!ctx || ctx.waitState.kind !== 'dialogue') continue;
+        out.push({
+          entityIndex,
+          slot: ctx.slot,
+          requestId: ctx.waitState.requestId,
+          choice: ctx.waitState.choice ?? null,
+        });
+      }
+    }
+    return out.sort((a, b) => a.entityIndex - b.entityIndex || a.slot - b.slot);
+  }
+
+  /** Beantwortet eine Dialoganfrage; `choice` ist der Auswahlindex (ASK). */
+  resolveDialog(requestId: number, choice = 0): void {
+    this.runtime?.postEvent({ kind: 'dialogue-resolved', requestId, choice });
   }
 
   snapshot(): FieldSessionSnapshot {

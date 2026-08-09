@@ -20,7 +20,8 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 - ✅ **S8 — Field-Hintergrund-Parser** (Sektionen 4 + 9: Paletten, 4-Layer-Modell mit realdaten-erschlossener Separator-Regel, 52-B-Tiles, Texturseiten; 702/702 Fields mit exaktem Accounting; Fortsetzungs-Roadmap in [ROADMAP-S8-S12.md](docs/ROADMAP-S8-S12.md))
 - ✅ **S9 — Hintergrund-Rendering + R2-Entscheid** (Tile-Semantik über 647.531 Tiles erschlossen: Palette u8@24 statt u16@20 korrigiert, Texturseite u8@34, UV-Cache-Regel `src2 vor src`; Atlas-Packer mit 1 Atlas je Field, texturierte Tile-Depth-Quads; Abnahme per Bildkohärenztest gegen Gegenhypothesen; **FOV-Basis 240 realdaten-entschieden** — [Kalibrier-Doku](tools/calibration/CALIBRATION.md))
 - ✅ **S10 — Model-Loader-Sektion (Field-Sektion 3)** (Grammatik über fünf Probeniterationen erschlossen, 702/702 Fields byteexakt; Modell- und Animationsreferenzen zu **100 %** gegen `char.lgp` auflösbar — inklusive der Korrektur, dass Animationsnamen den Stamm plus eine Kennung tragen und die Datei `<stamm>.a` heißt)
-- ⏳ S11 — Field-Integration (vertikaler Durchstich) und R4-Sichtvalidierung am echten Modell (nächster Schritt)
+- ✅ **S11 — Field-Integration (vertikaler Durchstich)**: `packages/field-runtime` bindet Solver, Trigger, Interpreter und Dialogbrücke zu einer Fixed-Tick-Sitzung mit Snapshot/Restore und Eingabe-Replay (Realdaten: 702 Fields × 240 Takte, **0 Digest-Abweichungen**; Wechselbudget Median 5,1 ms gegen 500 ms NFR). Der Field-Wechsel läuft: Zielfield über die `maplist` (u16@14, per Graph-Symmetrie belegt — 78,8 % Rückkanten gegen 0,2 % Kontrolle), Ankunft über das Gegen-Gateway, weil der Zielpunkt nachweislich **nicht** im Record steht. **Offen:** R4-Sichtprüfungen B1–B8 (brauchen ein Auge, [Begründung](docs/R4-MODELL-KONVENTIONEN.md))
+- ⏳ S12 — Interpreter-Ausbau: Bewegungs- und Kamera-Opcodes
 
 ## Struktur
 

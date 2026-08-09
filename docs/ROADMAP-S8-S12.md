@@ -9,7 +9,8 @@ S7: Realdaten-Strukturproben VOR Parserbau** (Formatfakten statt Annahmen).
 
 **Stand 2026-08-09:** S8 ✅ · S9 ✅ · S10 ✅ (Parserteil; R4-Sichtvalidierung
 zieht nach S11 um, weil sie das gerenderte Modell im Field voraussetzt) ·
-S11–S12 offen.
+S11 ✅ (Laufzeit, Determinismus und Field-Wechsel stehen; offen bleiben nur die
+Sichtprüfungen) · S12 offen.
 
 ## Abhängigkeitsbild
 
@@ -57,7 +58,7 @@ flowchart LR
 | Prompt | „Probe Sektion 3, dann Parser + Manifest-NAM; Actor-Viewer lädt lokales Realmodell; B1–B8 einzeln validieren und R4-Notiz fortschreiben." |
 | Ergebnis | Grammatik über fünf Probeniterationen erschlossen (702/702 byteexakt); **Referenzen zu 100 % auflösbar** (5454 Modelle, 26.212 Animationen) nach der Korrektur „Animationsname = Stamm + Kennung, Datei = `<stamm>.a`"; Model-Loader-Parser, NAM, codegetrennter Composer und Demoseite stehen. **Nicht erledigt:** die eigentliche Sichtvalidierung von B1–B8 — sie braucht das Modell im gerenderten Field und wandert nach S11. Offen geblieben: Flag hinter dem Modellnamen, `tail`-Restwerte, Aufteilung des 30-B-Blocks |
 
-### S11 — Field-Integration (vertikaler Durchstich)
+### S11 — Field-Integration (vertikaler Durchstich) ✅
 
 | Feld | Inhalt |
 |---|---|
@@ -67,6 +68,7 @@ flowchart LR
 | Akzeptanzkriterien | Feld-Rundgang mit Verdeckung (Figur hinter Vordergrund-Tiles); Gateway wechselt das Field < 500 ms warm (NFR aus Masterplan); Snapshot/Resume überlebt Tab-Reload; Determinismus-Digest bei Replay der Eingaben |
 | Nicht-Ziele | Menü/Save-UI, Audio, Battle-Übergang (Stub) |
 | Prompt | „Vertikaler Durchstich auf 2–3 Referenzfields; Field-Wechsel über die S3-Pipeline; Replay-Digest als Regressionstest der Integration." |
+| Ergebnis | **Erfüllt.** `packages/field-runtime` (Fixed-Tick-Sitzung, Dialogbrücke, Snapshot/Restore, Eingabe-Replay, Field-Wechsel) + Demoseite `apps/demo/field.html`. Realdaten: 702 Fields × 240 Takte mit 0 Digest-Abweichungen; Wechselbudget Median 5,1 ms (NFR 500 ms). Field-Wechsel: Zielfield über `maplist` (u16@14, per Rückkantenprobe belegt), Ankunft über das Gegen-Gateway — 510/1095 Kanten exakt platziert, 0 Sofort-Rückfeuern, Rest über den Meshschwerpunkt. Drei Fehler gefunden und behoben: die Sitzung startete den Interpreter nie; ungenutzte Trigger-/Gateway-Slots feuerten als Phantome am Weltursprung; der Gateway-Record war um zwei Bytes verschoben. **Offen:** (a) Verdeckungs-Sichtprüfung der Figur und damit die endgültige K7-Eichung; (b) R4-Sichtprüfungen B1–B8 (Automatisierungsversuch dokumentiert gescheitert) |
 
 ### S12 — Interpreter-Ausbau: Entity-/Bewegungs- und Kamera-Ops
 
@@ -84,9 +86,11 @@ flowchart LR
 ---
 
 *Anschluss: [ROADMAP-S13-S19.md](ROADMAP-S13-S19.md) führt den Bogen von hier
-aus weiter (Dialoge, Persistenz, Audio, Story-Kern, App-Shell, Modding-MVP).
-Achtung, dort notiert: Das Dokument entstand während S8 und referenziert
-Soll-Ergebnisse aus S8–S12 — vor Sessionstart den Ist-Stand gegenprüfen.*
+aus weiter (Dialoge, Persistenz, Audio, Story-Kern, App-Shell, Modding-MVP),
+danach [ROADMAP-S20-S26.md](ROADMAP-S20-S26.md) (Härtung, Menü, Modding II,
+Audio-Feinsemantik, Save/Load-UX, 1.0). Achtung, dort notiert: Die Dokumente
+entstanden, während frühere Sessions liefen, und referenzieren Soll-Ergebnisse
+— vor Sessionstart den Ist-Stand gegenprüfen.*
 
 *Reihenfolge-Empfehlung: S8 → S9 → S10 → S11 → S12. S8/S10 sind
 parallelisierbar; S11 braucht beide.*
