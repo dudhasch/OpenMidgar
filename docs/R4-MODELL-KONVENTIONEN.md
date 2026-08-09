@@ -164,3 +164,47 @@ Walkmesh.
 Bis dahin gilt: Der Wert ist durch eine unabhängige Zweitimplementierung
 gestützt UND deckt sich mit dem Symptom der Sichtprüfung („man sieht ihn von
 unten"). Das ist mehr Beleg als für den vorherigen Zustand — aber kein Beweis.
+
+## Repo-Abgleich Runde 2 (2026-08-10)
+
+### B10 ✅ gelöst — Lichtblock-Aufteilung
+
+Makou Reactor (`FieldModelLoaderPC.cpp`) liest je Lichteinheit **erst drei
+Farbbytes, dann drei i16-Richtungen**; wir lasen es umgekehrt. Beide
+Auslegungen sind 9 Byte lang, die Bytefolge allein entscheidet nichts.
+
+Entschieden hat der **Betrag der Richtungsvektoren** über alle 5454 Blöcke:
+
+| Auslegung | Median \|v\| | IQR | innerhalb ±10 % |
+|---|---|---|---|
+| **Farbe zuerst (Makou)** | **4108,5** | **9,2** | **96,4 %** |
+| Richtung zuerst (bisher) | 38022,3 | 9712,8 | 43,1 % |
+
+4096 ist die FF7-Festkommaeinheit — das sind normierte Vektoren. Korrigiert
+in `decodeModelLightBlock`; der Blockaufbau ist damit
+`3 × (RGB[3] + i16 dirA/dirB/dirC) + RGB[3] Globalfarbe = 30 B`.
+
+### B8 ✅ präzisiert — Modelldateifeld
+
+Makou liest das Feld als **8 B HRC-Name + 4 B ASCII-Skala** (nicht als 12 B
+gemischt) und beantwortet damit unsere offene Frage: Der Modellwert gilt,
+die globale Feldskala ist der **Rückfall**, wenn die vier Zeichen nicht als
+Zahl lesbar sind.
+
+### B9 ⏳ unverändert offen
+
+Das u16 hinter dem Modellnamen heißt auch bei Makou `unknown`. Kein Gewinn —
+aber immerhin die Bestätigung, dass es niemand kennt.
+
+### B2 — Kujata ist keine Blaupause
+
+Kujatas Wurzel-Pitch (180°) gehört zu einer Pipeline, die sich an zwei
+weiteren Stellen unterscheidet: Kindversatz nach `−parentLength` (bei uns
+`+parentLength`) und kein Achsen-Basiswechsel FF7→Szene. Nachgemessen
+verschlechtert Kujatas Versatzvorzeichen unsere Aufrechtigkeit durchgehend.
+
+Die drei Entscheidungen gehören zusammen; eine davon einzeln zu übernehmen
+wäre genau der Fehler, den dieses Projekt sonst vermeidet. Der Pitch steht
+deshalb als **Schalter** auf der Demoseite (`Wurzel-Pitch 180°`), nicht als
+Vorgabe — die Realdaten-Probe kann ihn nicht entscheiden, weil eine
+180°-Drehung eine Bounding-Box unverändert lässt.

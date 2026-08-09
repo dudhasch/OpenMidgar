@@ -235,3 +235,19 @@ Offene Semantikfragen (Achsen, Eulerorder, BGRA, …): [R4-Notiz](../../docs/R4-
    Unbekannte und nutzt eine Eigenschaft, die keine Koordinate braucht: dass
    Verbindungen zwischen Räumen gegenseitig sind. Wenn eine Messung nicht
    greift, lohnt der Blick, ob sie zu viele Unbekannte auf einmal prüft.
+
+## Sektion 7 — Encounter-Tabelle (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| **Layout vollständig: 2 Tabellen à 24 B.** `u8 enabled · u8 rate · u16 standard[6] · u16 special[4] · u16 padding`. Im Wort stecken **Wahrscheinlichkeit in den oberen 6 Bit** und **Kampf-ID in den unteren 10** (`& 0x03FF`) | ✅ Formatfakt |
+| Vier unabhängige Vorhersagen halten alle: **702/702** Fields exakt 48 B, Padding **1404/1404** genullt, `enabled` trägt genau **2** verschiedene Werte, `rate` neun; **434** verschiedene Kampf-IDs, **keine** über 1023 | ✅ belegt |
+| **Erklärt rückwirkend den ersten Fehlschlag der Kampf-Opcode-Suche.** Die verglich rohe u16-Werte aus der Sektion mit dem Operanden — aber Wahrscheinlichkeit und ID teilen sich das Wort. Ohne die Maske `& 0x03FF` KANN der Vergleich nicht treffen. Der Suchraum war nicht nur die falsche Menge, er war auch falsch kodiert | ⚠️ zweite Lehre aus demselben Fehlschlag |
+| Querbestätigung: Die 10-Bit-Breite deckt sich mit den Formationsnummern des `BATTLE`-Opcodes (169/173 unter 1024 = 2¹⁰) | ✅ zwei unabhängige Wege |
+
+## Audio und Musik — Negativbefunde bestätigt (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| **FFNx parst `audio.fmt` nicht.** Es greift auf das vom Spiel gefüllte Array `ff7_externals.sfx_fmt_header` zu und ruft die spieleigene Ladefunktion. Der Dateivorspann ist dort also nicht zu holen | 🔴 Quelle scheidet aus |
+| **FFNx führt keine Musiknamensliste.** Der Name kommt aus `common_externals.get_midi_name(musicId)` — einer Funktion in der EXE | 🔴 Quelle scheidet aus |

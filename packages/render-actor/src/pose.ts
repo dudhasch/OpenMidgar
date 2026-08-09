@@ -39,6 +39,24 @@ export const EULER_ORDER = 'YXZ' as const;
  */
 export const FIELD_ROOT_PITCH_DEG = 180;
 
+/**
+ * ⚠️ **Nicht als Vorgabe gesetzt.** Der Wert stammt aus einer Pipeline, die
+ * sich an ZWEI weiteren Stellen von unserer unterscheidet: Kujata versetzt das
+ * Kind nach `−parentLength` (bei uns `+parentLength`) und kennt keinen
+ * Achsen-Basiswechsel FF7→Szene, sondern arbeitet direkt im Modellraum. Die
+ * drei Entscheidungen gehören zusammen; eine davon einzeln zu übernehmen ist
+ * genau der Fehler, den dieses Projekt sonst vermeidet.
+ *
+ * Nachgemessen: Kujatas Versatzvorzeichen verschlechtert unsere Aufrechtigkeit
+ * durchgehend — `offset+` belegt alle vorderen Plätze. Unsere Bindpose steht
+ * ohne den Pitch bereits zu 95 % aufrecht.
+ *
+ * Der Pitch bleibt deshalb ein **Schalter** (`applyFrame(..., pitch)`), den
+ * die Demoseite live umlegen kann. Erst wenn ein Auge oder ein
+ * richtungsempfindliches Maß entschieden hat, wird daraus eine Vorgabe.
+ */
+export const DEFAULT_ROOT_PITCH_DEG = 0;
+
 /** Spaltenvektor-Konvention, Speicherung zeilenweise (m[r][c]). */
 export type Mat4 = number[][];
 

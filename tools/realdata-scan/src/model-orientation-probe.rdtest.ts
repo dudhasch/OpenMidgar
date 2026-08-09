@@ -372,15 +372,20 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
     // Wurzelversatz fehlt bei uns vollstaendig — er wird hier als zusaetzliche
     // Dimension mitgemessen, statt uebernommen zu werden.
     const ROOT_X = [0, 180];
+    // Kujata versetzt das Kind nach -parentLength (ff7-to-gltf.js:556); wir
+    // nach +parentLength. Da die Laengen negativ sind, kehrt das die
+    // Wachstumsrichtung der Kette um — und DAS sieht eine Bounding-Box sehr
+    // wohl, anders als eine 180-Grad-Drehung.
+    const SIGNS: (1 | -1)[] = [1, -1];
     const bewertung: Record<string, { aufrecht: number; gesamt: number; verhaeltnis: number[] }> = {};
-    for (const o of EULER_ORDERS) for (const rx of ROOT_X) bewertung[`${o} rootX+${rx}`] = { aufrecht: 0, gesamt: 0, verhaeltnis: [] };
+    for (const o of EULER_ORDERS) for (const rx of ROOT_X) for (const sg of SIGNS) bewertung[`${o} rootX+${rx} offset${sg > 0 ? '+' : '-'}`] = { aufrecht: 0, gesamt: 0, verhaeltnis: [] };
 
     for (const probe of proben) {
       for (const f of probe.clip.frames.slice(0, 12)) {
-        for (const o of EULER_ORDERS) for (const rx of ROOT_X) {
-          const e = extentWithOrder(probe.skeleton, probe.meshes, f, o, rx);
+        for (const o of EULER_ORDERS) for (const rx of ROOT_X) for (const sg of SIGNS) {
+          const e = extentWithOrder(probe.skeleton, probe.meshes, f, o, rx, sg);
           if (e.points === 0) continue;
-          const b = bewertung[`${o} rootX+${rx}`]!;
+          const b = bewertung[`${o} rootX+${rx} offset${sg > 0 ? '+' : '-'}`]!;
           b.gesamt++;
           if (longestAxis(e) === 'y') b.aufrecht++;
           const quer = Math.max(e.dx, e.dz);
@@ -524,6 +529,8 @@ function extentWithOrder(
   frame: AnimationFrame,
   order: string,
   rootOffsetX = 0,
+  /** Vorzeichen des Kindversatzes entlang der Bone-Achse. */
+  offsetSign: 1 | -1 = 1,
 ): Extent {
   const mats: M3[] = [];
   const origins: Vec3[] = [];
@@ -541,7 +548,7 @@ function extentWithOrder(
     } else {
       const pm = mats[bone.parentIndex]!;
       const po = origins[bone.parentIndex]!;
-      const plen = skeleton.bones[bone.parentIndex]!.length;
+      const plen = skeleton.bones[bone.parentIndex]!.length * offsetSign;
       // Kindursprung = Elternursprung + Elternrotation · (0,0,parentLength)
       origins.push([
         po[0] + pm[0]![2]! * plen,

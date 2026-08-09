@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ff7DirToScene } from '@webmidgar/convert';
 import { texToRgba, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource } from '@webmidgar/formats-model';
-import { EULER_ORDER, FIELD_ROOT_PITCH_DEG } from './pose.js';
+import { DEFAULT_ROOT_PITCH_DEG, EULER_ORDER } from './pose.js';
 
 /**
  * GPU-Adapter der Modellkette: Skeleton → Three-Bone-Hierarchie mit starren
@@ -116,7 +116,7 @@ export function applyFrame(
   actor: Actor,
   skeleton: Skeleton,
   frame: AnimationFrame,
-  rootPitchDeg: number = FIELD_ROOT_PITCH_DEG,
+  rootPitchDeg: number = DEFAULT_ROOT_PITCH_DEG,
 ): void {
   actor.model.position.set(...frame.rootTranslation);
   actor.model.rotation.set(

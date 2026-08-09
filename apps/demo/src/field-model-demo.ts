@@ -126,6 +126,15 @@ const frameLabelEl = $('frameLabel');
 const axesCheckboxEl = $('toggleAxes') as HTMLInputElement;
 const viewSelectEl = $('viewSelect') as HTMLSelectElement;
 const swapCheckboxEl = $('toggleSwap') as HTMLInputElement;
+/**
+ * R4-B2: Kujata setzt fuer Feldmodelle einen festen 180-Grad-Versatz auf der
+ * Wurzel-X-Achse. Unsere Realdaten-Probe kann ihn NICHT entscheiden — sie
+ * misst die Ausdehnung der Punktwolke, und eine 180-Grad-Drehung laesst eine
+ * Bounding-Box unveraendert. Deshalb steht er hier als Schalter statt als
+ * Vorgabe: Das Auge entscheidet in fuenf Sekunden, was keine Messung kann.
+ */
+const pitchCheckboxEl = $('togglePitch') as HTMLInputElement;
+const rootPitch = (): number => (pitchCheckboxEl.checked ? 180 : 0);
 
 function setStatus(text: string): void {
   statusEl.textContent = text;
@@ -566,6 +575,10 @@ viewSelectEl.addEventListener('change', () => {
   setCameraView(viewSelectEl.value as CameraView);
 });
 
+pitchCheckboxEl.addEventListener('change', () => {
+  frameActorCamera();
+});
+
 swapCheckboxEl.addEventListener('change', () => {
   if (!currentSkeleton) return; // Fallback-Actor hat keine Texturen.
   replaceActorInScene(buildActorFromCache());
@@ -629,13 +642,13 @@ frameSliderEl.addEventListener('input', () => {
 });
 
 function applyBindPoseIfPossible(): void {
-  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton));
+  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton), rootPitch());
 }
 
 function applyCurrentFrame(): void {
   if (currentActor && currentSkeleton && currentClipBound) {
     const frame = currentClipBound.frames[frameIndex] ?? bindPoseFrame(currentSkeleton);
-    applyFrame(currentActor, currentSkeleton, frame);
+    applyFrame(currentActor, currentSkeleton, frame, rootPitch());
   }
   updateFrameLabel();
 }
