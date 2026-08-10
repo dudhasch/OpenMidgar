@@ -327,3 +327,75 @@ dokumentierten Blindheit** — nicht ihr Widerspruch.
   Rotationen 0, die Kette fällt zu einer Geraden zusammen, und die Wurzel
   trägt weder Rotation noch Translation. Der Fehler *kann* dort nicht
   auftreten.
+
+## Korrektur: B2 war NICHT gelöst (2026-08-10, nachmittags)
+
+**Der Abschnitt oben behauptet zu viel.** Die Sichtprüfung nach der Umstellung
+zeigt: Mit der Wurzelrahmen-Korrektur sieht man die Figur **von oben** statt
+von unten — also weiterhin 90° daneben, nur in die andere Richtung. Und die
+Segmente stehen sichtbar auseinander.
+
+Diese Korrektur bleibt hier stehen, statt den Abschnitt zu überschreiben. Der
+Fehler war nicht die Rechnung, sondern die Gütefunktion — und das ist der
+lehrreiche Teil.
+
+### Was die vollständige Kreuzprodukt-Messung ergeben hat
+
+Gemessen wurde `Kindversatz (±) × Wurzelwinkel (0/90/180/270) × Achsenbasis
+(adr009 / keine / z→y)` = 24 Ketten, über 56 Modelle und 138 Frames, mit einer
+richtungsempfindlichen Güte (Breite oberhalb gegen unterhalb der Wurzel —
+über der Hüfte sitzen Rumpf, Arme und Kopf, darunter nur Beine).
+
+| Kette | aufrecht | Breite oben/unten |
+|---|---|---|
+| unsere jetzige (Versatz+ · 270° · adr009) | 38,4 % | 1,03 |
+| **Kujata vollständig** (Versatz− · 180° · ohne Basis) | **22,5 %** | — |
+| unsere frühere (Versatz+ · 0° · adr009) | 31,2 % | 0,97 |
+| schlechteste der 24 | 10,9 % | 0,96 |
+| **rohe `.p`-Vertices ohne JEDE Bone-Transformation** | **35,7 %** | 1,03 |
+
+Drei Schlüsse, alle unbequem:
+
+1. **Kujatas vollständige Kette ist bei uns schlechter, nicht besser.** Sie
+   wholesale zu übernehmen ist damit ausgeschlossen — die Referenz beschreibt
+   eine Pipeline, deren übrige Teile wir nicht teilen.
+2. **Keine der 24 Ketten steht aufrecht.** Der Fehler liegt also nicht in
+   diesen drei Achsen. Er liegt weiter unten: in der Zuordnung Mesh↔Bone, in
+   der `.p`-Auslegung oder in der Kettenkonstruktion selbst.
+3. **Die Güte trennt kaum.** Alle 24 Varianten liegen zwischen 0,96 und 1,03 —
+   ein Signal von rund 7 %. Und die rohen Vertices *ohne* jede
+   Bone-Transformation erreichen praktisch denselben Wert wie die beste
+   transformierte Kette. Das heißt: Die Bone-Transformationen tragen zur Form
+   fast nichts bei. Entweder ist die Kette faktisch wirkungslos, oder die
+   Meshes liegen bereits fertig platziert vor.
+
+### Der methodische Kern
+
+Dies ist der **dritte** Anlauf, bei dem eine Gütefunktion die gesuchte Größe
+nicht sehen konnte:
+
+| Anlauf | Güte | Warum blind |
+|---|---|---|
+| 1 | Y ist längste Achse | invariant unter 180° |
+| 2 | dito, über Eulerreihenfolgen | Fehler lag außerhalb des Suchraums |
+| 3 | Anteil über dem Pivot | Wurzel sitzt in der Hüfte, nicht am Boden ⇒ Median zwangsläufig ~0,5 |
+| 4 | Breite oben/unten | Signal nur ~7 %, im Rauschen |
+
+**Die Lehre ist nicht „besser messen", sondern: Diese Frage ist mit
+Punktwolken-Statistik nicht zu entscheiden.** Der nächste Anlauf braucht ein
+anderes Verfahren — die Sichtprüfung als primäres Instrument, oder einen
+Vergleich einzelner Segmentpositionen gegen eine bekannte Referenzpose, nicht
+gegen eine Aggregatgröße.
+
+### Stand jetzt
+
+- `ROOT_FRAME_FIX_DEG = −90` **bleibt**, weil es von 24 Ketten die beste ist
+  (38,4 % gegen 31,2 % ohne). Aber es ist eine Verbesserung um sieben
+  Prozentpunkte, **keine Lösung**.
+- **B2 ist NICHT entschieden.** Die Eulerreihenfolge YXZ ist unabhängig belegt
+  (Header, 3209/3209) — das bleibt. Alles andere an B1–B4 ist offen.
+- Nächster Faden, aus der Sichtprüfung statt aus der Messung: Die Segmente
+  stehen auseinander (freischwebende Kästen neben dem Körper). Das ist die
+  Signatur einer **Platzierungs**-, keiner Orientierungsfrage — zu prüfen sind
+  die RSD→`.p`-Auflösung je Bone und die Frage, in welchem Raum die
+  `.p`-Vertices überhaupt stehen.
