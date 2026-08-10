@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S28 Weltkarten-Terrain</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem; }
+    canvas { border: 1px solid #888; display: block; background: #06162a; }
+    button, input { font: inherit; }
+    .hint { background: #fff6d8; border: 1px solid #d8c26a; padding: .6rem .9rem; border-radius: 4px; }
+    .row { margin: .6rem 0; display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+    pre { background: #f2f2f2; padding: .5rem .8rem; min-height: 5.5em; }
+  </style>
+</head>
+<body>
+  <h1>S28 — Weltkarten-Terrain (WM0)</h1>
+  <p class="hint">
+    <strong>WM0.MAP</strong> aus <code>data/wm</code> der lokalen Installation wählen.
+    Ausschließlich lokal gelesen; nichts verlässt den Browser. Darstellung ist die
+    dokumentierte <em>Minimaldarstellung</em>: Vertexfarbe nach Geländeklasse
+    (Semantik der Klassen 🟡 — Farben sind Diagnose, kein Urteil), kein Wasser-/Himmelspfad.
+    Steuerung: Pfeile/WASD fahren, Q/E drehen (S27-Eingabeschicht, Abtastung am Takt).
+  </p>
+  <div class="row">
+    <input type="file" id="mapfile" accept=".MAP,.BOT" />
+    <span id="status">—</span>
+  </div>
+  <canvas id="view" width="960" height="540" tabindex="0"></canvas>
+  <pre id="readout">—</pre>
+  <script type="module" src="./src/world-demo.ts"></script>
+</body>
+</html>

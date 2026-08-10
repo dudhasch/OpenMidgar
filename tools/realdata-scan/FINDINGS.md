@@ -426,3 +426,27 @@ sah dabei überzeugend aus. **Für Fragen nach einer Richtung im Raum ist die
 Sichtprüfung kein Notbehelf, sondern das schärfere Instrument.** Der Beitrag
 der Automatik lag darin, den Suchraum vollständig aufzuspannen, nicht ihn zu
 bewerten.
+
+## S28 — Weltkarten-Terrain (`data/wm`), Probe vom 2026-08-10
+
+Werkzeug: `world-probe.rdtest.ts`. Hypothesenquelle: FFNx/ff7-landscaper/Qhimm
+(nur Hypothesengeber; jede Zeile unten ist gegen die eigenen Daten gemessen).
+Overlay-Hinweis: `mods/` existiert und enthält wm-/world-Pfade — gemessen wurde
+ausschließlich `data/wm` (Originalbestand).
+
+| Befund | Status |
+|---|---|
+| Bestand: WM0/WM2/WM3 je als `.MAP` (69/12/4 Blöcke) und `.BOT` (332/48/16 Blöcke), ALLE sechs Dateien exakte Vielfache von 0xB800 (47104 B); dazu 4 Sprach-LGPs gleicher Größe | ✅ Inventar |
+| **Blockgrammatik:** je Block 16 u32-Offsets (blockrelativ, erster = 0x40, monoton) auf LZS-Meshes (u32 Länge + Strom): **85/85 MAP-Blöcke**, um 2 B verschobene Kontrolle **0/85** | ✅ Formatfakt |
+| **Mesh-Grammatik:** dekomprimiert `u16 triCount · u16 vertCount · tri[12 B] · vert[8 B] · normal[8 B]` — **1360/1360 Meshes byteexakt aufgehend** (Accounting), Lochquote 0 | ✅ Formatfakt |
+| **Vertex:** i16 x · i16 h · i16 z · u16 — x,z ∈ [0, 8192] in 1104/1104 WM0-Meshes, h frei (−1269…4086) ⇒ Mesh-Grundriss 8192², Block = 4×4 Meshes = 32768² | ✅ Formatfakt |
+| **Nahtstetigkeit** (Bildkohärenz-Analogon): benachbarte Meshes teilen Randpunkte (t,h) **828/828 Paare perfekt (Quote 1,0)**; Nullwert-Zweitrechnung: ohne 541 Flachpaare bleiben 287 strukturierte Paare bei 1,0; Fremdpaar-Kontrolle 0,56 | ✅ Formatfakt |
+| **Blockanordnung WM0:** Primärraster **9 Spalten × 7 Zeilen** (Blöcke 0–62): Blockgrenz-Nähte 440/440 perfekt (1,0); Kontrollanordnung 7×9: 0,764 (Ozeanflächen matchen trivial — deshalb ist nur die 1,0 beweisend) | ✅ Formatfakt |
+| WM0-Blöcke 63–68: 6 Alternativblöcke (Story-Varianten). Welcher Block welche Rasterzelle ersetzt und woran das Script das schaltet | 🔴 offen (S29-Kandidat) |
+| **`.BOT`-Dateien:** identische Block-/Mesh-Grammatik, alle 6336 Meshes exakt; Digest-Kreuzvergleich: **Unikatmengen von MAP und BOT sind identisch** (512/512, 190/190, 12/12) ⇒ keine eigene Geometrie, nur andere Anordnung derselben Meshes | ✅ gemessen; Zweck der Anordnung 🟡 |
+| Dreiecks-Byte 3, untere 5 Bits: 25+ verschiedene Werte mit plausibler Häufigkeitsordnung (Klasse 3 dominiert = Wiese?); obere 3 Bits fast nur 0/1 | 🟡 Wertevielfalt belegt, SEMANTIK unbelegt — Geländeklassen-Matrix bleibt austauschbare Tabelle (S29) |
+| Dreieck 12 B: v0/v1/v2 u8 (⇒ ≤256 Verts/Mesh), Byte 3 = Attribut, 6 B UV-Kandidaten, u16 Texturwort | 🟡 nur Längen belegt; UV/Textur-Deutung braucht den Texturpfad |
+| Sprach-LGPs: gleich groß, byteweise VERSCHIEDEN (Stichprobe); `world_gm.lgp`: 985 Einträge — .tex 415, .p/.rsd je 228, .a 77, .hrc 29, **.ev 3**, .tbl 2, .bin 1, .ta 1, 1 ohne Endung | ✅ Inventar; Modellkette = bekannte S7-Formate |
+| Die 3 `.ev`-Einträge (WM0/2/3-Scripts?) und der endungslose Eintrag (Texte?) | 🟡 S29-Gegenstand |
+| **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
+| **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
