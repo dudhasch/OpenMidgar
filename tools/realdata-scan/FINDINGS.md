@@ -374,3 +374,25 @@ Die Installation enthält zwar eine zweite `flevel.lgp`, die gehört aber zu
 einem 7th-Heaven-Overlay und ist vom Original abgeleitet — also keine
 unabhängige Stichprobe. Eine Installation eines anderen Release oder einer
 anderen Sprachfassung wäre eine.
+
+## R4-B2 gelöst — Wurzelrahmen statt Bone-Rotationen (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| **Der Fehler saß nie in den Bone-Rotationen.** Er sitzt im Wurzelrahmen: Unsere ADR-009-Basis `C: (x,y,z) → (x,z,−y)` ist genau `Rx(−90°)`; damit die Szene dieselbe Weltlage liefert wie die Referenzpipeline, muss `C · Rx(fix) = Rx(180°)` gelten ⇒ **fix = −90°**. Die Wurzeltranslation steht im selben Rahmen und braucht `C⁻¹`: `t → (t.x, −t.z, t.y)` | ✅ gelöst |
+| **Zwei unabhängige Wege, dieselbe Antwort.** Die Sichtprüfung meldet 0° → von unten, 180° → von oben; beide 90° daneben, in entgegengesetzte Richtungen. Die Algebra liefert dieselbe Zahl, ohne die Sichtprüfung zu kennen | ✅ Auge + Rechnung |
+| **Und diesmal ist es messbar.** Eine Vierteldrehung vertauscht Y- und Z-Ausdehnung, anders als eine halbe. Über 271 animierte Frames: ±90° **63,1 %** aufrecht gegen 34,3 % bei 0° und 180° — Faktor **1,84** | ✅ Realdaten |
+| **Dass 0° und 180° exakt gleich abschneiden, bestätigt die dokumentierte Blindheit der Gütefunktion** gegenüber 180° — sie widerspricht ihr nicht | ✅ Kontrolle |
+| **Das Vorzeichen entscheidet die Messung nicht** (−90° und +90° liegen 180° auseinander, dagegen ist die Box blind — beide 63,1 %). Es kommt aus Sichtprüfung und Algebra | 🟡 Grenze benannt |
+| **Den Translations-Umbau kann sie prinzipiell nicht prüfen:** Die Ausdehnung einer Punktwolke ist verschiebungsinvariant. Abgesichert stattdessen durch einen Fixture-Test mit in allen drei Komponenten verschiedener Translation | 🟡 Grenze benannt |
+| **63,1 % sind nicht 100 %.** B2 ist entschieden, R4 als Ganzes nicht abgeschlossen | 🟡 Rest offen |
+| **Rückwirkend erklärt:** Der Eulerreihenfolgen-Sweep konnte keinen Sieger haben, weil der Fehler außerhalb seines Suchraums lag; „Bindpose 95 % aufrecht" war ein Artefakt, weil in der Bindpose alle Rotationen 0 sind und die Wurzel weder Rotation noch Translation trägt — der Fehler *kann* dort nicht auftreten | ⚠️ methodische Lehre |
+
+## Sprachfassung — `flevel` ist nicht sprachabhängig (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| Nach Umstellung des Spiels auf Englisch liefert `data/field/flevel.lgp` **exakt dieselben 48.041 Skriptspannen** und in allen O9-Varianten identische Zahlen | ✅ gemessen |
+| Ursache: `data/lang-en` enthält nur `battle`, `kernel` und `movies` — **kein** `field`. Der Field-Bytecode ist sprachunabhängig; die Sprachfassung steckt in `kernel.bin`, nicht im Field-Archiv | ✅ erklärt |
+| **Konsequenz für O9:** Das ist keine unabhängige Stichprobe. Die verbleibenden 🟡-Längen brauchen einen Datensatz aus einem anderen **Release**, nicht aus einer anderen Sprache | 🟡 offen |
+| **Konsequenz für S37:** `kernel.bin` IST sprachabhängig — genau die Gegenprobe, die der EXE-Bogen für Namenstabellen braucht | ✅ nützlich |

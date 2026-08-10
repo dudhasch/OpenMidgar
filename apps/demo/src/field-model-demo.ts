@@ -134,7 +134,7 @@ const swapCheckboxEl = $('toggleSwap') as HTMLInputElement;
  * Vorgabe: Das Auge entscheidet in fuenf Sekunden, was keine Messung kann.
  */
 const pitchCheckboxEl = $('togglePitch') as HTMLInputElement;
-const rootPitch = (): number => (pitchCheckboxEl.checked ? 180 : 0);
+const rootFrameFix = (): boolean => pitchCheckboxEl.checked;
 
 function setStatus(text: string): void {
   statusEl.textContent = text;
@@ -642,13 +642,13 @@ frameSliderEl.addEventListener('input', () => {
 });
 
 function applyBindPoseIfPossible(): void {
-  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton), rootPitch());
+  if (currentActor && currentSkeleton) applyFrame(currentActor, currentSkeleton, bindPoseFrame(currentSkeleton), rootFrameFix());
 }
 
 function applyCurrentFrame(): void {
   if (currentActor && currentSkeleton && currentClipBound) {
     const frame = currentClipBound.frames[frameIndex] ?? bindPoseFrame(currentSkeleton);
-    applyFrame(currentActor, currentSkeleton, frame, rootPitch());
+    applyFrame(currentActor, currentSkeleton, frame, rootFrameFix());
   }
   updateFrameLabel();
 }

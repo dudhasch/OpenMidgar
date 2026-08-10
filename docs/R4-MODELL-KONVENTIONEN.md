@@ -248,3 +248,82 @@ dieselbe Händigkeit. Eine davon zu drehen kippt das Ergebnis, beide zu drehen
 womöglich nicht — genau die Kopplungsfalle, die dieses Projekt an anderer
 Stelle schon einmal Zeit gekostet hat. Der nächste Anlauf muss das Kreuzprodukt
 aus Versatzvorzeichen × Basiswechsel durchmessen, nicht eine Achse davon.
+
+## B2 gelöst — der Fehler saß im Wurzelrahmen (2026-08-10)
+
+**Die Sichtprüfung hat entschieden, was keine Bounding-Box konnte.** Gemeldet
+wurde: ohne Zusatzwinkel sieht man die Figur **von unten** (Füße), mit 180°
+**von oben** (Kopf). Beide Stellungen liegen 90° daneben — in
+entgegengesetzte Richtungen. Der gesuchte Wert liegt also dazwischen.
+
+**Dieselbe Zahl folgt unabhängig aus der Algebra.** Kujata setzt für
+Feldmodelle `rootRotationDegreesX = 180` im *reinen Modellraum*. Unsere
+Pipeline hängt stattdessen die ADR-009-Basis `C: (x,y,z) → (x, z, −y)` über
+das Modell — und das ist exakt `Rx(−90°)`:
+
+```text
+Rx(θ):    (x, y, z) → (x, y·cosθ − z·sinθ, y·sinθ + z·cosθ)
+θ = −90°:           → (x, z, −y)                    ✓ C = Rx(−90°)
+```
+
+Aus der Äquivalenzforderung `C · Rx(fix) = Rx(180°)` folgt, weil Drehungen um
+dieselbe Achse additiv sind, `Rx(−90° + fix) = Rx(180°)` ⇒ **fix = −90°**.
+Die Translation steht im selben gedrehten Rahmen und braucht `C⁻¹ = Rx(+90°)`:
+`t → (t.x, −t.z, t.y)`.
+
+### Und diesmal ist es messbar
+
+Der frühere Sweep konnte nichts entscheiden, weil eine 180°-Drehung eine
+Bounding-Box unverändert lässt. Eine **Vierteldrehung** lässt sie nicht
+unverändert — sie vertauscht Y- und Z-Ausdehnung. Gemessen über 271 animierte
+Frames:
+
+| Variante | aufrecht |
+|---|---|
+| ohne Versatz (0°) | 34,3 % |
+| **Wurzel-X ±90°** | **63,1 %** |
+| Wurzel-X 180° (Kujata roh) | 34,3 % |
+| vollständige Korrektur (−90° + C⁻¹·t) | 63,1 % |
+
+Faktor **1,84** gegenüber beiden Alternativen — nach Projektmaßstab ein
+Befund. Der frühere Eulerreihenfolgen-Sweep lag mit Faktor 1,11 klar darunter,
+und zwar zu Recht: Der Fehler lag außerhalb seines Suchraums.
+
+**Dass 0° und 180° exakt dieselbe Zahl liefern, ist die Bestätigung der
+dokumentierten Blindheit** — nicht ihr Widerspruch.
+
+### Was diese Messung NICHT zeigt — drei Einschränkungen, die bleiben
+
+1. **Das Vorzeichen entscheidet sie nicht.** −90° und +90° unterscheiden sich
+   um 180°, und dagegen ist die Box blind; gemessen liefern beide 63,1 %.
+   Entschieden wird das Vorzeichen durch die Sichtprüfung („von unten" bei 0°)
+   plus die Algebra oben — nicht durch diesen Sweep.
+2. **Den Translations-Umbau kann sie prinzipiell nicht prüfen.** Die
+   Ausdehnung einer Punktwolke ist gegenüber Verschiebungen invariant. Der
+   Umbau `t → (x, −z, y)` folgt allein aus der Algebra; abgesichert ist er
+   durch einen Fixture-Test mit in allen drei Komponenten verschiedener
+   Translation, der ohne die Regel durchfiele.
+3. **63,1 % sind nicht 100 %.** Ein Rest bleibt unerklärt. B2 ist damit
+   entschieden, R4 als Ganzes nicht abgeschlossen.
+
+### Umgesetzt
+
+- `render-actor/pose.ts`: `ROOT_FRAME_FIX_DEG = −90`,
+  `rootFrameTranslationToModel(t)`; `computePose(…, rootFrameFix = false)` —
+  die reine Referenzmathematik bleibt konventionsfrei.
+- `render-actor/actor.ts`: `applyFrame(…, rootFrameFix = true)` — der
+  Renderpfad trägt die Korrektur als **Vorgabe**.
+- `render-actor.test.ts`: Dualität jetzt in **beiden** Modi geprüft; ohne den
+  zweiten Test wäre ausgerechnet die Vorgabe ungeprüft gewesen. Dazu eine
+  Gegenprobe, dass sich die Modi überhaupt unterscheiden.
+- Demoseite: Schalter „Wurzelrahmen-Korrektur", standardmäßig **an**.
+
+### Damit erledigt sich rückwirkend
+
+- Der Eulerreihenfolgen-Sweep konnte keinen Sieger haben — der Fehler lag
+  nicht in der Reihenfolge. Die Messung „YXZ 34,3 %" war korrekt und trotzdem
+  irreführend.
+- „Bindpose zu 95 % aufrecht" war ein Artefakt: In der Bindpose sind alle
+  Rotationen 0, die Kette fällt zu einer Geraden zusammen, und die Wurzel
+  trägt weder Rotation noch Translation. Der Fehler *kann* dort nicht
+  auftreten.

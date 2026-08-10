@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { composeA, composeHrc, composeP } from '@webmidgar/fixture-gen';
-import { parseA, parseHrc, parseP, type Skeleton } from '@webmidgar/formats-model';
+import { parseA, parseHrc, parseP, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
 import { bindClip } from './binding.js';
 import { bindPoseFrame, computePose } from './pose.js';
 import { applyFrame, boneModelMatrix, buildActor, buildFallbackActor } from './actor.js';
@@ -110,7 +110,7 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
     const actor = buildActor(sk, () => []);
     // Ohne Feldversatz: Dieser Test belegt die Dualität der reinen
     // Referenzmathematik, nicht die Fassungs-Konvention.
-    applyFrame(actor, sk, frame, 0);
+    applyFrame(actor, sk, frame, false);
     for (let b = 0; b < sk.bones.length; b++) {
       const three = boneModelMatrix(actor, b); // column-major elements
       const ref = poses[b]!.matrix;
@@ -122,10 +122,57 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
     }
   });
 
+  it('Dualität gilt auch im KORRIGIERTEN Wurzelrahmen — dem Standardpfad', () => {
+    // Der Renderpfad läuft per Vorgabe MIT der Wurzelrahmen-Korrektur. Ohne
+    // diesen Test wäre ausgerechnet die Vorgabe ungeprüft und nur der
+    // abgeschaltete Sonderfall abgesichert.
+    //
+    // Die Wurzeltranslation ist bewusst ungleich null und in allen drei
+    // Komponenten verschieden: Wäre sie (0,0,0) oder symmetrisch, könnte der
+    // Test die Umbauregel `t → (x, −z, y)` gar nicht von der Identität
+    // unterscheiden und bliebe grün, auch wenn sie fehlte.
+    const sk = skeleton();
+    const frame: AnimationFrame = {
+      rootRotation: [11, -23, 47],
+      rootTranslation: [3, 5, -7],
+      rotations: new Float32Array([12, -34, 56, 0, 0, 0, -8, 90, 3]),
+    };
+    const poses = computePose(sk, frame, true);
+    const actor = buildActor(sk, () => []);
+    applyFrame(actor, sk, frame, true);
+    for (let b = 0; b < sk.bones.length; b++) {
+      const three = boneModelMatrix(actor, b);
+      const ref = poses[b]!.matrix;
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          expect(three.elements[c * 4 + r]).toBeCloseTo(ref[r]![c]!, 5);
+        }
+      }
+    }
+  });
+
+  it('Wurzelrahmen-Korrektur ist wirksam — Gegenprobe zum abgeschalteten Modus', () => {
+    // Kontrolle zum Test darüber: Beide Modi müssen sich messbar
+    // unterscheiden. Wären sie gleich, liefe die Dualität oben ins Leere und
+    // die Korrektur wäre faktisch wirkungslos.
+    const sk = skeleton();
+    const frame: AnimationFrame = {
+      rootRotation: [0, 0, 0],
+      rootTranslation: [0, 4, 0],
+      rotations: new Float32Array(sk.bones.length * 3),
+    };
+    const roh = computePose(sk, frame, false);
+    const fix = computePose(sk, frame, true);
+    // Translation: (0,4,0) → (0,−0,4) — die Höhe wandert von Y nach Z.
+    expect(roh[0]!.origin[1]).toBeCloseTo(4, 5);
+    expect(fix[0]!.origin[2]).toBeCloseTo(4, 5);
+    expect(fix[0]!.origin[1]).toBeCloseTo(0, 5);
+  });
+
   it('Scene-Wrapper: FF7-Höhenachse (+Z) landet auf Three-+Y', () => {
     const sk = skeleton();
     const actor = buildActor(sk, () => []);
-    applyFrame(actor, sk, bindPoseFrame(sk), 0);
+    applyFrame(actor, sk, bindPoseFrame(sk), false);
     actor.root.updateMatrixWorld(true);
     // Kettenende (0,0,6)_ff7 muss in Scene-Koordinaten (0,6,0) liegen.
     const tip = actor.boneGroups[2]!.localToWorld(new THREE.Vector3(0, 0, 1));

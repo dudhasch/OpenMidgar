@@ -348,6 +348,7 @@ describe.skipIf(!available)('Realdaten: Modellausrichtung (R4-B1)', () => {
           ausfallgruende: warum,
           'aufrecht in der Bindpose': `${aufrechtBind}/${geprueft}`,
           'aufrecht in Frame 0': `${aufrechtFrame0}/${geprueft}`,
+          'Wurzelrahmen-Sweep (animierte Frames, Anteil aufrecht)': wurzelrahmenSweep(proben, toScene),
           wurzelrotationFrame0: { x: achsen[0], y: achsen[1], z: achsen[2] },
           'Höhensprung je Frame': { median: median(sprung).toFixed(4), p95: p95(sprung).toFixed(4) },
         },
@@ -589,14 +590,60 @@ function extentWithOrder(
   return { dx: maxX - minX, dy: maxY - minY, dz: maxZ - minZ, points };
 }
 
+/**
+ * Wurzelrahmen-Sweep — der Test, den die frühere Probe nicht führen konnte.
+ *
+ * Die Sichtprüfung (2026-08-10) meldet: **ohne** Zusatzwinkel sieht man die
+ * Figur von unten, **mit 180°** von oben. Beide Stellungen liegen also 90°
+ * daneben, in entgegengesetzte Richtungen — der gesuchte Wert liegt dazwischen.
+ *
+ * Anders als bei 180° ist die Bounding-Box gegenüber **90°** ausdrücklich
+ * NICHT blind: Eine Vierteldrehung um X vertauscht Y- und Z-Ausdehnung. Genau
+ * deshalb ist dieser Sweep messbar, während der 180°-Sweep es nie war.
+ *
+ * Gemessen werden vier reine Winkelversätze (ohne Umbau der Translation) und
+ * zusätzlich die vollständige Korrektur inklusive `C⁻¹` auf der Translation.
+ * Erwartung: 0° und 180° verlieren, ±90° gewinnt — und die vollständige
+ * Korrektur ist mindestens so gut wie der reine Winkel.
+ */
+function wurzelrahmenSweep(
+  proben: { skeleton: Skeleton; meshes: Map<number, Float32Array[]>; clip: AnimationClipSource }[],
+  toScene: (v: Vec3) => Vec3,
+): Record<string, string> {
+  const varianten: Array<{ name: string; pitch: number; fix: boolean }> = [
+    { name: 'ohne Versatz (0°)', pitch: 0, fix: false },
+    { name: 'Wurzel-X +90°', pitch: 90, fix: false },
+    { name: 'Wurzel-X −90°', pitch: -90, fix: false },
+    { name: 'Wurzel-X 180° (Kujata roh)', pitch: 180, fix: false },
+    { name: 'vollständige Korrektur (−90° + C⁻¹·t)', pitch: 0, fix: true },
+  ];
+  const out: Record<string, string> = {};
+  for (const v of varianten) {
+    let aufrecht = 0;
+    let gesamt = 0;
+    for (const p of proben) {
+      for (const f of p.clip.frames.slice(0, 12)) {
+        const frame: AnimationFrame = v.pitch === 0
+          ? f
+          : { ...f, rootRotation: [f.rootRotation[0] + v.pitch, f.rootRotation[1], f.rootRotation[2]] };
+        gesamt++;
+        if (longestAxis(extentForFrame(p.skeleton, p.meshes, toScene, frame, v.fix)) === 'y') aufrecht++;
+      }
+    }
+    out[v.name] = `${((aufrecht / Math.max(1, gesamt)) * 100).toFixed(1)}% von ${gesamt}`;
+  }
+  return out;
+}
+
 /** Ausdehnung für einen konkreten Frame (statt der Bindpose). */
 function extentForFrame(
   skeleton: Skeleton,
   meshesByBone: Map<number, Float32Array[]>,
   mapModel: (v: Vec3) => Vec3,
   frame: AnimationFrame,
+  rootFrameFix = false,
 ): Extent {
-  const poses = computePose(skeleton, frame);
+  const poses = computePose(skeleton, frame, rootFrameFix);
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let points = 0;

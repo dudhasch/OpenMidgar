@@ -17,45 +17,54 @@ import type { AnimationFrame, Skeleton } from '@webmidgar/formats-model';
 
 export const EULER_ORDER = 'YXZ' as const;
 
-/**
- * Fester Zusatzwinkel auf der Wurzel-X-Achse (Grad), nur für FELD-Modelle.
- *
- * 🟡 Herkunft: Kujata (picklejar76) führt für Feldmodelle
- * `rootRotationDegreesX = 180` bei sonst unveränderten Bone-Winkeln und
- * derselben Eulerreihenfolge 'YXZ'. Zwei Dinge stützen das:
- *
- *  - Die Sichtprüfung am echten Modell meldet „die Figur liegt, man sieht sie
- *    **von unten**" — eine 180°-Drehung ist genau diese Symptomatik.
- *  - Kujatas Quaternion-Herleitung entspricht Zeichen für Zeichen der
- *    Three-Semantik von 'YXZ' (R = Ry·Rx·Rz), also derselben Konvention wie
- *    `rotationEulerYxz` hier. Die Reihenfolge war nie das Problem.
- *
- * **Warum das (noch) nicht gemessen ist:** Die Realdaten-Probe bewertet über
- * die Ausdehnung der Mesh-Punktwolke — und eine 180°-Drehung lässt eine
- * Bounding-Box unverändert. Die Gütefunktion ist für diesen Fehler
- * konstruktionsbedingt blind; gemessen liefern Versatz 0 und 180 exakt
- * dieselben Werte. Der Wert ist deshalb ausdrücklich 🟡 und braucht eine
- * Sichtprüfung oder ein richtungsempfindliches Maß.
- */
-export const FIELD_ROOT_PITCH_DEG = 180;
+
 
 /**
- * ⚠️ **Nicht als Vorgabe gesetzt.** Der Wert stammt aus einer Pipeline, die
- * sich an ZWEI weiteren Stellen von unserer unterscheidet: Kujata versetzt das
- * Kind nach `−parentLength` (bei uns `+parentLength`) und kennt keinen
- * Achsen-Basiswechsel FF7→Szene, sondern arbeitet direkt im Modellraum. Die
- * drei Entscheidungen gehören zusammen; eine davon einzeln zu übernehmen ist
- * genau der Fehler, den dieses Projekt sonst vermeidet.
+ * **Wurzelrahmen-Korrektur** (R4, 2026-08-10).
  *
- * Nachgemessen: Kujatas Versatzvorzeichen verschlechtert unsere Aufrechtigkeit
- * durchgehend — `offset+` belegt alle vorderen Plätze. Unsere Bindpose steht
- * ohne den Pitch bereits zu 95 % aufrecht.
+ * Die Sichtprüfung am echten Modell entscheidet, was keine Bounding-Box
+ * konnte: Ohne Zusatzwinkel sieht man die Figur **von unten** (Füße), mit 180°
+ * **von oben** (Kopf). Beide Stellungen liegen 90° daneben — in
+ * entgegengesetzte Richtungen. Der gesuchte Wert liegt also dazwischen.
  *
- * Der Pitch bleibt deshalb ein **Schalter** (`applyFrame(..., pitch)`), den
- * die Demoseite live umlegen kann. Erst wenn ein Auge oder ein
- * richtungsempfindliches Maß entschieden hat, wird daraus eine Vorgabe.
+ * Dieselbe Zahl folgt unabhängig aus der Rechnung. Kujata setzt für
+ * Feldmodelle `rootRotationDegreesX = 180` im **reinen Modellraum**. Unsere
+ * Pipeline hängt stattdessen die ADR-009-Basis
+ * `C: (x,y,z) → (x, z, −y)` über das Modell — und das ist genau `Rx(−90°)`:
+ *
+ * ```text
+ * Rx(θ): (x, y, z) → (x, y·cosθ − z·sinθ, y·sinθ + z·cosθ)
+ * θ = −90°:         → (x, z, −y)   ✓ also C = Rx(−90°)
+ * ```
+ *
+ * Damit unsere Szene dieselbe Weltlage liefert wie Kujata, muss gelten
+ * `C · Rx(fix) = Rx(180°)`, und weil Drehungen um dieselbe Achse additiv sind:
+ *
+ * ```text
+ * Rx(−90° + fix) = Rx(180°)  ⇒  fix = 270° ≡ −90°
+ * ```
+ *
+ * Zwei unabhängige Wege, dieselbe Antwort — das Auge und die Algebra.
  */
-export const DEFAULT_ROOT_PITCH_DEG = 0;
+export const ROOT_FRAME_FIX_DEG = -90;
+
+/**
+ * Wurzeltranslation aus dem gedrehten `.a`-Rahmen in den Modellraum.
+ *
+ * Die rohe Translation steht im selben gedrehten Rahmen wie die
+ * Wurzelrotation. Wird nur die Rotation korrigiert und die Translation roh
+ * übernommen, wandert die Figur in die falsche Achse — das ist der zweite
+ * Teil des Symptoms „von unten gesehen". Angewandt wird `C⁻¹ = Rx(+90°)`:
+ *
+ * ```text
+ * Rx(+90°): (x, y, z) → (x, −z, y)
+ * ```
+ */
+export function rootFrameTranslationToModel(
+  t: readonly [number, number, number],
+): [number, number, number] {
+  return [t[0], -t[2], t[1]];
+}
 
 /** Spaltenvektor-Konvention, Speicherung zeilenweise (m[r][c]). */
 export type Mat4 = number[][];
@@ -142,20 +151,22 @@ export function bindPoseFrame(skeleton: Skeleton): AnimationFrame {
  * Modellraum-Posen aller Bones für einen Frame. `rotations` wird in
  * Dateireihenfolge adressiert; fehlende Einträge gelten als 0 (Pad-Regel).
  *
- * `rootPitchDeg` ist bewusst **0** als Vorgabe: Diese Funktion ist die reine
- * Referenzmathematik und soll keine Fassungs-Konvention tragen. Den
- * Feldversatz (`FIELD_ROOT_PITCH_DEG`) setzt der Aufrufer — im Renderpfad
- * genau einmal in `applyFrame`.
+ * `rootFrameFix` ist hier bewusst **false** als Vorgabe: Diese Funktion ist die reine
+ * Referenzmathematik und soll keine Fassungs-Konvention tragen. Die Korrektur
+ * setzt der Aufrufer — im Renderpfad genau einmal in `applyFrame`, wo sie
+ * umgekehrt **Vorgabe** ist.
  */
 export function computePose(
   skeleton: Skeleton,
   frame: AnimationFrame,
-  rootPitchDeg = 0,
+  rootFrameFix = false,
 ): BonePose[] {
   const rootR = frame.rootRotation;
+  const t = rootFrameFix ? rootFrameTranslationToModel(frame.rootTranslation) : frame.rootTranslation;
+  const pitch = rootFrameFix ? ROOT_FRAME_FIX_DEG : 0;
   const rootMatrix = matMul(
-    translation(frame.rootTranslation[0], frame.rootTranslation[1], frame.rootTranslation[2]),
-    rotationEulerYxz(rootR[0] + rootPitchDeg, rootR[1], rootR[2]),
+    translation(t[0], t[1], t[2]),
+    rotationEulerYxz(rootR[0] + pitch, rootR[1], rootR[2]),
   );
   const poses: BonePose[] = [];
   for (let i = 0; i < skeleton.bones.length; i++) {
