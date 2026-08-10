@@ -39,6 +39,41 @@ export function sceneBasisMatrix(): THREE.Matrix4 {
 
 const PLACEHOLDER_COLOR = 0xff00ff; // Magenta-Platzhalter (Debug-Konvention)
 
+/**
+ * Schwelle des Farbschlüssels. 🟢 **Realdatenbeleg** (`tex-alpha-probe`): Der
+ * Bestand kennt praktisch nur die Alphawerte 255 (28209 Einträge), 0 (2213)
+ * und 254 (858) — es gibt keine Halbtransparenz, die eine feinere Schwelle
+ * verlangte. Ein harter Schnitt in der Mitte ist deshalb kein Kompromiss,
+ * sondern die exakte Semantik.
+ *
+ * `alphaTest` statt `transparent: true`: Verworfene Fragmente schreiben auch
+ * die Tiefe nicht. Genau darauf kommt es an — sonst verdeckte die unsichtbare
+ * Fläche des Aufklebers das Gesicht ebenso zuverlässig wie die sichtbare, und
+ * man hätte statt eines schwarzen Rechtecks ein Loch.
+ */
+const ALPHA_TEST = 0.5;
+
+/**
+ * Tiefenvorzug für texturierte Flächen (Aufkleber-Versatz).
+ *
+ * 🟡 **Renderentscheidung, kein Formatfakt.** FF7 legt Augen und Mund als
+ * Aufkleber EXAKT auf die Gesichtsfläche. Ohne Vorzug entscheidet der
+ * Rundungsfehler je Pixel, wer gewinnt; sichtbar wurde das als Streifenmuster
+ * über den Augen (Sichtprüfung 2026-08-10).
+ *
+ * Dass ausgerechnet die texturierten Flächen die Aufkleber sind, ist gemessen
+ * und nicht geraten: Von 4710 Submeshes des Bestands sind nur **626**
+ * texturiert (13,3 %), und 187 Ressourcen tragen genau drei Texturen — Gesicht
+ * plus zwei Augen. Die Grundgeometrie ist vertexgefärbt.
+ *
+ * Bleibt 🟡, weil die Regel eine Bauform ausnutzt und keine Angabe der Datei
+ * ist: Ein texturiertes Submesh, das KEIN Aufkleber ist, bekäme den Vorzug
+ * ebenfalls. Bei einem Versatz dieser Größe ist das folgenlos, aber es ist
+ * eine Annahme und wird als solche geführt.
+ */
+const DECAL_OFFSET_FACTOR = -1;
+const DECAL_OFFSET_UNITS = -1;
+
 function buildTexture(tex: TextureSource): THREE.DataTexture {
   const texture = new THREE.DataTexture(texToRgba(tex), tex.width, tex.height, THREE.RGBAFormat);
   texture.magFilter = THREE.NearestFilter; // authentischer Look, keine Palettensäume
@@ -62,7 +97,13 @@ function buildMeshObject(bundle: ActorMeshBundle): THREE.Mesh {
       const tex = bundle.textures[sub.textureIndex];
       materials.push(
         tex
-          ? new THREE.MeshBasicMaterial({ map: buildTexture(tex) })
+          ? new THREE.MeshBasicMaterial({
+              map: buildTexture(tex),
+              alphaTest: ALPHA_TEST,
+              polygonOffset: true,
+              polygonOffsetFactor: DECAL_OFFSET_FACTOR,
+              polygonOffsetUnits: DECAL_OFFSET_UNITS,
+            })
           : new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR }),
       );
     } else {

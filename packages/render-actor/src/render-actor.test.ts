@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { composeA, composeHrc, composeP } from '@webmidgar/fixture-gen';
-import { parseA, parseHrc, parseP, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
+import { composeA, composeHrc, composeP, composeTex } from '@webmidgar/fixture-gen';
+import { parseA, parseHrc, parseP, parseTex, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
 import { bindClip } from './binding.js';
 import { bindPoseFrame, computePose } from './pose.js';
 import { applyFrame, boneModelMatrix, buildActor, buildFallbackActor } from './actor.js';
@@ -246,5 +246,73 @@ describe('Animationsbindung & Meshes', () => {
 
     const fallback = buildFallbackActor();
     expect(fallback.model.children.length).toBe(1);
+  });
+
+  it('texturierte Flächen bekommen Farbschlüssel und Aufkleber-Versatz', () => {
+    const sk = skeleton();
+    // Zwei Flächen: eine texturierte (Aufkleber) und eine vertexgefärbte
+    // (Grundgeometrie) — nur die erste darf die Sonderbehandlung erhalten.
+    const { value: mesh } = parseP(
+      composeP({
+        vertices: [
+          [0, 0, 0],
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+          [1, 0, 1],
+          [0, 1, 1],
+        ],
+        normals: [[0, 0, 1]],
+        texCoords: [
+          [0, 0],
+          [1, 0],
+          [0, 1],
+        ],
+        groups: [
+          {
+            vertexStart: 0,
+            vertexCount: 3,
+            polys: [{ v: [0, 1, 2], n: [0, 0, 0] }],
+            textured: true,
+            textureIndex: 0,
+            texCoordStart: 0,
+          },
+          { vertexStart: 3, vertexCount: 3, polys: [{ v: [0, 1, 2], n: [0, 0, 0] }] },
+        ],
+      }),
+      'decal.p',
+    );
+    // Paletteneintrag 0 durchsichtig, 1 undurchsichtig — die Bauform der
+    // Aufkleber im Bestand (98 % durchsichtige Fläche um ein kleines Motiv).
+    const { value: tex } = parseTex(
+      composeTex({
+        width: 2,
+        height: 2,
+        palettes: [[[0, 0, 0, 0], [200, 40, 40, 255]]],
+        pixels: [0, 1, 0, 0],
+      }),
+      'decal.tex',
+    );
+    expect(tex).not.toBeNull();
+    // Der Farbschlüssel im Kopf folgt dem Palettenalpha (695/695 im Bestand).
+    expect(tex!.palettes[0]![3]).toBe(0);
+
+    const actor = buildActor(sk, (bone) => (bone === 1 ? [{ mesh: mesh!, textures: [tex!] }] : []));
+    const drei = actor.boneGroups[1]!.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh;
+    const mats = drei.material as THREE.MeshBasicMaterial[];
+    expect(mats).toHaveLength(2);
+
+    // Texturiert: Farbschlüssel scharf, Tiefenvorzug aktiv.
+    expect(mats[0]!.alphaTest).toBeGreaterThan(0);
+    expect(mats[0]!.polygonOffset).toBe(true);
+    expect(mats[0]!.polygonOffsetFactor).toBeLessThan(0); // zur Kamera hin
+    expect(mats[0]!.map).not.toBeNull();
+
+    // Vertexgefärbt: KEINE Sonderbehandlung. Ohne diese Gegenprobe wäre der
+    // Test auch dann grün, wenn jedes Material den Versatz bekäme — und dann
+    // hätte er über Aufkleber nichts ausgesagt.
+    expect(mats[1]!.polygonOffset).toBe(false);
+    expect(mats[1]!.alphaTest).toBe(0);
+    expect(mats[1]!.vertexColors).toBe(true);
   });
 });
