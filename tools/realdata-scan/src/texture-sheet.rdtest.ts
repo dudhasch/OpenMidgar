@@ -54,7 +54,7 @@ const REAL_DIR =
 
 const OUT =
   process.env['WEBMIDGAR_TEXSHEET_OUT'] ??
-  'C:\\Users\\timur\\AppData\\Local\\Temp\\claude\\C--ff7-web\\49dab9ae-a74e-4275-bde7-8575218c5ff6\\scratchpad\\b5b6-tafel.html';
+  'C:\\Users\\timur\\AppData\\Local\\Temp\\claude\\C--ff7-web\\49dab9ae-a74e-4275-bde7-8575218c5ff6\\scratchpad\\b5b6-formular.html';
 
 const available = existsSync(REAL_DIR);
 
@@ -225,8 +225,177 @@ function dreiecke(m: Modell, opt: Optionen): Dreieck[] {
   return out;
 }
 
-describe.skipIf(!available)('Realdaten: B5/B6-Bildtafel (Palette, Vertexfarben, UV)', () => {
-  it('rendert 20 Farb-/UV-Varianten in eine lokale HTML-Tafel', async () => {
+/** Ein Texturbild als Zelle, mit Nearest auf Zellgroesse gebracht. */
+function texZelle(tex: TextureSource, perm: (r: number, g: number, b: number, a: number) => [number, number, number]): Buffer {
+  const bild = texRgb(tex, perm);
+  const px = new Uint8Array(W * H * 3).fill(18);
+  const s = Math.min(W / bild.w, H / bild.h);
+  const ox = Math.floor((W - bild.w * s) / 2);
+  const oy = Math.floor((H - bild.h * s) / 2);
+  for (let y = 0; y < Math.floor(bild.h * s); y++) {
+    for (let x = 0; x < Math.floor(bild.w * s); x++) {
+      const sx = Math.min(bild.w - 1, Math.floor(x / s));
+      const sy = Math.min(bild.h - 1, Math.floor(y / s));
+      const so = (sy * bild.w + sx) * 3;
+      const dst = ((y + oy) * W + (x + ox)) * 3;
+      px[dst] = bild.rgb[so]!;
+      px[dst + 1] = bild.rgb[so + 1]!;
+      px[dst + 2] = bild.rgb[so + 2]!;
+    }
+  }
+  return encodePng(W, H, px);
+}
+
+interface Fall {
+  id: string;
+  gruppe: string;
+  frage: string;
+  variante: string;
+  detail: string;
+  png: Buffer;
+}
+
+function html(faelle: Fall[]): string {
+  const gruppen = [...new Set(faelle.map((f) => f.gruppe))];
+  const abschnitte = gruppen.map((g) => {
+    const eigene = faelle.filter((f) => f.gruppe === g);
+    const karten = eigene.map((f) => `
+      <figure data-id="${f.id}" data-gruppe="${f.gruppe}" data-variante="${f.variante}">
+        <img src="data:image/png;base64,${f.png.toString('base64')}" width="${W}" height="${H}" alt="${f.id}">
+        <figcaption><b>${f.id}</b> — ${f.variante}<br><span class="d">${f.detail}</span></figcaption>
+        <div class="wahl">
+          <label><input type="radio" name="${f.id}" value="richtig"> richtig</label>
+          <label><input type="radio" name="${f.id}" value="falsche-farbe"> falsche Farbe</label>
+          <label><input type="radio" name="${f.id}" value="anderes"> etwas anderes</label>
+          <input class="notiz" type="text" placeholder="was genau? (optional)">
+        </div>
+      </figure>`).join('\n');
+    return `<h2>${g}</h2><p class="frage">${eigene[0]?.frage ?? ''}</p><div class="grid">${karten}</div>`;
+  }).join('\n');
+
+  return `<!doctype html><meta charset="utf-8"><title>B5/B6 — Testfälle</title>
+<style>
+:root{color-scheme:dark}
+body{background:#111;color:#ddd;font:14px/1.5 system-ui,sans-serif;margin:0;padding:24px 24px 220px}
+h1{font-size:21px;margin:0 0 6px} h2{font-size:16px;color:#7aa2f7;margin:34px 0 4px}
+p{max-width:78ch;color:#aaa;margin:6px 0} .frage{color:#e0af68}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:14px;margin-top:12px}
+figure{margin:0;background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:9px}
+figure.fertig{border-color:#2f6f4f;background:#16211b}
+img{display:block;border-radius:4px;background:#121212;width:100%;height:auto}
+figcaption{font-size:11.5px;line-height:1.4;margin:7px 0 6px;color:#ccc}
+b{color:#fff} .d{color:#888}
+.wahl{display:flex;flex-direction:column;gap:3px;font-size:12px}
+.wahl label{display:flex;align-items:center;gap:6px;cursor:pointer;padding:1px 0}
+.notiz{margin-top:4px;background:#111;border:1px solid #3a3a3a;border-radius:4px;color:#ddd;padding:4px 6px;font:inherit;font-size:11.5px}
+#leiste{position:fixed;left:0;right:0;bottom:0;background:#181818;border-top:1px solid #333;padding:12px 24px;display:flex;gap:14px;align-items:flex-start}
+#leiste textarea{flex:1;height:120px;background:#111;color:#9ece6a;border:1px solid #3a3a3a;border-radius:6px;padding:8px;font:12px/1.4 ui-monospace,Consolas,monospace;resize:vertical}
+#leiste .rechts{display:flex;flex-direction:column;gap:8px;min-width:190px}
+button{background:#2d4f7c;color:#fff;border:0;border-radius:6px;padding:9px 12px;font:inherit;cursor:pointer}
+button:hover{background:#3a67a0}
+#stand{font-size:12.5px;color:#aaa}
+</style>
+<h1>B5/B6 — Farbkanäle und UV-Ursprung</h1>
+<p>Bitte je Fall eine Auswahl treffen. Unbeantwortete Fälle sind erlaubt — sie erscheinen im JSON als <code>offen</code>. Der Fortschritt bleibt beim Neuladen erhalten.</p>
+<p><b>Hinweis:</b> Zwei Zellen derselben Textur können <i>identisch</i> aussehen. Das ist kein Fehler: Bei grauen Palettenfarben (R&nbsp;=&nbsp;G&nbsp;=&nbsp;B) fallen Kanalvertauschungen zusammen. Solche Paare bitte gleich bewerten — sie tragen zur Entscheidung schlicht nichts bei.</p>
+${abschnitte}
+
+<div id="leiste">
+  <textarea id="json" readonly></textarea>
+  <div class="rechts">
+    <div id="stand"></div>
+    <button id="kopieren">JSON kopieren</button>
+    <button id="leeren">Antworten verwerfen</button>
+  </div>
+</div>
+
+<script>
+const SPEICHER = 'b5b6-urteile';
+const karten = [...document.querySelectorAll('figure[data-id]')];
+
+function laden() {
+  try {
+    const roh = localStorage.getItem(SPEICHER);
+    if (!roh) return;
+    const daten = JSON.parse(roh);
+    for (const k of karten) {
+      const e = daten[k.dataset.id];
+      if (!e) continue;
+      if (e.urteil) {
+        const r = k.querySelector('input[value="' + e.urteil + '"]');
+        if (r) r.checked = true;
+      }
+      if (e.notiz) k.querySelector('.notiz').value = e.notiz;
+    }
+  } catch (_) { /* localStorage kann bei file:// gesperrt sein */ }
+}
+
+function sammeln() {
+  const faelle = karten.map((k) => {
+    const gewaehlt = k.querySelector('input[type=radio]:checked');
+    const notiz = k.querySelector('.notiz').value.trim();
+    k.classList.toggle('fertig', !!gewaehlt);
+    return {
+      id: k.dataset.id,
+      gruppe: k.dataset.gruppe,
+      variante: k.dataset.variante,
+      urteil: gewaehlt ? gewaehlt.value : 'offen',
+      notiz: notiz,
+    };
+  });
+  return faelle;
+}
+
+function aktualisieren() {
+  const faelle = sammeln();
+  const beantwortet = faelle.filter((f) => f.urteil !== 'offen').length;
+  document.getElementById('stand').textContent = beantwortet + ' von ' + faelle.length + ' beantwortet';
+  const ausgabe = { tafel: 'b5b6', version: 1, faelle: faelle };
+  document.getElementById('json').value = JSON.stringify(ausgabe, null, 1);
+  try {
+    const karte = {};
+    for (const f of faelle) karte[f.id] = { urteil: f.urteil, notiz: f.notiz };
+    localStorage.setItem(SPEICHER, JSON.stringify(karte));
+  } catch (_) { /* egal */ }
+}
+
+document.addEventListener('input', aktualisieren);
+document.addEventListener('change', aktualisieren);
+
+document.getElementById('kopieren').addEventListener('click', async () => {
+  const ta = document.getElementById('json');
+  const btn = document.getElementById('kopieren');
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    btn.textContent = 'kopiert ✓';
+  } catch (_) {
+    // Bei file:// ist die Zwischenablage oft gesperrt — dann markieren,
+    // damit Strg+C trotzdem funktioniert.
+    ta.removeAttribute('readonly');
+    ta.select();
+    btn.textContent = 'markiert — Strg+C';
+    ta.setAttribute('readonly', '');
+  }
+  setTimeout(() => { btn.textContent = 'JSON kopieren'; }, 2200);
+});
+
+document.getElementById('leeren').addEventListener('click', () => {
+  if (!confirm('Alle Antworten verwerfen?')) return;
+  for (const k of karten) {
+    for (const r of k.querySelectorAll('input[type=radio]')) r.checked = false;
+    k.querySelector('.notiz').value = '';
+  }
+  try { localStorage.removeItem(SPEICHER); } catch (_) {}
+  aktualisieren();
+});
+
+laden();
+aktualisieren();
+</script>`;
+}
+
+describe.skipIf(!available)('Realdaten: B5/B6-Testformular (Palette, Vertexfarben, UV)', () => {
+  it('erzeugt ein lokales Formular mit unabhängigen Testfällen', async () => {
     const dir = new NodeDirectorySource(REAL_DIR, ['data/field']);
     const index = new IndexService();
     await index.openSource(dir, { deep: false });
@@ -281,11 +450,6 @@ describe.skipIf(!available)('Realdaten: B5/B6-Bildtafel (Palette, Vertexfarben, 
     }
     await dir.closeAll();
 
-    // Sortiert wird nach texturierten DREIECKEN, nicht nach der Zahl der
-    // Texturdateien: Ein Modell mit drei Texturen auf winzigen Flächen macht
-    // die Palettenfrage unentscheidbar. Genau das ist im ersten Anlauf
-    // passiert — die vier Permutationen sahen fast gleich aus, weil die
-    // sichtbare Farbe überwiegend aus Vertexfarben kam.
     const texturierteDreiecke = (m: Modell): number => {
       let n = 0;
       for (const liste of m.res.values()) {
@@ -300,129 +464,106 @@ describe.skipIf(!available)('Realdaten: B5/B6-Bildtafel (Palette, Vertexfarben, 
     for (const m of modelle) m.texDreiecke = texturierteDreiecke(m);
     modelle.sort((a, b) => b.texDreiecke - a.texDreiecke);
     expect(modelle.length).toBeGreaterThan(2);
-    expect(modelle[0]!.texAnzahl).toBeGreaterThan(0);
     const haupt = modelle[0]!;
+    expect(haupt.texDreiecke).toBeGreaterThan(20);
 
-    // --- Abschnitt 1: Palette × UV
-    const zellen1: string[] = [];
-    const signaturen: string[] = [];
-    let nr = 1;
-    for (const palette of Object.keys(PALETTEN)) {
-      for (const flipV of [false, true]) {
-        for (const flipU of [false, true]) {
-          const png = rasterize(dreiecke(haupt, { palette, flipV, flipU, vertexPerm: null }));
-          signaturen.push(png.toString('base64').slice(0, 64));
-          zellen1.push(
-            `<figure><img src="data:image/png;base64,${png.toString('base64')}" width="${W}" height="${H}"><figcaption><b>T${nr++}</b><br>Palette <b>${palette}</b><br>V ${flipV ? 'geflippt' : 'roh'} · U ${flipU ? 'geflippt' : 'roh'}</figcaption></figure>`,
-          );
+    // Texturen aus mehreren FIGÜRLICHEN Modellen: Bei einem Effektsprite ist
+    // jede Farbe plausibel, bei einem Gesicht nicht.
+    const alleTex: TextureSource[] = [];
+    for (const m of [...modelle].sort((a, b) => b.skeleton.bones.length - a.skeleton.bones.length)) {
+      if (alleTex.length >= 4) break;
+      for (const liste of m.res.values()) {
+        for (const { texturen } of liste) {
+          for (const t of texturen) if (t && !alleTex.includes(t) && alleTex.length < 4) alleTex.push(t);
         }
       }
     }
 
-    // --- Abschnitt 2: Vertexfarben, Texturen abgeschaltet
-    const zellen2: string[] = [];
+    const faelle: Fall[] = [];
+
+    // --- Gruppe 1: Palettenreihenfolge, am Texturbild selbst.
+    //
+    // Bewusst am Bild statt am Modell: Auf dem Modell nimmt die texturierte
+    // Fläche nur einen Bruchteil ein, und dieselbe Vertauschung geht dort
+    // unter. Vier Texturen, damit ein einzelnes mehrdeutiges Sprite (eine
+    // cyane Flamme ist als Wasser genauso plausibel wie eine rote als Feuer)
+    // die Entscheidung nicht allein trägt.
+    let pn = 1;
+    for (const [ti, tex] of alleTex.entries()) {
+      for (const palette of Object.keys(PALETTEN)) {
+        faelle.push({
+          id: `P${pn++}`,
+          gruppe: '1 — Palettenreihenfolge im .tex (B5)',
+          frage: 'Welche Zellen zeigen plausible Farben? Hauttöne, Augen und Münder sind eindeutig; Effektsprites bewusst mit Vorsicht beurteilen.',
+          variante: palette,
+          detail: `Textur ${ti + 1} · ${tex.width}×${tex.height}`,
+          png: texZelle(tex, PALETTEN[palette]!),
+        });
+      }
+    }
+
+    // --- Gruppe 2: UV-Ursprung, am Modell.
+    //
+    // Unabhängig von der Palette: Ein geflipptes Bild ist geflippt, egal in
+    // welchen Farben. Deshalb hier eine feste Palette und nur die vier
+    // UV-Kombinationen.
+    let un = 1;
+    for (const flipV of [false, true]) {
+      for (const flipU of [false, true]) {
+        faelle.push({
+          id: `U${un++}`,
+          gruppe: '2 — UV-Ursprung (B6b)',
+          frage: 'Welche Zelle zeigt die Textur richtig herum? Nur auf Ausrichtung achten, nicht auf Farbe — die entscheidet Gruppe 1.',
+          variante: `V ${flipV ? 'geflippt' : 'roh'} · U ${flipU ? 'geflippt' : 'roh'}`,
+          detail: 'Modell, Palette BGRA',
+          png: rasterize(dreiecke(haupt, { palette: 'BGRA (heute)', flipV, flipU, vertexPerm: null })),
+        });
+      }
+    }
+
+    // --- Gruppe 3: Vertexfarben, Texturen abgeschaltet.
     const VERTEX: Record<string, (r: number, g: number, b: number) => Vec3> = {
       'BGRA (heute)': (r, g, b) => [r, g, b],
       'RGBA': (r, g, b) => [b, g, r],
     };
     let vn = 1;
-    for (const [n, m] of modelle.slice(0, 2).entries()) {
+    const figuren = [...modelle].sort((a, b) => b.skeleton.bones.length - a.skeleton.bones.length).slice(0, 2);
+    for (const [n, m] of figuren.entries()) {
       for (const [name, fn] of Object.entries(VERTEX)) {
-        const png = rasterize(dreiecke(m, { palette: 'BGRA (heute)', flipV: false, flipU: false, vertexPerm: fn }));
-        zellen2.push(
-          `<figure><img src="data:image/png;base64,${png.toString('base64')}" width="${W}" height="${H}"><figcaption><b>V${vn++}</b><br>Modell ${n + 1} · Vertexfarben <b>${name}</b><br>Texturen aus</figcaption></figure>`,
-        );
+        faelle.push({
+          id: `V${vn++}`,
+          gruppe: '3 — Vertexfarben (B6a), Texturen aus',
+          frage: 'Welche Zellen zeigen glaubhafte Haut-, Haar- und Kleidungsfarben?',
+          variante: name,
+          detail: `Modell ${n + 1} · ${m.skeleton.bones.length} Bones`,
+          png: rasterize(dreiecke(m, { palette: 'BGRA (heute)', flipV: false, flipU: false, vertexPerm: fn })),
+        });
       }
     }
-
-    // --- Abschnitt 3: die Texturen SELBST unter den vier Permutationen.
-    //
-    // Auf dem Modell nimmt die texturierte Fläche nur einen Bruchteil ein; die
-    // Kanalfrage entscheidet sich am Bild direkt. Ein Hautton in vertauschter
-    // Reihenfolge ist als Blau- oder Grünstich sofort erkennbar, während
-    // dieselbe Vertauschung auf einer briefmarkengroßen Fläche untergeht.
-    const zellen3: string[] = [];
-    const alleTex: TextureSource[] = [];
-    // Texturen aus MEHREREN Modellen sammeln, bevorzugt aus figürlichen
-    // (viele Bones). Ein einzelnes Modell liefert womöglich nur Effektsprites
-    // — und bei einer Flamme ist „cyan oder rot" nicht entscheidbar, weil
-    // beides als Effekt plausibel wäre. Hauttöne sind es dagegen sehr wohl:
-    // Es gibt keine plausible Lesart, in der ein Gesicht blau ist.
-    const figuerlich = [...modelle].sort((a, b) => b.skeleton.bones.length - a.skeleton.bones.length);
-    for (const m of figuerlich) {
-      if (alleTex.length >= 6) break;
-      for (const liste of m.res.values()) {
-        for (const { texturen } of liste) {
-          for (const t of texturen) {
-            if (t && !alleTex.includes(t) && alleTex.length < 6) alleTex.push(t);
-          }
-        }
-      }
-    }
-    let tn = 1;
-    for (const [ti, tex] of alleTex.entries()) {
-      for (const palette of Object.keys(PALETTEN)) {
-        const bild = texRgb(tex, PALETTEN[palette]!);
-        // Auf Zellgröße hochskalieren (Nearest), damit Paletten sichtbar sind.
-        const px = new Uint8Array(W * H * 3).fill(18);
-        const s2 = Math.min(W / bild.w, H / bild.h);
-        const ox = Math.floor((W - bild.w * s2) / 2);
-        const oy = Math.floor((H - bild.h * s2) / 2);
-        for (let y = 0; y < Math.floor(bild.h * s2); y++) {
-          for (let x = 0; x < Math.floor(bild.w * s2); x++) {
-            const sx = Math.min(bild.w - 1, Math.floor(x / s2));
-            const sy = Math.min(bild.h - 1, Math.floor(y / s2));
-            const so = (sy * bild.w + sx) * 3;
-            const dobj = ((y + oy) * W + (x + ox)) * 3;
-            px[dobj] = bild.rgb[so]!;
-            px[dobj + 1] = bild.rgb[so + 1]!;
-            px[dobj + 2] = bild.rgb[so + 2]!;
-          }
-        }
-        const png = encodePng(W, H, px);
-        zellen3.push(
-          `<figure><img src="data:image/png;base64,${png.toString('base64')}" width="${W}" height="${H}"><figcaption><b>P${tn++}</b><br>Textur ${ti + 1} (${bild.w}×${bild.h}) · <b>${palette}</b></figcaption></figure>`,
-        );
-      }
-    }
-
-    const html = `<!doctype html><meta charset="utf-8"><title>B5/B6 — Palette, Vertexfarben, UV</title>
-<style>
-body{background:#111;color:#ddd;font:14px/1.45 system-ui,sans-serif;margin:24px}
-h1{font-size:20px} h2{font-size:16px;margin-top:32px;color:#7aa2f7} p{max-width:74ch;color:#aaa}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;margin-top:16px}
-figure{margin:0;background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:8px}
-img{display:block;border-radius:4px;background:#121212}
-figcaption{font-size:11px;line-height:1.4;margin-top:6px;color:#bbb}
-b{color:#fff}
-</style>
-<h1>B5/B6 — Farbkanäle und UV-Ursprung</h1>
-<p>Frontansicht, Frame&nbsp;0, Modellorientierung wie zuletzt bestätigt. Gesucht ist die Zelle mit <b>natürlichen Hautfarben und passender Kleidung</b> — falsche Kanalreihenfolge macht Haut blau oder grün, ein falscher UV-Ursprung setzt die Texturstreifen kopfüber oder seitenverkehrt.</p>
-<h2>Abschnitt 1 — Palettenreihenfolge (B5) × UV-Ursprung (B6b)</h2>
-<p>16 Zellen: vier Kanalauslegungen des Palettenblocks, je mit und ohne V- und U-Flip.</p>
-<div class="grid">${zellen1.join('\n')}</div>
-<h2>Abschnitt 2 — Vertexfarben (B6a), Texturen abgeschaltet</h2>
-<p>Die Vertexfarben sind unter den Texturen unsichtbar; deshalb hier ohne. Zwei Modelle, je beide Kanalauslegungen.</p>
-<div class="grid">${zellen2.join('\n')}</div>
-<h2>Abschnitt 3 — die Texturbilder selbst (B5, entscheidend)</h2>
-<p>Dieselben Paletten-Auslegungen, aber direkt auf das Texturbild angewandt statt auf das Modell. Gesucht ist die Zelle mit <b>plausiblen Hauttönen</b> — die falschen Reihenfolgen erzeugen einen Blau- oder Grünstich, der hier großflächig sichtbar ist.</p>
-<div class="grid">${zellen3.join('\n')}</div>`;
 
     mkdirSync(dirname(OUT), { recursive: true });
-    writeFileSync(OUT, html, 'utf8');
-    console.log(`B5/B6-Bildtafel geschrieben: ${OUT}`);
-    console.log(`Modelle: ${modelle.length}, texturierte Dreiecke im Hauptmodell: ${haupt.texDreiecke}, Texturen: ${alleTex.length}, Bones mit Geometrie: ${haupt.res.size}`);
+    writeFileSync(OUT, html(faelle), 'utf8');
+    console.log(`B5/B6-Testformular geschrieben: ${OUT}`);
+    console.log(`Testfälle: ${faelle.length} (Palette ${pn - 1}, UV ${un - 1}, Vertexfarben ${vn - 1})`);
 
-    // Kontrolle: Die vier Palettenauslegungen MÜSSEN sich unterscheiden.
-    // Wären die Bilder gleich, wäre entweder die Textur einfarbig oder der
-    // Texturpfad tot — und die ganze Tafel wertlos.
-    expect(new Set(signaturen).size).toBeGreaterThan(4);
-    expect(zellen1.length).toBe(16);
-    expect(zellen2.length).toBe(4);
-    expect(zellen3.length).toBeGreaterThanOrEqual(16);
-    // Die texturierte Fläche muss nennenswert sein, sonst ist B5 am Modell
-    // gar nicht sichtbar und Abschnitt 1 wäre irreführend.
-    expect(haupt.texDreiecke).toBeGreaterThan(20);
+    // Kontrolle: Je Textur müssen sich die vier Auslegungen unterscheiden —
+    // sonst wäre der Texturpfad tot und das Formular wertlos.
+    //
+    // ABER: Vollständige Verschiedenheit ist NICHT zu erwarten. Hat eine
+    // Palette graue Einträge (R = G = B), fallen Permutationen zusammen; bei
+    // A = R gilt dasselbe für die Alpha-Varianten. Gemessen wird deshalb, dass
+    // je Textur mindestens zwei verschiedene Bilder entstehen, und die Zahl
+    // der zusammenfallenden Paare wird berichtet statt weggeprüft.
+    const pFaelle = faelle.filter((f) => f.id.startsWith('P'));
+    let entartet = 0;
+    for (let t = 0; t < pFaelle.length; t += 4) {
+      const gruppe = pFaelle.slice(t, t + 4).map((f) => f.png.toString('base64').slice(0, 96));
+      const verschieden = new Set(gruppe).size;
+      expect(verschieden).toBeGreaterThan(1);
+      entartet += 4 - verschieden;
+    }
+    console.log(`zusammenfallende Palettenvarianten (graue Paletten): ${entartet} von ${pFaelle.length}`);
+    expect(faelle.length).toBe(24);
   }, 900_000);
 });
 
