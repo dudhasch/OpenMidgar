@@ -34,6 +34,11 @@
       "@webmidgar/cache": ["./packages/cache/src/index.ts"],
       "@webmidgar/studio-core": ["./packages/studio-core/src/index.ts"],
       "@webmidgar/studio-compiler": ["./packages/studio-compiler/src/index.ts"],
+      "@webmidgar/license-steam": ["./packages/license-steam/src/index.ts"],
+      "@webmidgar/input": ["./packages/input/src/index.ts"],
+      "@webmidgar/formats-world": ["./packages/formats-world/src/index.ts"],
+      "@webmidgar/render-world": ["./packages/render-world/src/index.ts"],
+      "@webmidgar/world-runtime": ["./packages/world-runtime/src/index.ts"],
       "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"],
       "@webmidgar/nfr-run": ["./tools/nfr-run/src/index.ts"]
     }
