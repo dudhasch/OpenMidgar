@@ -31,6 +31,7 @@ export default defineConfig({
       '@webmidgar/input': r('./packages/input/src/index.ts'),
       '@webmidgar/formats-world': r('./packages/formats-world/src/index.ts'),
       '@webmidgar/formats-battle': r('./packages/formats-battle/src/index.ts'),
+      '@webmidgar/battle-runtime': r('./packages/battle-runtime/src/index.ts'),
       '@webmidgar/render-world': r('./packages/render-world/src/index.ts'),
       '@webmidgar/world-runtime': r('./packages/world-runtime/src/index.ts'),
       '@webmidgar/fixture-gen': r('./tools/fixture-gen/src/index.ts'),

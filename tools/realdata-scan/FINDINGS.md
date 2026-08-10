@@ -501,6 +501,25 @@ ausschließlich `data/wm` (Originalbestand).
 | **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
 | **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
 
+## S31 — Gegner-KI-Grammatik und Battle-Runtime (2026-08-10)
+
+Werkzeuge: `battle-ai-probe.rdtest.ts`. Verfahren: S12 (Spannen-Abschluss +
+Koordinatenabstieg) — mit zwei NEU dokumentierten Blindheiten der
+Gütefunktion, die hier beide zugeschlagen haben.
+
+| Befund | Status |
+|---|---|
+| **Handler-Tabelle:** Jedes Gegner-KI-Skript beginnt mit 16×u16-Offsets — **614/614** monoton, erster belegter Offset **ausnahmslos 32**; Handler-Spannen = [off_i, off_{i+1}) | ✅ Formatfakt |
+| **Doppelte Blindheit des Spannen-Abschlusses:** (a) Die NULLTABELLE besteht „Durchlauf landet exakt auf dem Ende" trivial (bytewese Vorrücken landet immer); (b) auch „…und die letzte Instruktion ist Terminator" ist trivial (das letzte Byte IST der Terminator). Der freie Abstieg ÜBERFITTETE anschließend selbst die kombinierte CFG-Gütefunktion (verbog die Push-Familie 0x00→0) — die Ergebnistabelle stützt sich deshalb auf UNABHÄNGIGE Messungen je Familie, nicht auf den Abstieg | ⚠️ zwei Methodenlehren |
+| **String-Op 0x93 endet mit 0xFF — 0x00 ist TRENNZEICHEN im Text.** Sichtbar an ASCII-Debugtexten im Bytecode; die naheliegende NUL-Terminierung zerlegt 219 Spannen falsch | ✅ Formatfakt (Korrektur einer naheliegenden Annahme) |
+| **0x72 trägt einen u16-Operanden und ist NICHT der Terminator** (wiederkehrende `72 XX 00`-Tripel; kein einziges Spannenende auf 0x72). Terminator ist **0x73** (722/941 Spannenenden; Rest = Mehrfachausgänge) | ✅ realdaten-entschieden, Community-Angabe korrigiert |
+| **Operandenlängen eingefroren:** Push 0x00–0x03 je 2 (Adressoperanden clustern in 8 Bänken: 95,0 % von 9884), Immediate-Treppen 0x10–0x13 = 1/2/3/4 und 0x60–0x62 = 1/2/3, Sprünge 0x70/0x71/0x72 je 2, 0xA0/0xA1 = 2 (🟡 indifferent), Rest 0. **Spannen-Abschluss 938/941 = 99,68 %**; die 3 Reste sind dokumentiert (🟡) | ✅ Ziel ≥ 99 % erfüllt |
+| **Sprungziele sind HANDLER-relativ:** 7969/8177 = 97,5 % auf Instruktionsgrenzen (0x70/0x71 allein: 99,5 %); Kontrollen: skript-relativ 33 %, +1 verschoben 19 % (erhöht, weil 1-Byte-Instruktionen fast jede Position zur Grenze machen — der Abstand trägt) | ✅ Formatfakt |
+| **0x70 ist bedingt, 0x71/0x72 unbedingt.** Diskriminator: Der Nachfolger eines unbedingten Sprungs ist nur als Sprungziel erreichbar — 0x70: 0,0 %, 0x71: 69,2 %, 0x72: 77,7 % | ✅ gemessen; semantischer Unterschied 0x71↔0x72 🟡 |
+| **VM-Abdeckungslauf** (UNKNOWN-Politik wie S29): Haupthandler aller 614 Skripte — **613/614 enden regulär** (1 bad-jump-Abbruch in einem Restspannen-Skript), 0 Budget-Hänger; unknown-Quote 20,2 %; mit Null-Speicher wählen 194/614 bereits eine Attacke per 0x92 (Rest verzweigt speicherabhängig → 🔵-Rückfallpfad der Runtime) | ✅ Abdeckung gemessen; Stack-Semantik 🟡 Fixture-Festlegung; Speicherbelegung 🔴 |
+| Battle-Speicher-Adressraum (Push-Bänke 0x00/0x20/0x40/0x41/…): Belegung unbelegt — die Runtime führt einen Scratch-Speicher (Stores rücklesbar) und meldet unbekannte Lesezugriffe als Quote | 🔴 → 🔵 dokumentiert |
+| ATB/Schadensformeln/Trefferquoten/Zielwahl: **kein Formatgegenstand** — als austauschbarer 🔵-Formelsatz umgesetzt (`battle-runtime/formulas.ts`); Kampfverläufe sind reproduzierbar und in sich stimmig, aber NICHT zahlengleich mit dem Original (Release-Notes-Pflicht aus der Roadmap) | 🔵 Eigenentwurf |
+
 ## S30 — Kampfdaten: scene.bin, battle.lgp, kernel 0–2 (2026-08-10)
 
 Werkzeuge: `battle-probe.rdtest.ts` (Grammatik-Erschließung),

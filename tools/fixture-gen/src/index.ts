@@ -12,4 +12,6 @@ export * from './kernel-composer.js';
 export * from './savemap-composer.js';
 export * from './world-composer.js';
 export * from './battle-composer.js';
+export * from './battle-ai-assembler.js';
 export * from './world-script-assembler.js';
+export * from './audio-composer.js';
