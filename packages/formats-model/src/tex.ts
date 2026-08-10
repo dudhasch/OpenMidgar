@@ -62,6 +62,24 @@ export function parseTex(bytes: Uint8Array, asset: string): ParseResult<TextureS
     palettes.push(rgba);
   }
 
+  // Farbschlüssel. 🟢 **Realdatenbeleg 695/695** (`tex-alpha-probe`): Das
+  // Kopffeld bei 0x08 ist der Transparenzschalter. Es steht auf 1 in **genau
+  // den 627** Dateien, in denen Paletteneintrag 0 das Alpha 0 trägt, und auf 0
+  // in **genau den 68**, in denen er undurchsichtig ist — null Widersprüche in
+  // beide Richtungen. Zwei unabhängige Felder derselben Datei sagen dasselbe;
+  // gleiche Anzahlen allein wären Zufall gewesen, gleiche Dateien sind es nicht.
+  //
+  // Ausgewertet wird trotzdem das **Palettenalpha** und nicht das Kopffeld:
+  // Es ist die feinere Angabe (8 Dateien führen zwischen 63 und 142
+  // durchsichtige Einträge, nicht nur den ersten) und eine echte Teilmenge der
+  // Faustregel „Index 0 ist immer durchsichtig". Gemessen entfernt die
+  // Faustregel zusätzlich 7,7 % aller Texel — in den 68 Dateien, in denen
+  // Index 0 eine gewöhnliche Farbe ist. Deshalb bleibt sie draußen.
+  //
+  // Die Gegenprobe gegen die naheliegende Falle ist bestanden: Wäre A = 0 ein
+  // ungenutztes, überall genulltes Feld, machte die Regel jede Textur
+  // unsichtbar. Tatsächlich tragen 640/695 Texturen GEMISCHTES Alpha, und die
+  // Regel entfernt ein Drittel der Texel — die leeren Ränder der Aufkleber.
   const pixelStart = HEADER_LEN + paletteSize * 4;
   return {
     value: {
