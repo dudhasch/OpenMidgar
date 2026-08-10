@@ -501,6 +501,36 @@ ausschließlich `data/wm` (Originalbestand).
 | **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
 | **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
 
+## S30 — Kampfdaten: scene.bin, battle.lgp, kernel 0–2 (2026-08-10)
+
+Werkzeuge: `battle-probe.rdtest.ts` (Grammatik-Erschließung),
+`battle-sweep.rdtest.ts` (Produktionsparser). Hypothesengeber: Qhimm-Wiki —
+zwei Angaben wurden von den Daten korrigiert (s. u.).
+
+| Befund | Status |
+|---|---|
+| **Strukturvorhersage hält punktgenau:** scene.bin = 34 Blöcke à 0x2000, je Block 16 u32-Zeiger in 4-Byte-Einheiten (Kontrolle „Byte-Offsets": 0/256 Magics) auf gzip-Ströme → **256 Szenen × 4 Formationen = 1024** — exakt der Adressraum der 10-Bit-Kampf-ID. Die Vorhersage stand VOR der Zerlegung | ✅ Formatfakt |
+| **Alle 256 Szenen entpacken exakt auf 7808 B (0x1E80)**; Accounting Zeigertabellen + Ströme + Füllung == Dateigröße byteexakt; die Füllung ist in allen 23.884 Füllbytes **ausnahmslos 0xFF** | ✅ Formatfakt |
+| **Dekodier-Fallstrick:** Die Ströme tragen Nachlauf-Füllung — strikte gzip-Dekoder (auch `DecompressionStream`) lehnen das ab. Da ein gzip-Strom mit ISIZE endet (MSB hier nie 0xFF), liefert **0xFF-Lauf abstreifen** exakt den Strom; danach dekodieren 256/256 STRIKT inklusive CRC-Prüfung. Browsertauglich ohne eigenen Inflater | ✅ Strategie belegt |
+| **Szenen-Partition byteexakt:** IDs 8 B · Setup 4×20 B · Kamera 4×48 B · Formationen 4×6×16 B · Gegner 3×184 B · Attacken 32×28 B · Attack-IDs 64 B · Attack-Namen 32×32 B · Formation-KI [0xC80,0xE80) · Gegner-KI [0xE80,0x1E80) — Summe exakt 0x1E80 | ✅ Formatfakt |
+| **Korrektur 1 an der Community-Beschreibung:** Die Gegner-KI-Offsettabelle liegt bei **0xE80**, nicht 0xF00 (dort steht Text). Sweep 0xC00–0x1400 mit Kriterium „3 monotone Offsets + Korrelation Slot⇔Gegner": Sieger 0xE80 mit **241/256** gegen 15/256 (nächster unabhängiger) und **0/256 bei 0xF00** | ✅ realdaten-entschieden |
+| **Referenzschluss 1:** Alle **2414/2414** belegten Formationsplätze referenzieren einen der 3 Szenen-Gegnertypen (Kontrolle Nachbarszene: 25,1 %). 3730 leere Plätze (0xFFFF) getrennt gezählt | ✅ Formatfakt |
+| **Referenzschluss 2:** Alle **2509/2509** belegten Gegner-Attack-IDs (@0x48) liegen in der Szenen-Attacktabelle (@0x840); Kontrolle Nachbarszene 28,6 % | ✅ Formatfakt |
+| **Referenzschluss 3:** Alle **434/434** Kampf-IDs der Encounter-Tabellen (Sektion 7, maskiert & 0x3FF) lösen auf nicht-leere Formationen auf (1000/1024 Formationen tragen Gegner). ⚠️ Die Verschiebe-Kontrolle ist hier blind (auch id+1 trifft meist) — der Schluss stützt sich auf die Vollständigkeit, nicht auf den Kontrollabstand | ✅ geschlossen |
+| Gegner-Record: **HP = u32@0xA4** (627/627 in [1,10⁶], Kontrolle @0xA3: 76,2 %), **Level = u8@0x20** (627/627 in [1,99]), **EXP = u32@0xA8** (Konkordanz mit Level 0,869 gegen 0,642 bei Byteversatz; Nullwert-Zweitrechnung: 36 EXP-0-Gegner = Story-Bosse ausgenommen). 141 unbenutzte Gegner-Slots (ID 0xFFFF) getrennt | ✅ belegt |
+| Gegnernamen (32 B @Record-Anfang) dekodieren mit der S13-Tabelle (Versatz 0x20): 615/617 vollständig, Deutsch-Maß 0,707 gegen 0,361 bei falschem Versatz | ✅ belegt |
+| Stat-Bytes @0x21–0x27 (speed/luck/…): u8-Werte tragen keine messbare Ordnung — Reihenfolge bleibt Community-Deutung | 🟡 roh konserviert |
+| Formation-KI @0xC80: nur 12/1024 Formationen tragen ein Skript, alle 12 Offsets im Bereich | ✅ konsistent (dünn belegt) |
+| **battle.lgp-Namenskonvention:** ausnahmslos **11.119 4-Buchstaben-Namen** ohne Endung; **481 Präfixe**, jedes mit genau einem `aa`; die 1798 W-LGP-SHADOWED aus S1 sind KEINE TOC-Duplikate (0 Duplikatnamen) — sie stammen aus der Lookup-Bucket-Struktur | ✅ Inventar |
+| **Battle-Skelett `**aa`: 52-B-Kopf + 12 B je Bone — 481/481 byteexakt** (Accounting über den GESAMTBESTAND). Bone = **i32 parent** (Vorwärtskette 11.026/11.026) · **f32 length** (fast ausnahmslos negativ — die −len-Konvention aus R4-B1) · **u32 Flag ∈ {0,1}** (7510× 1, 3516× 0). Masterplan 1.1 bestätigt: NICHT die `.hrc`-Konvention | ✅ Formatfakt |
+| **Suffix-Klassifikation über Inhalts-Signaturen** (S7-Parser als Messgerät): `aa` = Skelett, `ae`–`ai` = **TEX**, `am` und alles Weitere = **`.p`-Geometrie** (alle Stichproben 100 % eindeutig), `ab`/`da` = eigenes Format (Animationsskript/Animationsdaten) | ✅ gemessen; `ab`/`da`-Grammatik 🔴 |
+| **Modell-Referenzschluss: Gegner-ID → Basis-26-Präfix, `<präfix>aa` existiert 354/354.** ⚠️ Die id+1-Kontrolle ist blind (ID-Raum 0..369 mit nur 16 Lücken, dichter Namensraum) — die Zuordnung stützt sich auf die exakte Arithmetik und braucht den S32-Sichtnachweis | ✅ geschlossen, 🟡 Kontrolle blind |
+| Kompositionsregel „k-ter Flag-1-Bone ← k-te Geometriedatei": exakt in 356/481 Präfixen; 125 Abweichungen um +1 Datei (Waffen?) | 🟡 S32-Gegenstand |
+| **kernel.bin Sektion 0 = exakt 32×8 B (Commands), Sektion 1 = exakt 128×28 B (Attacken)** — Recordlayout der Attacken identisch zur Szenen-Attacktabelle | ✅ Formatfakt |
+| **Growth-Sektion (Sektion 2, 3988 B):** 9 Charakter-Records à 56 B (81/81 Kurvenindizes < 64; HP/MP/EXP-Bänder **37–45/46–54/55–63 exakt getrennt**, je 9 verschiedene) + 3×12 B Gewinn-Tabellen (monoton) + **64 Kurven à 16 B ab 0x21C** + 2424 B Rest (🟡 roh). Kurvenbasis AUS DEN DATEN: EXP-Block = längster (grad,0)-Paarlauf @0x58C → Basis 0x21C; alle 9 EXP-Kurven tragen Basis 0 in allen 8 Paaren, die um 4 B verschobene Kontrolle nicht | ✅ Formatfakt |
+| Kurven-SEMANTIK (welche Formel aus grad/base Werte macht): nicht in den Daten — bleibt 🔵-Eigenentwurf (Zusatzregel 3) | 🔴 → 🔵 |
+| Inventar: magic.lgp 3454 Einträge (.tex 670, .rsd 618, .p 585, .s 357, …), camdat0–2 49.044/42.552/42.760 B, Stage-Zuordnung der `location`-Werte (90 verschiedene) | 🟡 S32-Gegenstand |
+
 ## S29 — World-Script (`.ev`) und Fahrzeugproben, 2026-08-10
 
 Werkzeuge: `world-ev-probe.rdtest.ts`, `world-vehicle-probe.rdtest.ts`.

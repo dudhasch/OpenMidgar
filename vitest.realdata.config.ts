@@ -23,6 +23,7 @@ export default defineConfig({
       '@webmidgar/interpreter': r('./packages/interpreter/src/index.ts'),
       '@webmidgar/input': r('./packages/input/src/index.ts'),
       '@webmidgar/formats-world': r('./packages/formats-world/src/index.ts'),
+      '@webmidgar/formats-battle': r('./packages/formats-battle/src/index.ts'),
       '@webmidgar/render-world': r('./packages/render-world/src/index.ts'),
       '@webmidgar/world-runtime': r('./packages/world-runtime/src/index.ts'),
       '@webmidgar/formats-model': r('./packages/formats-model/src/index.ts'),

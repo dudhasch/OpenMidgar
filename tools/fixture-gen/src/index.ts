@@ -11,4 +11,5 @@ export * from './maplist-composer.js';
 export * from './kernel-composer.js';
 export * from './savemap-composer.js';
 export * from './world-composer.js';
+export * from './battle-composer.js';
 export * from './world-script-assembler.js';
