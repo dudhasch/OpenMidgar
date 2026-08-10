@@ -12,6 +12,7 @@ import {
 import { parseFieldContainer, type FieldBundle } from '@webmidgar/formats-field';
 import { readBank } from '@webmidgar/interpreter';
 import { FieldSession, type FieldInput } from './session.js';
+import { decodeFieldDialogs } from './dialog.js';
 import { InputRecorder, replayInputs } from './replay.js';
 
 /**
@@ -323,6 +324,208 @@ describe('Replay', () => {
     expect(replay.digest).toBe(original.digest());
     expect(replay.fieldChanges).toBeGreaterThan(0);
     expect(replay.triggerEvents).toBeGreaterThan(0);
+  });
+});
+
+describe('Dialogtexte', () => {
+  /**
+   * FF-Text der Fixture-Konvention: ASCII − 0x20 (realdaten-abgeleiteter
+   * Versatz aus S13), 0xFF-Terminator. Bewusst hier im Test dupliziert statt
+   * den Dekoder zu importieren — zwei unabhängige Umsetzungen (Dualität).
+   */
+  function ffText(text: string): Uint8Array {
+    const out = new Uint8Array(text.length + 1);
+    for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) - 0x20;
+    out[text.length] = 0xff;
+    return out;
+  }
+
+  it('MESSAGE reicht den String-Index durch; decodeFieldDialogs und dialogText liefern den Text', () => {
+    const asm = new ScriptAssembler();
+    asm.message(0, 1).ret();
+    const { bytes } = asm.assemble();
+    const bundle = buildBundle({
+      script: {
+        entities: [{ name: 'talker', entryPoints: [0] }],
+        scriptBytes: bytes,
+        strings: [ffText('Erster Text'), ffText('Hallo Midgar!')],
+      },
+    });
+
+    // Volle Kette Writer → Parser → Dekoder: die selbstgebaute Stringtabelle
+    // kommt Zeichen für Zeichen zurück.
+    expect(decodeFieldDialogs(bundle)).toEqual(['Erster Text', 'Hallo Midgar!']);
+
+    const session = new FieldSession(bundle, { dialogMode: 'manual' });
+    const result = session.tick();
+    expect(result.pendingDialogs).toHaveLength(1);
+    const dialog = result.pendingDialogs[0]!;
+    expect(dialog.dialogId).toBe(1); // MESSAGE mit String-Index 1
+    expect(dialog.choice).toBeNull();
+    expect(dialog.firstChoice).toBeNull();
+    expect(session.dialogText(dialog.dialogId)).toBe('Hallo Midgar!');
+    expect(session.dialogText(0)).toBe('Erster Text');
+    expect(session.dialogText(99)).toBeNull(); // unbekannter Index: null, keine Exception
+  });
+
+  it('ASK trägt dialogId und Auswahlzeilen im PendingDialog', () => {
+    const asm = new ScriptAssembler();
+    asm.ask(3, 9, 0, 0, 1, 2).ret();
+    const { bytes } = asm.assemble();
+    const bundle = buildBundle({
+      script: {
+        entities: [{ name: 'asker', entryPoints: [0] }],
+        scriptBytes: bytes,
+        strings: [ffText('Ja oder nein?')],
+      },
+    });
+    const session = new FieldSession(bundle, { dialogMode: 'manual' });
+    const result = session.tick();
+    expect(result.pendingDialogs).toHaveLength(1);
+    const dialog = result.pendingDialogs[0]!;
+    expect(dialog.dialogId).toBe(0);
+    expect(dialog.choice).toEqual({ bank: 3, addr: 9 });
+    expect(dialog.firstChoice).toBe(1);
+    expect(dialog.lastChoice).toBe(2);
+    expect(session.dialogText(dialog.dialogId)).toBe('Ja oder nein?');
+  });
+
+  it('liefert ohne Script-Sektion eine leere Tabelle', () => {
+    const bundle = buildBundle({ walkmesh: flatRect(0, 0, 500, 500) });
+    expect(decodeFieldDialogs(bundle)).toEqual([]);
+  });
+});
+
+describe('Talk-Interaktion (F04)', () => {
+  /** FF-Text wie in der Dialogtexte-Suite: ASCII − 0x20, 0xFF-Terminator. */
+  function ffText(text: string): Uint8Array {
+    const out = new Uint8Array(text.length + 1);
+    for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) - 0x20;
+    out[text.length] = 0xff;
+    return out;
+  }
+
+  /** NPC bei (x,y): Init platziert, Main tut nichts, Talk (Entry 1) zeigt MESSAGE 0. */
+  function talkerBundle(x: number, y: number, opts: { invisible?: boolean } = {}): FieldBundle {
+    const asm = new ScriptAssembler();
+    asm.xyzi(x, y, 0, 0);
+    if (opts.invisible) asm.visi(false);
+    asm.ret(); // Init-Ende — dahinter beginnt der Main-Teil
+    asm.ret(); // Main: leer, terminiert sofort
+    asm.label('talk').message(0, 0).ret();
+    const { bytes, offsets } = asm.assemble();
+    return buildBundle({
+      walkmesh: flatRect(0, 0, 1200, 300),
+      script: {
+        entities: [{ name: 'npc', entryPoints: [0, offsets['talk']!] }],
+        scriptBytes: bytes,
+        strings: [ffText('Hallo!')],
+      },
+    });
+  }
+
+  const confirmInput: FieldInput = { moveX: 0, moveY: 0, confirm: true, cancel: false };
+
+  it('confirm neben dem NPC startet das Talk-Script; dieselbe Flanke drückt den Dialog nicht weg', () => {
+    const session = new FieldSession(talkerBundle(500, 150), { start: { x: 490, y: 150 } });
+    session.tick(); // Tick 1: Init platziert den NPC
+    const r = session.tick(confirmInput);
+    expect(r.talkStarted).toEqual({ entityIndex: 0 });
+    expect(r.pendingDialogs).toHaveLength(1);
+    expect(r.pendingDialogs[0]!.entityIndex).toBe(0);
+    expect(r.pendingDialogs[0]!.slot).toBe(1);
+    expect(session.dialogText(r.pendingDialogs[0]!.dialogId)).toBe('Hallo!');
+    expect(r.resolvedDialogs).toHaveLength(0); // die Start-Flanke beantwortet nicht
+
+    // Gehaltene Taste: keine neue Flanke — Dialog bleibt offen, kein Neustart.
+    const r2 = session.tick(confirmInput);
+    expect(r2.talkStarted).toBeNull();
+    expect(r2.pendingDialogs).toHaveLength(1);
+
+    // Loslassen, erneut drücken: jetzt beantwortet die Flanke den Dialog,
+    // statt ein weiteres Talk zu starten (offener Dialog konsumiert die Taste).
+    session.tick();
+    const r4 = session.tick(confirmInput);
+    expect(r4.talkStarted).toBeNull();
+    expect(r4.resolvedDialogs).toHaveLength(1);
+    expect(r4.pendingDialogs).toHaveLength(0);
+  });
+
+  it('confirm außerhalb der Talk-Reichweite startet nichts', () => {
+    const session = new FieldSession(talkerBundle(900, 150), { start: { x: 100, y: 150 } });
+    session.tick();
+    const r = session.tick(confirmInput);
+    expect(r.talkStarted).toBeNull();
+    expect(r.pendingDialogs).toHaveLength(0);
+  });
+
+  it('unsichtbare Entitäten sind nicht ansprechbar', () => {
+    const session = new FieldSession(talkerBundle(500, 150, { invisible: true }), { start: { x: 490, y: 150 } });
+    session.tick();
+    const r = session.tick(confirmInput);
+    expect(r.talkStarted).toBeNull();
+    expect(r.pendingDialogs).toHaveLength(0);
+  });
+
+  it('Gleichstand: bei zwei gleich weit entfernten NPCs gewinnt der kleinere Index', () => {
+    const asm = new ScriptAssembler();
+    asm.label('i0').xyzi(530, 150, 0, 0).ret().ret();
+    asm.label('t0').message(0, 0).ret();
+    asm.label('i1').xyzi(470, 150, 0, 0).ret().ret();
+    asm.label('t1').message(0, 1).ret();
+    const { bytes, offsets } = asm.assemble();
+    const bundle = buildBundle({
+      walkmesh: flatRect(0, 0, 1200, 300),
+      script: {
+        entities: [
+          { name: 'npc0', entryPoints: [offsets['i0']!, offsets['t0']!] },
+          { name: 'npc1', entryPoints: [offsets['i1']!, offsets['t1']!] },
+        ],
+        scriptBytes: bytes,
+        strings: [ffText('Null'), ffText('Eins')],
+      },
+    });
+    const session = new FieldSession(bundle, { start: { x: 500, y: 150 } });
+    session.tick(); // beide Inits platzieren
+    const r = session.tick(confirmInput);
+    expect(r.talkStarted).toEqual({ entityIndex: 0 });
+    expect(r.pendingDialogs).toHaveLength(1);
+    expect(r.pendingDialogs[0]!.dialogId).toBe(0);
+  });
+
+  it('Replay-Determinismus: identische Eingaben ⇒ identischer Digest; Snapshot mitten im Talk trägt', () => {
+    const bundle = talkerBundle(500, 150);
+    const options = { start: { x: 470, y: 150 } };
+    const inputs: FieldInput[] = [];
+    for (let i = 0; i < 40; i++) {
+      inputs.push({ moveX: i < 5 ? 1 : 0, moveY: 0, confirm: i % 6 === 3, cancel: false });
+    }
+
+    const a = new FieldSession(bundle, options);
+    const b = new FieldSession(bundle, options);
+    let sawTalk = false;
+    for (const input of inputs) {
+      if (a.tick(input).talkStarted) sawTalk = true;
+      b.tick(input);
+    }
+    expect(sawTalk).toBe(true); // der Lauf deckt den Talk-Pfad tatsächlich ab
+    expect(a.digest()).toBe(b.digest());
+
+    // Snapshot, während der Talk-Dialog offen ist: der Zusatzkontext liegt im
+    // Runtime-Snapshot, die Wiederherstellung muss bitidentisch weiterlaufen.
+    const c = new FieldSession(bundle, options);
+    c.tick();
+    const opened = c.tick(confirmInput);
+    expect(opened.talkStarted).toEqual({ entityIndex: 0 });
+    const snap = c.snapshot();
+    const tail = inputs.slice(0, 12);
+    for (const input of tail) c.tick(input);
+    const expected = c.digest();
+
+    const d = new FieldSession(bundle);
+    expect(d.restore(snap).ok).toBe(true);
+    for (const input of tail) d.tick(input);
+    expect(d.digest()).toBe(expected);
   });
 });
 

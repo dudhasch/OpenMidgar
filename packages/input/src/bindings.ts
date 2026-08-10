@@ -10,8 +10,9 @@ import {
  * Belegungen als DATEN (S27): Welche Taste/welcher Knopf/welches Touch-
  * Steuerelement welche Aktion auslöst, steht in einer serialisierbaren
  * Tabelle — keine Sonderlogik je Quelle. Die Tabelle ist je Eingabekontext
- * getrennt; `battle`, `world` und `minigame` sind reservierte Plätze und
- * bleiben in S27 bewusst `null` (die Bögen S29/S31/S34 füllen sie selbst).
+ * getrennt; `battle` und `world` waren in S27 reservierte Plätze und sind
+ * inzwischen von ihren Bögen belegt (S29 bzw. Kampf-Integration); `minigame`
+ * bleibt reserviert (`null`, S34-Vorgabe).
  *
  * Wichtig für das Replay: Die Aufzeichnung enthält AKTIONEN, keine Tasten.
  * Eine Belegungsänderung wirkt deshalb sofort auf künftige Abtastungen, aber
@@ -85,16 +86,20 @@ function baseSet(): BindingSet {
 }
 
 /**
- * Standardbelegung. `field`/`dialog`/`menu` seit S27 belegt, `world` seit S29
- * (der Bogen, der den Kontext nutzt, füllt seinen Platz — S27-Vorgabe);
- * `battle` und `minigame` bleiben reserviert (null).
+ * Standardbelegung. `field`/`dialog`/`menu` seit S27 belegt, `world` seit S29,
+ * `battle` seit der produktiven Kampf-Integration (der Bogen, der den Kontext
+ * nutzt, füllt seinen Platz — S27-Vorgabe). Die Battle-Belegung ist die
+ * Basistabelle: Pfeile/Stick = Kommandonavigation, `ok` = bestätigen,
+ * `cancel` = zurück, `menu` reserviert für die Kampf-Sondersicht — dieselben
+ * physischen Tasten wie im Menü, damit kein Umlernen nötig ist. `minigame`
+ * bleibt reserviert (null).
  */
 export function defaultBindings(): BindingTable {
   return {
     field: baseSet(),
     dialog: baseSet(),
     menu: baseSet(),
-    battle: null,
+    battle: baseSet(),
     world: baseSet(),
     minigame: null,
   };

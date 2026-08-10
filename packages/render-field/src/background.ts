@@ -64,6 +64,10 @@ export interface BackgroundMeshOptions {
  * Der dafür nötige Faktor liegt im Median bei 0,66, im 99. Perzentil bei 3,31
  * und maximal bei 3,77 — **4 ist der kleinste Wert, der alle Fields
  * abdeckt** (bei 1 wären es nur 476 von 702).
+ *
+ * Die so skalierte Sichtdistanz DARF `far` überschreiten (Layer 0:
+ * 4095·4 = 16380) — `buildBackgroundMesh` klemmt die NDC-Tiefe auf das
+ * Clip-Fenster, damit die Ordnung gilt, ohne Quads zu verlieren (F03).
  */
 export const DEFAULT_TILE_Z_SCALE = 4;
 
@@ -94,7 +98,17 @@ export function buildBackgroundMesh(
   const toNdcY = (py: number): number => 1 - (py / DESIGN_HEIGHT) * 2;
 
   tiles.forEach((tile, i) => {
-    const depth = viewDistanceToNdcDepth(tile.viewDistance, opts.near, opts.far);
+    // 🟢 F03 (md1stin, bg-clip-probe 2026-08-10): Tile-`z` ist ein
+    // Sortierschlüssel, keine Metrik — skaliert liegt die Sichtdistanz
+    // regelmäßig außerhalb von [near, far] (Layer 0: 4095·4 = 16380 > 10000;
+    // Overlays mit kleinem z: max(1, z·4) < 100). Ohne Klemmung fällt das
+    // Quad aus dem Clip-Volumen (NDC-|z| > 1) und der Rasterizer verwirft es
+    // KOMPLETT: in md1stin verschwanden so 795/795 Layer-0- und 247/320
+    // Layer-1-Tiles; systematisch traf es jede Layer-0-Fläche aller Fields.
+    // Die Klemmung auf das Tiefenfenster ist ordnungserhaltend; Gleichstände
+    // an den Rändern entscheidet die Zeichenreihenfolge (hinterster Layer
+    // zuerst, großes z zuerst) unter dem Standard-Tiefentest LessEqual.
+    const depth = Math.min(1, Math.max(-1, viewDistanceToNdcDepth(tile.viewDistance, opts.near, opts.far)));
     const x0 = toNdcX(tile.x);
     const x1 = toNdcX(tile.x + tile.width);
     const y0 = toNdcY(tile.y);

@@ -34,7 +34,32 @@ export const PriorityRules = {
   compareQueue: (a: PendingRequest, b: PendingRequest): number =>
     a.priority - b.priority || a.seq - b.seq,
   INIT_PRIORITY: 7,
+  /**
+   * 🟡 Vorgabe für Wirt-Interaktionen (`requestEntityScript`, F04): hoch
+   * genug, um eine in `wait`/`move` hängende Main-Schleife zu verdrängen
+   * (Verdrängung braucht strikt höhere Priorität als INIT_PRIORITY 7),
+   * niedrig genug, um Raum nach oben zu lassen. Der Zahlenwert ist nicht
+   * realdaten-belegt — das Original kennt für Talk keinen Prioritätsoperanden.
+   */
+  INTERACTION_PRIORITY: 3,
 } as const;
+
+/**
+ * 🟡 Script-Slot-Konvention je Entität (Community-dokumentiert): Slot 0 =
+ * Init + Main, Slot 1 = Talk (Spieler drückt OK in Reichweite), Slot 2 =
+ * Contact (Kollision).
+ *
+ * Messstand 2026-08-10 (tools/realdata-scan/src/talk-slot-probe.rdtest.ts,
+ * 702 Fields, 10 523 Entities, davon 5460 Modell-Entities mit CHAR im Init):
+ *  - Die MESSAGE/ASK-Quote der Modell-Entities differenziert Slot 1 (22,5 %)
+ *    scharf von Slot 2 (0,5 %) — zwei klar verschiedene Rollen, konsistent
+ *    mit Talk (Dialog üblich) gegen Contact (Dialog bei Berührung unüblich).
+ *  - Über das Kontrollniveau der Slots 3+ (27,5 %) hebt sich Slot 1 dagegen
+ *    NICHT — auch REQ-gerufene Eventscripts zeigen Dialoge. Die Zuordnung
+ *    „1 = Talk" bleibt damit Community-Wissen, gestützt, nicht bewiesen.
+ */
+export const TALK_SCRIPT_SLOT = 1;
+export const CONTACT_SCRIPT_SLOT = 2;
 
 /** Beobachter-Hooks für Timeline/Debugger — alle optional, kostenneutral. */
 export interface RuntimeObserver {
@@ -151,6 +176,59 @@ export class FieldRuntime {
       return false;
     }
     entity.staged.push({ slot, priority, mode, seq: this.state.nextSeq++ });
+    return true;
+  }
+
+  /**
+   * Startet ein Script-Entry einer Entität als neuen Kontext — die Wirt-Seite
+   * der Spieler-Interaktion (F04): Talk (`TALK_SCRIPT_SLOT`) und Contact
+   * (`CONTACT_SCRIPT_SLOT`) werden nicht von Skripten, sondern vom Wirt
+   * angefordert. Der Kontext läuft mit der normalen Scheduler-Mechanik
+   * (Staging an der Tick-Grenze, Budget, Faults) und liegt damit automatisch
+   * in jedem Snapshot — es gibt keinen Sonderzustand.
+   *
+   * Liefert `false` — ohne jede Zustandsänderung, insbesondere ohne
+   * `droppedRequests`-Zählung, denn eine abgewiesene Interaktion ist keine
+   * Skript-Diagnose — wenn:
+   *  - Entität oder Entry nicht existieren (Index außerhalb, Entry null),
+   *  - das Entry leer ist: `== codeEnd`-Sentinel ODER Wiederholung eines
+   *    kleineren Slots (realdaten-belegt: 288 665 wiederholte gegen 29
+   *    Sentinel-Slots — ungenutzte Slots wiederholen frühere Werte),
+   *  - der Slot per Fault deaktiviert ist,
+   *  - dieses Entry auf der Entität bereits läuft oder ansteht,
+   *  - `opts.exclusive` gesetzt ist und die Entität bereits einen Kontext
+   *    jenseits der Slot-0-Schleife ausführt oder eingereiht hat.
+   */
+  requestEntityScript(
+    entityIndex: number,
+    entryIndex: number,
+    opts: { exclusive?: boolean; priority?: number } = {},
+  ): boolean {
+    const entity = this.state.entities[entityIndex];
+    const eps = this.script.entities[entityIndex]?.entryPoints;
+    const entry = eps?.[entryIndex];
+    if (!entity || !eps || entry === null || entry === undefined) return false;
+    if (entry >= this.script.codeEnd) return false; // leerer Span (Sentinel)
+    for (let s = 0; s < entryIndex; s++) {
+      if (eps[s] === entry) return false; // wiederholter Slot = ungenutzt
+    }
+    if (entity.disabledSlots.includes(entryIndex)) return false;
+    const contexts = entity.context ? [entity.context, ...entity.suspended] : entity.suspended;
+    if (contexts.some((c) => c.status === 'running' && c.slot === entryIndex)) return false;
+    const pending = [...entity.queue, ...entity.staged];
+    if (pending.some((r) => r.slot === entryIndex)) return false;
+    if (
+      opts.exclusive &&
+      (contexts.some((c) => c.status === 'running' && c.slot !== 0) || pending.some((r) => r.slot !== 0))
+    ) {
+      return false;
+    }
+    entity.staged.push({
+      slot: entryIndex,
+      priority: opts.priority ?? PriorityRules.INTERACTION_PRIORITY,
+      mode: 'async',
+      seq: this.state.nextSeq++,
+    });
     return true;
   }
 

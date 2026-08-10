@@ -284,6 +284,8 @@ describe('Dialog-Stub', () => {
     expect(bank(rt, 3, 1)).toBe(3); // walker lief parallel weiter
     const w = rt.state.entities[0]!.context!.waitState;
     expect(w.kind).toBe('dialogue');
+    // Der String-Index-Operand (zweites Operandenbyte) wird durchgereicht.
+    expect((w as { dialogId: number }).dialogId).toBe(3);
     rt.postEvent({ kind: 'dialogue-resolved', requestId: (w as { requestId: number }).requestId, choice: 0 });
     rt.tick();
     expect(bank(rt, 3, 0)).toBe(1);
@@ -298,6 +300,11 @@ describe('Dialog-Stub', () => {
     rt.tick();
     const w = rt.state.entities[0]!.context!.waitState;
     expect(w.kind).toBe('dialogue');
+    // ASK-Operanden: Dialog-Index + erste/letzte wählbare Zeile.
+    const ask = w as { dialogId: number; firstChoice?: number; lastChoice?: number };
+    expect(ask.dialogId).toBe(5);
+    expect(ask.firstChoice).toBe(1);
+    expect(ask.lastChoice).toBe(3);
     rt.postEvent({ kind: 'dialogue-resolved', requestId: (w as { requestId: number }).requestId, choice: 2 });
     rt.tick();
     expect(bank(rt, 3, 9)).toBe(2);
@@ -379,6 +386,110 @@ describe('Script-Requests (REQ/REQSW/REQEW, 🟡 R1-Hooks)', () => {
     rt.run(6);
     expect(bank(rt, 3, 2)).toBe(9); // s2 fertig
     expect(bank(rt, 3, 0)).toBeGreaterThan(before); // s1 läuft danach weiter
+  });
+});
+
+describe('Wirt-Interaktion (requestEntityScript, F04)', () => {
+  it('startet ein gültiges Entry an der nächsten Tick-Grenze; Doppelstart wird abgelehnt', () => {
+    const asm = new ScriptAssembler();
+    asm.label('init').ret();
+    asm.label('talk').setByte(3, 0, 7).wait(2).setByte(3, 1, 8).ret();
+    const { bytes, offsets } = asm.assemble();
+    const rt = new FieldRuntime(
+      prepare([{ name: 'npc', entries: [offsets['init']!, offsets['talk']!] }], bytes),
+      { mainLoop: false },
+    );
+    rt.start();
+    rt.tick(); // Init durch
+    expect(rt.requestEntityScript(0, 1)).toBe(true);
+    expect(rt.requestEntityScript(0, 1)).toBe(false); // bereits eingereiht (staged)
+    rt.tick();
+    expect(bank(rt, 3, 0)).toBe(7); // Talk lief an der Tick-Grenze an
+    expect(rt.requestEntityScript(0, 1)).toBe(false); // läuft gerade (WAIT)
+    rt.run(4);
+    expect(bank(rt, 3, 1)).toBe(8); // Talk zu Ende
+    expect(rt.requestEntityScript(0, 1)).toBe(true); // wieder frei
+  });
+
+  it('lehnt leere, wiederholte und unbekannte Entries ohne jede Zustandsänderung ab', () => {
+    const asm = new ScriptAssembler();
+    asm.label('init').ret();
+    const { bytes } = asm.assemble();
+    // Slot 1 wiederholt Slot 0 (Fixture-Komposition = Realdaten-Konvention),
+    // Slot 2 trägt den codeEnd-Sentinel (leerer Span).
+    const rt = new FieldRuntime(
+      prepare([{ name: 'npc', entries: [0, 0, bytes.length] }], bytes),
+      { mainLoop: false },
+    );
+    rt.start();
+    rt.tick();
+    const before = stateDigest(rt.state);
+    expect(rt.requestEntityScript(0, 1)).toBe(false); // wiederholter Slot = ungenutzt
+    expect(rt.requestEntityScript(0, 2)).toBe(false); // Sentinel == codeEnd
+    expect(rt.requestEntityScript(0, 40)).toBe(false); // außerhalb der 32 Slots
+    expect(rt.requestEntityScript(9, 1)).toBe(false); // Entität existiert nicht
+    expect(rt.state.droppedRequests).toBe(0); // keine Skript-Diagnose für Wirt-Abweisungen
+    expect(stateDigest(rt.state)).toBe(before); // Ablehnung ist nebenwirkungsfrei
+  });
+
+  it('verdrängt eine wartende Main-Schleife (INTERACTION_PRIORITY) und setzt sie danach fort', () => {
+    const asm = new ScriptAssembler();
+    asm.ret(); // Init (Entry 0)
+    asm.inc(3, 0).wait(10).ret(); // Main: zählt, wartet lange
+    asm.label('talk').setByte(3, 1, 5).ret();
+    const { bytes, offsets } = asm.assemble();
+    const rt = new FieldRuntime(prepare([{ name: 'npc', entries: [0, offsets['talk']!] }], bytes), {
+      mainLoop: true,
+    });
+    rt.start();
+    rt.run(2); // Tick 1 Init, Tick 2: Main zählt und hängt im WAIT bis Tick 12
+    expect(bank(rt, 3, 0)).toBe(1);
+    expect(rt.requestEntityScript(0, 1)).toBe(true);
+    rt.tick(); // Talk verdrängt den wartenden Main-Kontext und läuft durch
+    expect(bank(rt, 3, 1)).toBe(5);
+    expect(bank(rt, 3, 0)).toBe(1); // Main hat nicht erneut gezählt
+    rt.run(11); // Main-WAIT läuft ab, Schleife iteriert erneut
+    expect(bank(rt, 3, 0)).toBeGreaterThan(1);
+  });
+
+  it('exclusive verhindert den Start neben einem laufenden Interaktionskontext', () => {
+    const asm = new ScriptAssembler();
+    asm.label('init').ret();
+    asm.label('s1').wait(5).ret();
+    asm.label('s2').setByte(3, 0, 1).ret();
+    const { bytes, offsets } = asm.assemble();
+    const rt = new FieldRuntime(
+      prepare([{ name: 'npc', entries: [offsets['init']!, offsets['s1']!, offsets['s2']!] }], bytes),
+      { mainLoop: false },
+    );
+    rt.start();
+    rt.tick();
+    expect(rt.requestEntityScript(0, 1)).toBe(true);
+    rt.tick(); // s1 läuft (WAIT)
+    expect(rt.requestEntityScript(0, 2, { exclusive: true })).toBe(false); // Entität beschäftigt
+    expect(rt.requestEntityScript(0, 2)).toBe(true); // ohne exclusive erlaubt
+  });
+
+  it('Zusatzkontexte überleben Snapshot/Restore bitidentisch', () => {
+    const asm = new ScriptAssembler();
+    asm.label('init').ret();
+    asm.label('talk').setByte(3, 0, 1).wait(5).setByte(3, 1, 9).ret();
+    const { bytes, offsets } = asm.assemble();
+    const prepared = prepare([{ name: 'npc', entries: [offsets['init']!, offsets['talk']!] }], bytes);
+    const rt = new FieldRuntime(prepared, { mainLoop: false });
+    rt.start();
+    rt.tick();
+    rt.requestEntityScript(0, 1);
+    rt.tick(); // Talk läuft und hängt im WAIT — mitten im Zusatzkontext sichern
+    const snap = snapshotRuntime(rt.state);
+    rt.run(6);
+    expect(bank(rt, 3, 1)).toBe(9);
+    const digestA = stateDigest(rt.state);
+
+    const rt2 = new FieldRuntime(prepared, { mainLoop: false });
+    expect(rt2.restoreFrom(snap)).toEqual([]);
+    rt2.run(6);
+    expect(stateDigest(rt2.state)).toBe(digestA);
   });
 });
 

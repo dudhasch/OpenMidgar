@@ -1,6 +1,5 @@
 import type { BattleFormation, BattleSkeleton } from '@webmidgar/formats-battle';
 import { fnv1a32Numbers, type Skeleton } from '@webmidgar/formats-model';
-import { ff7ToScene } from '@webmidgar/convert';
 
 /**
  * Battle-Modellkomposition (S32) — bewusst Three-frei (Dualitätsprinzip wie
@@ -31,6 +30,38 @@ import { ff7ToScene } from '@webmidgar/convert';
  * `.a`-Rotationsreihenfolge-Abschnitt).
  */
 export const BATTLE_ROOT_EXTRA_X_DEG = 270;
+
+/**
+ * 🟢 **Battle-Basis (S33/F13, aus 2414 belegten Slots aller 1000 nicht-leeren
+ * Formationen in scene.bin gemessen, 2026-08-10):** Der Battle-Raum ist
+ * x-rechts / **y-ab** / z-Tiefe — NICHT die Field-Konvention (z-oben) von
+ * ADR-009/`ff7ToScene`. Belege:
+ *
+ *  - Höhe = Slot-y: 2217/2414 (91,8 %) exakt 0 (Bodenhöhe), die 197
+ *    Nicht-Null-Werte sind 196/197 negativ (Flieger ÜBER dem Boden ⇒ y-ab;
+ *    max +1). Kontrollen: x = 0 nur 39,7 %, z = 0 nur 0,6 % — die aktuelle
+ *    ff7ToScene-Deutung (Höhe = Slot-z) legte 99,4 % der Gegner in die Luft
+ *    bzw. unter den Boden (F13-Sichtbefund: −1700/−2000).
+ *  - Tiefe = Slot-z: row-monoton (Mittel row 1→−1400, 2→−2450, 3→−3330) und
+ *    2047/2400 auf EINER Seite (−z; Rest = Zangenangriffe, 910/1000
+ *    Formationen komplett einseitig). Kontrollen x/y: row-Schritte < 300.
+ *  - Unabhängige Referenz Kamerablock: Die Kamera-POSITION ist auf genau
+ *    einer Achse streng einseitig — y, 1000/1000 negativ (über dem Boden,
+ *    y-ab), x 959/1000, z 713/1000; die Blickrichtung verfehlt den
+ *    Formationsschwerpunkt unter Achs-Identität in 996/1000 Fällen um < 20°.
+ *
+ * Abbildung B: (x,y,z)_battle → (x,−y,−z)_scene = Rx(180°), det +1 (kein
+ * Spiegel). Konsistenzstütze: Rx(180°) − Field-Basis Rx(−90°) = Rx(270°) —
+ * exakt der sichtgeprüfte Wurzelfix `BATTLE_ROOT_EXTRA_X_DEG` (S32): Modelle
+ * und Aufstellung folgen DERSELBEN y-ab-Konvention. Dies ist die EINZIGE
+ * Battle-Flip-Stelle (Pendant zu `ff7ToScene`, ADR-009).
+ * 🟡 Rest: Das globale Vorzeichen von z (Spiegelfrage „Gegner links oder
+ * rechts im Bild") ist aus den Daten allein nicht entscheidbar; gewählt ist
+ * die händigkeitserhaltende Variante, Sichtnachweis gegen das Original steht aus.
+ */
+export function battleToScene(v: [number, number, number]): [number, number, number] {
+  return [v[0], -v[1], -v[2]];
+}
 
 /** Bildet das Battle-Skelett auf den NAM-Skeleton der Modellkette ab. */
 export function battleSkeletonToSkeleton(bs: BattleSkeleton, name: string): Skeleton {
@@ -98,17 +129,17 @@ export function parseCameraBlock(cameraRaw: Uint8Array): { cameras: BattleCamera
 export interface PlacedActor {
   slotIndex: number;
   enemyTypeId: number;
-  /** Szene-Koordinaten (ADR-009 über die ZENTRALE Konvertierung — keine zweite Flip-Stelle). */
+  /** Szene-Koordinaten über die zentrale Battle-Basis `battleToScene` — keine zweite Flip-Stelle. */
   scenePosition: [number, number, number];
   row: number;
 }
 
 /**
  * Aufstellung AUS DEN SZENENDATEN (keine handgesetzten Positionen): belegte
- * Formationsplätze, über `ff7ToScene` in den Szenenraum gebracht.
- * 🟡 Die Slot-Felder x,y,z sind als FF7-Raumkoordinaten gedeutet (Sichtnachweis
- * ausstehend); die Party steht dem Original nach gegenüber (+z-Seite) — hier
- * 🔵 als Spiegelposition der Gegnerseite gesetzt, bis Partypositionen belegt sind.
+ * Formationsplätze, über die 🟢 Battle-Basis `battleToScene` (x-rechts, y-ab,
+ * z-Tiefe; Messbelege dort) in den Szenenraum gebracht. Damit stehen 91,8 %
+ * der Akteure exakt auf Bodenhöhe 0, Flieger darüber; Gegner überwiegend auf
+ * der Szene-+z-Seite (Battle-z < 0 in 2047/2400 Slots).
  */
 export function placeFormation(formation: BattleFormation): PlacedActor[] {
   const placed: PlacedActor[] = [];
@@ -117,19 +148,23 @@ export function placeFormation(formation: BattleFormation): PlacedActor[] {
     placed.push({
       slotIndex: i,
       enemyTypeId: slot.enemyTypeId,
-      scenePosition: ff7ToScene([slot.x, slot.y, slot.z]),
+      scenePosition: battleToScene([slot.x, slot.y, slot.z]),
       row: slot.row,
     });
   });
   return placed;
 }
 
-/** 🔵 Party-Standardpositionen: Spiegelseite der Gegner, gestaffelt in x. */
+/**
+ * 🔵 Party-Standardpositionen: gegenüber der Gegner-Mehrheitsseite
+ * (Battle-z = +3200, Boden y = 0), gestaffelt in x — bis Partypositionen
+ * aus Realdaten belegt sind.
+ */
 export function placeParty(count: number): [number, number, number][] {
   const out: [number, number, number][] = [];
   for (let i = 0; i < count; i++) {
     const x = (i - (count - 1) / 2) * 1200;
-    out.push(ff7ToScene([Math.round(x), 0, 3200]));
+    out.push(battleToScene([Math.round(x), 0, 3200]));
   }
   return out;
 }

@@ -13,11 +13,13 @@ import {
   prepareScript,
   restoreRuntime,
   snapshotRuntime,
+  TALK_SCRIPT_SLOT,
   type HostRequest,
   type PreparedScript,
   type RuntimeSnapshot,
 } from '@webmidgar/interpreter';
 import { DEFAULT_STEPS_PER_CHECK, EncounterModel, parseEncounterTables } from './encounter.js';
+import { decodeFieldDialogs } from './dialog.js';
 
 /**
  * Field-Sitzung (Masterplan Phase 5, vertikaler Durchstich): bindet Walkmesh-
@@ -78,8 +80,13 @@ export interface PendingDialog {
   entityIndex: number;
   slot: number;
   requestId: number;
+  /** String-Index in die Field-Stringtabelle — `dialogText()` löst ihn auf. */
+  dialogId: number;
   /** Gesetzt, wenn das Skript eine Auswahl erwartet (ASK). */
   choice: { bank: number; addr: number } | null;
+  /** Erste/letzte wählbare Zeile (nur ASK), sonst null. */
+  firstChoice: number | null;
+  lastChoice: number | null;
 }
 
 export interface TickResult {
@@ -104,6 +111,12 @@ export interface TickResult {
   hostRequests: HostRequest[];
   /** Kontexte, die auf das Schließen des Menüs warten (stabil sortiert). */
   pendingMenus: PendingMenu[];
+  /**
+   * In diesem Takt per Bestätigungstaste gestartetes Talk-Script (F04):
+   * die Entität, deren Entry 1 angestoßen wurde — oder null, wenn kein
+   * ansprechbarer Nachbar in `TALK_RANGE` stand oder das Entry leer war.
+   */
+  talkStarted: { entityIndex: number } | null;
 }
 
 /**
@@ -188,6 +201,16 @@ export const SESSION_SCHEMA_VERSION = 3;
 
 const DEFAULT_SPEED = 6;
 
+/**
+ * 🟡 Talk-Reichweite: maximaler Grundriss-Abstand (XY) zwischen Spieler und
+ * Entität, in Field-Einheiten. Startwert ohne Realdaten-Beleg — im Original
+ * dürfte die Kollisionsbox des Modells entscheiden; 40 entspricht grob einer
+ * Figurenbreite und deckt „direkt davor stehen" ab. Die Blickrichtung wird
+ * bewusst NICHT geprüft (dokumentierte Vereinfachung: der nächste Nachbar
+ * gewinnt, egal wohin die Figur schaut).
+ */
+export const TALK_RANGE = 40;
+
 /** Fortschritt je Takt, unter dem eine Bewegung als blockiert gilt. */
 const MOVE_MIN_PROGRESS = 1e-3;
 /** Takte ohne Fortschritt, nach denen ein Bewegungsauftrag abgebrochen wird. */
@@ -271,6 +294,12 @@ export class FieldSession {
   private moveStalls = new Map<number, number>();
   /** Zufallskampf-Modell (null = Tabelle fehlt/deaktiviert). */
   private encounterModel: EncounterModel | null = null;
+  /**
+   * Lazy dekodierte Dialogtexte (Index = String-Index). Reiner Lese-Cache
+   * über unveränderliche Bundle-Daten — bewusst KEIN Sitzungszustand, taucht
+   * also weder im Snapshot noch im Digest auf.
+   */
+  private dialogTexts: (string | null)[] | null = null;
 
   constructor(
     readonly bundle: FieldBundle,
@@ -346,6 +375,12 @@ export class FieldSession {
     const triggers: TriggerEvent[] = [];
     let fieldChange: FieldChange | null = null;
 
+    // Bestätigungsflanke VOR dem Interpreter-Tick bestimmen: Sie steuert
+    // sowohl die Talk-Auslösung (wirkt in DIESEM Tick, s. u.) als auch die
+    // Dialogantwort (nach dem Tick). Reine Funktion aus Eingabe + Vorzustand.
+    const confirmPressed = input.confirm && !this.prevConfirm;
+    this.prevConfirm = input.confirm;
+
     const mx = Math.sign(input.moveX);
     const my = Math.sign(input.moveY);
     if (this.solver && this.player && (mx !== 0 || my !== 0)) {
@@ -389,6 +424,19 @@ export class FieldSession {
       this.player = { ...this.player, moving: false };
     }
 
+    // Talk-Auslösung (F04): steigende confirm-Flanke, kein bereits offener
+    // Dialog (der würde die Taste konsumieren), dann das Talk-Entry des
+    // nächstgelegenen ansprechbaren Nachbarn anfordern. Das Staging wird an
+    // der Grenze des GLEICH FOLGENDEN runtime.tick() übernommen — der Dialog
+    // eines MESSAGE-Talk-Scripts erscheint also noch in diesem TickResult.
+    let talkStarted: TickResult['talkStarted'] = null;
+    if (confirmPressed && this.runtime && this.player && this.pendingDialogs().length === 0) {
+      const target = this.nearestTalkTarget();
+      if (target !== null && this.runtime.requestEntityScript(target, TALK_SCRIPT_SLOT)) {
+        talkStarted = { entityIndex: target };
+      }
+    }
+
     // Skriptgesteuerte Bewegung VOR dem Tick abarbeiten: Der Interpreter
     // setzt nur den Auftrag; ausgeführt wird er hier mit dem Solver, damit die
     // Invariante „immer im Mesh" auch für Skript-Entitäten gilt.
@@ -419,15 +467,15 @@ export class FieldSession {
       for (const m of pendingMenus) this.closeMenu(m.requestId);
     }
 
-    const confirmPressed = input.confirm && !this.prevConfirm;
-    this.prevConfirm = input.confirm;
-
     // Dialoge werden NACH dem Tick betrachtet: die Antwort wirkt dann im
     // nächsten Takt — genau wie jedes andere Ereignis (ADR-006, Staging).
+    // Hat DIESE Flanke gerade ein Talk-Script gestartet, darf sie den soeben
+    // geöffneten Dialog nicht im selben Takt beantworten — sonst würde ein
+    // einziger Tastendruck das Gespräch beginnen UND wegdrücken.
     let pendingDialogs = this.pendingDialogs();
     const resolvedDialogs: number[] = [];
     if (this.dialogMode !== 'manual' && pendingDialogs.length > 0) {
-      const answer = this.dialogMode === 'auto' || confirmPressed;
+      const answer = this.dialogMode === 'auto' || (confirmPressed && talkStarted === null);
       if (answer) {
         const first = pendingDialogs[0]!;
         this.resolveDialog(first.requestId, 0);
@@ -449,7 +497,36 @@ export class FieldSession {
       arrivals,
       hostRequests,
       pendingMenus,
+      talkStarted,
     };
+  }
+
+  /**
+   * Nächstgelegene ansprechbare Entität (F04): sichtbar, platziert, kein
+   * Partymitglied (die Spielfigur spricht nicht mit sich selbst), im
+   * Quadratabstand ≤ TALK_RANGE² zum Spieler. Determinismus: Quadratabstand
+   * statt Wurzel (reine IEEE-Multiplikation/-Addition, bitstabil über
+   * Engines) und bei exaktem Gleichstand gewinnt der kleinste Entitätsindex
+   * (strikte `<`-Verbesserung in aufsteigender Indexfolge).
+   */
+  private nearestTalkTarget(): number | null {
+    const rt = this.runtime;
+    const p = this.player;
+    if (!rt || !p) return null;
+    const maxSq = TALK_RANGE * TALK_RANGE;
+    let best: number | null = null;
+    let bestSq = Infinity;
+    for (const [entityIndex, a] of rt.state.actors.entries()) {
+      if (!a.visible || !a.position || a.partyMember !== null) continue;
+      const dx = a.position[0] - p.walk.x;
+      const dy = a.position[1] - p.walk.y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq <= maxSq && dSq < bestSq) {
+        best = entityIndex;
+        bestSq = dSq;
+      }
+    }
+    return best;
   }
 
   /** Kontexte, die auf das Schließen des Menüs warten. */
@@ -561,7 +638,10 @@ export class FieldSession {
           entityIndex,
           slot: ctx.slot,
           requestId: ctx.waitState.requestId,
+          dialogId: ctx.waitState.dialogId,
           choice: ctx.waitState.choice ?? null,
+          firstChoice: ctx.waitState.firstChoice ?? null,
+          lastChoice: ctx.waitState.lastChoice ?? null,
         });
       }
     }
@@ -571,6 +651,16 @@ export class FieldSession {
   /** Beantwortet eine Dialoganfrage; `choice` ist der Auswahlindex (ASK). */
   resolveDialog(requestId: number, choice = 0): void {
     this.runtime?.postEvent({ kind: 'dialogue-resolved', requestId, choice });
+  }
+
+  /**
+   * Dialogtext zum String-Index eines `PendingDialog` (MESSAGE/ASK). Lazy
+   * dekodiert und gecacht; `null` bei unbekanntem Index oder quarantänisiertem
+   * Eintrag — nie eine Exception (Politik von `decodeFieldDialogs`).
+   */
+  dialogText(dialogId: number): string | null {
+    this.dialogTexts ??= decodeFieldDialogs(this.bundle);
+    return this.dialogTexts[dialogId] ?? null;
   }
 
   snapshot(): FieldSessionSnapshot {

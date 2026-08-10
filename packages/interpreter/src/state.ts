@@ -4,7 +4,14 @@
  * damit Snapshot/Restore und Replay trivial korrekt sind (ADR-006).
  */
 
-export const RUNTIME_SCHEMA_VERSION = 1;
+/**
+ * Schema 1 → 2 (Dialogtext-Pipeline): Der `dialogue`-Wartezustand trägt jetzt
+ * den String-Index des Opcodes (`dialogId`, bei ASK zusätzlich firstChoice/
+ * lastChoice). Ein Schema-1-Snapshot mitten im Dialog könnte den Index nicht
+ * liefern — er ist eine Operandenangabe und aus dem alten Zustand nicht
+ * rekonstruierbar. Deshalb laut scheitern statt still raten (ADR-006).
+ */
+export const RUNTIME_SCHEMA_VERSION = 2;
 
 /** Bänke 0x1–0xF à 256 Bytes; Bank 0 = Literal-Marker in Operanden. */
 export const BANK_COUNT = 16;
@@ -48,7 +55,17 @@ export const GLOBAL_BANKS: readonly number[] = BANK_REGION.map((r, bank) =>
 export type WaitState =
   | { kind: 'none' }
   | { kind: 'ticks'; untilTick: number }
-  | { kind: 'dialogue'; requestId: number; choice?: { bank: number; addr: number } | undefined }
+  | {
+      kind: 'dialogue';
+      requestId: number;
+      /** String-Index in die Field-Stringtabelle (MESSAGE-/ASK-Operand). */
+      dialogId: number;
+      /** Zielvariable der Auswahl (nur ASK). */
+      choice?: { bank: number; addr: number } | undefined;
+      /** Erste/letzte wählbare Zeile (nur ASK; aus den Operanden). */
+      firstChoice?: number | undefined;
+      lastChoice?: number | undefined;
+    }
   | { kind: 'movement'; requestId: number }
   | { kind: 'sync'; entityIndex: number; slot: number }
   | { kind: 'transition' }

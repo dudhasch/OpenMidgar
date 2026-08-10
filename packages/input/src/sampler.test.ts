@@ -89,7 +89,7 @@ describe('InputSampler — Flanken und Verschmelzung', () => {
     const sampler = new InputSampler(defaultBindings(), [kb]);
     kb.handleKey('Enter', true);
     sampler.sampleTick();
-    sampler.setContext('battle'); // reserviert (null)
+    sampler.setContext('minigame'); // reserviert (null)
     const t = sampler.sampleTick();
     expect(t.held).toEqual([]);
     expect(t.released).toEqual(['ok']);

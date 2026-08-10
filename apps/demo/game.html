@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — 1.0-Integration: Spielbare Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+    }
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1rem auto; max-width: 76rem; padding: 0 1rem; background: #16161c; color: #ddd; }
+    canvas { border: 1px solid #555; image-rendering: pixelated; display: block; background: #000; }
+    button, select { font: inherit; padding: .25rem .7rem; margin-right: .4rem; }
+    .row { margin: .5rem 0; display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+    .cols { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+    .stage { position: relative; width: 640px; height: 480px; }
+    #readout { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #202027; border: 1px solid #444; padding: .6rem; overflow-x: auto; min-width: 24rem; max-width: 30rem; }
+    #status { font-family: ui-monospace, monospace; font-size: 12px; color: #9ad; }
+    #dialogOverlay { display: none; position: absolute; left: 0; right: 0; bottom: 0; justify-content: center; pointer-events: none; }
+    #dialogOverlay.visible { display: flex; }
+    #dialogOverlay .box {
+      margin-bottom: 1.2rem; min-width: 50%; max-width: 92%;
+      background: linear-gradient(#0008acdd, #000028dd);
+      color: #fff; border: 2px solid #e8e8e8; border-radius: 6px;
+      padding: .7rem 1rem; font-family: ui-monospace, monospace; font-size: 14px; white-space: pre-wrap;
+    }
+    #dialogOverlay .choice { padding-left: 1.2em; }
+    #dialogOverlay .choice.sel { padding-left: 0; }
+    #dialogOverlay .choice.sel::before { content: '▶ '; }
+    #menuOverlay { display: none; position: absolute; inset: 6% 8%; background: #000030ee; border: 2px solid #ddd; border-radius: 6px; padding: 1rem; color: #fff; overflow: auto; }
+    #menuOverlay.visible { display: block; }
+    #menuOverlay table { border-collapse: collapse; width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
+    #menuOverlay td { padding: .1rem .5rem; }
+    #battleOverlay { display: none; position: absolute; left: 0; right: 0; top: 0; justify-content: center; pointer-events: none; }
+    #battleOverlay.visible { display: flex; }
+    #battleOverlay .box { margin-top: .8rem; background: #300808dd; border: 2px solid #c66; border-radius: 6px; padding: .5rem 1rem; font-family: ui-monospace, monospace; font-size: 13px; color: #fff; white-space: pre; }
+    .controls-help { font-family: ui-monospace, monospace; font-size: 12px; color: #999; }
+  </style>
+</head>
+<body>
+  <h1>WebMidgar 1.0-Integration — Field · Weltkarte · Kampf · Menü</h1>
+  <div class="row">
+    <span id="status">Boot …</span>
+  </div>
+  <div class="row">
+    <label for="fieldSelect">Field:</label>
+    <select id="fieldSelect" disabled></select>
+    <button id="enter" disabled>Betreten</button>
+    <button id="toWorld" disabled>→ Weltkarte</button>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="stage">
+        <canvas id="view" width="640" height="480"></canvas>
+        <div id="dialogOverlay"><div class="box" id="dialogBox"></div></div>
+        <div id="battleOverlay"><div class="box" id="battleBox"></div></div>
+        <div id="menuOverlay"><div id="menuBox"></div></div>
+      </div>
+      <p class="controls-help">
+        WASD/Pfeile bewegen · Enter/Leertaste OK · Esc abbrechen · M Menü · Tab Fahrzeug (Welt) ·
+        F9 Field↔Welt (Ersatz, solange echte Einstiegspunkte 🔴 offen sind)
+      </p>
+    </div>
+    <div class="col">
+      <div id="readout">—</div>
+    </div>
+  </div>
+  <script type="module" src="/src/game-demo.ts"></script>
+</body>
+</html>

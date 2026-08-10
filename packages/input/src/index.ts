@@ -47,6 +47,7 @@ export {
   type RecordedActionFrame,
 } from './recording.js';
 export { toFieldInput, fieldInputPlan } from './field-adapter.js';
+export { toMenuInput, type MenuInputFrame } from './menu-adapter.js';
 export {
   resolveTouchLayout,
   hitTest,

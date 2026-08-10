@@ -214,18 +214,30 @@ export function stepInstruction(
       return { kind: 'yield' };
     }
     case OP.MESSAGE: {
+      // Operanden: Fenster-ID, String-Index — dieselbe Belegung, die der
+      // Fixture-Assembler unabhängig spiegelt (`message(windowId, dialogId)`).
       const requestId = rt.nextRequestId++;
       ctx.ip = next;
-      ctx.waitState = { kind: 'dialogue', requestId, choice: undefined };
+      ctx.waitState = { kind: 'dialogue', requestId, dialogId: u8(1), choice: undefined };
       return { kind: 'yield' };
     }
     case OP.ASK: {
       // 🟡 Operandenbelegung (B, Fenster, Dialog, erste/letzte Zeile, Adresse).
       const bankPair = u8(0);
+      const dialogId = u8(2);
+      const firstChoice = u8(3);
+      const lastChoice = u8(4);
       const addr = u8(5);
       const requestId = rt.nextRequestId++;
       ctx.ip = next;
-      ctx.waitState = { kind: 'dialogue', requestId, choice: { bank: (bankPair >> 4) & 0xf || 1, addr } };
+      ctx.waitState = {
+        kind: 'dialogue',
+        requestId,
+        dialogId,
+        firstChoice,
+        lastChoice,
+        choice: { bank: (bankPair >> 4) & 0xf || 1, addr },
+      };
       return { kind: 'yield' };
     }
     case OP.MENU: {

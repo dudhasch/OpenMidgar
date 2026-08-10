@@ -36,8 +36,8 @@ export function sortActions(actions: Iterable<SemanticAction>): SemanticAction[]
 }
 
 /**
- * Eingabekontexte. `field`, `dialog` und `menu` sind belegt; `battle`,
- * `world` und `minigame` sind **reservierte Tabellenplätze** (S27-Vorgabe:
+ * Eingabekontexte. `field`, `dialog`, `menu`, `world` und `battle` sind
+ * belegt; `minigame` ist ein **reservierter Tabellenplatz** (S27-Vorgabe:
  * Plätze ja, Belegungen nein — die füllt der jeweilige Bogen selbst).
  */
 export const INPUT_CONTEXTS = ['field', 'dialog', 'menu', 'battle', 'world', 'minigame'] as const;

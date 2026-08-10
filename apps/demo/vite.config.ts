@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { ff7DataPlugin } from './ff7data-plugin';
 
 const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
   root: r('.'),
+  plugins: [ff7DataPlugin(r('.'))],
   resolve: {
     alias: {
       '@webmidgar/formats-lgp': r('../../packages/formats-lgp/src/index.ts'),
@@ -30,6 +32,10 @@ export default defineConfig({
       '@webmidgar/input': r('../../packages/input/src/index.ts'),
       '@webmidgar/formats-world': r('../../packages/formats-world/src/index.ts'),
       '@webmidgar/render-world': r('../../packages/render-world/src/index.ts'),
+      '@webmidgar/world-runtime': r('../../packages/world-runtime/src/index.ts'),
+      '@webmidgar/formats-battle': r('../../packages/formats-battle/src/index.ts'),
+      '@webmidgar/battle-runtime': r('../../packages/battle-runtime/src/index.ts'),
+      '@webmidgar/render-battle': r('../../packages/render-battle/src/index.ts'),
       '@webmidgar/fixture-gen': r('../../tools/fixture-gen/src/index.ts'),
       '@webmidgar/nfr-run': r('../../tools/nfr-run/src/index.ts'),
       '@webmidgar/pipeline': r('../../packages/pipeline/src/index.ts'),
@@ -42,7 +48,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license', 'world'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license', 'world', 'game'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),

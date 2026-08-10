@@ -7,6 +7,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@webmidgar/formats-battle": "*",
+    "@webmidgar/formats-save": "*",
     "@webmidgar/interpreter": "*"
   }
 }

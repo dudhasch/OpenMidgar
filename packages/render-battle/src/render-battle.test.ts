@@ -5,6 +5,7 @@ import { BattleSession, NEUTRAL_BATTLE_INPUT, battleConfigFromScene, type Battle
 import {
   assignPartsToBones,
   battleSkeletonToSkeleton,
+  battleToScene,
   parseCameraBlock,
   placeFormation,
   placeParty,
@@ -110,18 +111,41 @@ describe('Wirkungsfreiheit (erste Abnahme, nicht letzte)', () => {
 });
 
 describe('Aufstellung aus den Szenendaten', () => {
-  it('placeFormation nutzt die Slot-Koordinaten über die zentrale Konvertierung', () => {
+  it('battleToScene ist die Battle-Basis Rx(180°): y-ab → Y-oben, det +1, Boden bleibt 0', () => {
+    // (x, y, z)_battle → (x, −y, −z)_scene
+    expect(battleToScene([1, 2, 3])).toEqual([1, -2, -3]);
+    // Bodenslot bleibt auf Bodenhöhe (−0 ≡ 0), Flieger (Battle-y < 0) landet ÜBER dem Boden.
+    expect(battleToScene([100, 0, -1700])[1] === 0).toBe(true);
+    expect(battleToScene([0, -300, 0])[1]).toBe(300);
+    // Händigkeit: e1 × e2 = e3 bleibt erhalten (Rx(180°), kein Spiegel; +0 normalisiert).
+    const e1 = battleToScene([1, 0, 0]);
+    const e2 = battleToScene([0, 1, 0]);
+    const e3 = battleToScene([0, 0, 1]);
+    const cross = [
+      e1[1] * e2[2] - e1[2] * e2[1],
+      e1[2] * e2[0] - e1[0] * e2[2],
+      e1[0] * e2[1] - e1[1] * e2[0],
+    ];
+    expect(cross.map((v) => v + 0)).toEqual(e3.map((v) => v + 0));
+  });
+
+  it('placeFormation nutzt die Slot-Koordinaten über die zentrale Battle-Basis', () => {
     const scene = fixtureScene();
     const placed = placeFormation(scene.formations[0]!);
     expect(placed.length).toBe(2);
-    // ff7ToScene: (x,y,z) → (x,z,−y)
-    expect(placed[0]!.scenePosition).toEqual([-500, -1000, -0]);
-    expect(placed[1]!.scenePosition).toEqual([700, -1400, -0]);
+    // battleToScene: (x,y,z) → (x,−y,−z) — Bodenslots (y=0) stehen auf
+    // Szene-Höhe 0, Gegner (Battle-z<0) auf der Szene-+z-Seite.
+    expect(placed[0]!.scenePosition).toEqual([-500, -0, 1000]);
+    expect(placed[1]!.scenePosition).toEqual([700, -0, 1400]);
     expect(placed[1]!.row).toBe(1);
-    // Party-Ersatzpositionen (🔵) auf der Spiegelseite.
+    // Party-Ersatzpositionen (🔵): ebenfalls Bodenhöhe 0, gegenüber der
+    // Gegner-Mehrheitsseite (Battle-z +3200 → Szene-z −3200).
     const partyPos = placeParty(2);
     expect(partyPos.length).toBe(2);
-    expect(partyPos[0]![1]).toBe(3200);
+    expect(partyPos[0]![1]).toBe(-0);
+    expect(partyPos[0]![2]).toBe(-3200);
+    // Gegner und Party liegen auf GEGENÜBERLIEGENDEN Seiten der Tiefenachse.
+    expect(Math.sign(placed[0]!.scenePosition[2])).not.toBe(Math.sign(partyPos[0]![2]));
   });
 });
 

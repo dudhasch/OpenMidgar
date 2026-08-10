@@ -20,3 +20,5 @@ yarn-error.log*
 # OS / Editor
 .DS_Store
 Thumbs.db
+ff7data.local.json
+.shots/

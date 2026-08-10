@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import type { BattleSkeleton } from '@webmidgar/formats-battle';
 import type { MeshSource, TextureSource } from '@webmidgar/formats-model';
 import { applyFrame, bindPoseFrame, buildActor, type Actor } from '@webmidgar/render-actor';
-import { ff7ToScene } from '@webmidgar/convert';
-import { assignPartsToBones, BATTLE_ROOT_EXTRA_X_DEG, battleSkeletonToSkeleton, type BattleCamera } from './composition.js';
+import { assignPartsToBones, BATTLE_ROOT_EXTRA_X_DEG, battleSkeletonToSkeleton, battleToScene, type BattleCamera } from './composition.js';
 
 /**
  * Three-Pfad der Battle-Darstellung (S32). Die Regeln (Skelettabbildung,
@@ -58,10 +57,15 @@ export function buildSubstituteStage(radius = 12000): THREE.Group {
   return group;
 }
 
-/** Kamera aus dem Szenen-Kamerablock — über die ZENTRALE Konvertierung. */
+/**
+ * Kamera aus dem Szenen-Kamerablock — über die zentrale 🟢 Battle-Basis
+ * `battleToScene` (x-rechts, y-ab, z-Tiefe; Messbelege in composition.ts),
+ * dieselbe Konvention wie die Aufstellung: Kamera-y ist 1000/1000 negativ
+ * (über dem Boden) und landet damit auf Szene-+Y.
+ */
 export function applyBattleCamera(camera: THREE.PerspectiveCamera, cam: BattleCamera): void {
-  const pos = ff7ToScene(cam.position);
-  const target = ff7ToScene(cam.target);
+  const pos = battleToScene(cam.position);
+  const target = battleToScene(cam.target);
   camera.position.set(pos[0], pos[1], pos[2]);
   camera.up.set(0, 1, 0);
   camera.lookAt(target[0], target[1], target[2]);

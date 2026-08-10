@@ -210,10 +210,23 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * Vorherige Werte (Stand nach S21): `diagonal ae692c2df57cee63`,
  * `gleiten c09f412edb884cdb`, `skript 2cbf1510b831a8f8`.
  */
+/**
+ * **Fortschreibung 2026-08-10 (Dialogtext-Pipeline).** Erneut alle drei Werte,
+ * erneut EINE benennbare Ursache: Runtime-Schema 1 → 2 — der `dialogue`-
+ * Wartezustand trägt jetzt den String-Index des MESSAGE-/ASK-Opcodes
+ * (`dialogId`), und `schemaVersion` steht in jedem Zustandsbaum. Die
+ * Gegenprobe trägt wie immer: Auch `diagonal` und `gleiten` (kein Dialog im
+ * Skript) wandern mit — wäre nur `skript` gewandert, hätte die Dialog-
+ * Erweiterung die Bewegungs- oder Scheduling-Rechnung berührt, und DAS wäre
+ * der Fehler gewesen.
+ *
+ * Vorherige Werte (Stand nach S33): `diagonal d1f2f69588a75aa4`,
+ * `gleiten 4538950e18f2622c`, `skript 068e7fb42783b857`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: 'd1f2f69588a75aa4',
-  gleiten: '4538950e18f2622c',
-  skript: '068e7fb42783b857',
+  diagonal: '7dec0ebab96b619a',
+  gleiten: '331df99d295c41c2',
+  skript: '03dad5854e045fdf',
 };
 
 export interface VektorVergleich {

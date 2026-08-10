@@ -421,6 +421,58 @@ describe('Degradierung: fehlende Texturseite', () => {
   });
 });
 
+describe('buildFieldBackground: Tiefenfenster (F03)', () => {
+  /**
+   * Regression md1stin: Layer 0 trägt konstant z = 4095; mit zScale 4 liegt
+   * die Sichtdistanz (16380) hinter far = 10000 → unklammert NDC-Tiefe > 1 →
+   * der Rasterizer verwirft das komplette Quad. Real gemessen (bg-clip-probe):
+   * 795/795 Layer-0-Tiles unsichtbar, ebenso jede Layer-0-Fläche der
+   * Kontroll-Fields. Kacheln mit kleinem z (Sichtdistanz < near) fielen
+   * spiegelbildlich aus dem vorderen Fenster.
+   */
+  it('klemmt die NDC-Tiefe aller Tiles auf [-1, 1], hinten wie vorn', () => {
+    const palBytes = composePaletteSection({ pages: [[TRANSPARENT, RED]] });
+    const palette = parsePaletteSection(palBytes, 'fix', [])!;
+
+    const texData = texturePage(1);
+    fillPalettizedBlock(texData, 0, 0, 16, 1);
+
+    const bgBytes = composeBackgroundSection({
+      layers: {
+        0: {
+          width: 1,
+          height: 1,
+          // z-Default des Composers für Layer 0 ist 4095 — der md1stin-Fall.
+          tiles: [{ dstX: 0, dstY: 0, srcX: 0, srcY: 0, paletteId: 0, textureId: 0, bpp: 1 }],
+        },
+        1: {
+          width: 1,
+          height: 1,
+          // z = 1 → Sichtdistanz 4 < near → läge vor dem vorderen Fenster.
+          tiles: [{ dstX: 16, dstY: 0, srcX: 0, srcY: 0, paletteId: 0, textureId: 0, bpp: 1, z: 1 }],
+        },
+      },
+      texturePages: [{ slot: 0, depth: 1, data: texData }],
+    });
+    const bg = parseBackgroundSection(bgBytes, 'fix', [])!;
+
+    const render = buildFieldBackground(bg, palette, { near: 100, far: 10000 });
+    expect(render.tileCount).toBe(2);
+    for (const mesh of render.meshes) {
+      const pos = mesh.geometry.getAttribute('position') as BufferAttribute;
+      for (let v = 0; v < pos.count; v++) {
+        expect(pos.getZ(v)).toBeGreaterThanOrEqual(-1);
+        expect(pos.getZ(v)).toBeLessThanOrEqual(1);
+      }
+    }
+    // Ordnung bleibt erhalten: die ferne Basis liegt am hinteren, das nahe
+    // Overlay am vorderen Rand des Fensters.
+    const pos = render.meshes[0]!.geometry.getAttribute('position') as BufferAttribute;
+    expect(pos.getZ(0)).toBeCloseTo(1, 9); // Layer 0, z=4095
+    expect(pos.getZ(4)).toBeCloseTo(-1, 9); // Layer 1, z=1
+  });
+});
+
 describe('buildFieldBackground: Koordinatenverschiebung', () => {
   it('dst = (-160,-120) landet im Design-Raster bei (0,0); scrollX/Y verschiebt entsprechend; ein Mesh je Atlas', () => {
     const palBytes = composePaletteSection({ pages: [[TRANSPARENT, RED]] });
