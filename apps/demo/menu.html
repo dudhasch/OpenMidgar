@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S21: Menü (lesend)</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 50rem; padding: 0 1rem; }
+    button { font: inherit; padding: .4rem 1rem; }
+    table { border-collapse: collapse; margin-top: .5rem; width: 100%; }
+    td { border-bottom: 1px solid #ddd; padding: .35rem .6rem; vertical-align: top; }
+    td.marke { width: 1.5rem; color: #0a7a2f; }
+    tr.statisch td { color: #555; }
+    .bar { background: #eee; height: 6px; border-radius: 3px; margin-top: .25rem; }
+    .bar span { display: block; height: 100%; background: #0a7a2f; border-radius: 3px; }
+    .zu { color: #777; }
+    kbd { border: 1px solid #bbb; border-radius: 3px; padding: 0 .3rem; background: #f6f6f6; }
+    #quelle { color: #555; margin-left: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>S21 — Menü (lesend)</h1>
+  <p><a href="/">← Index</a> · <a href="/field.html">Field</a> · <a href="/walkmesh.html">Walkmesh</a></p>
+  <p>
+    Zeigt Gruppe, Status, Gegenstände und Übersicht aus einer Savemap.
+    Bedienung: <kbd>M</kbd> öffnen/schließen · <kbd>↑</kbd><kbd>↓</kbd> Zeiger ·
+    <kbd>←</kbd><kbd>→</kbd> blättern · <kbd>Enter</kbd> Status · <kbd>Esc</kbd> schließen.
+    <strong>Nur Anzeige</strong> — es gibt keinen Schreibpfad in den Spielstand.
+  </p>
+  <button id="laden">Echten Spielstand + KERNEL.BIN wählen</button>
+  <span id="quelle">Fixture-Spielstand aktiv.</span>
+  <div id="view"></div>
+  <script type="module" src="/src/menu-demo.ts"></script>
+</body>
+</html>

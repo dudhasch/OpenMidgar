@@ -84,7 +84,14 @@ export function stepInstruction(
   let operandLen = IMPL_OPERAND_LEN[op];
   let category: OpCategory;
   if (operandLen !== undefined) {
-    category = op >= 0x76 ? 'variable' : op >= 0x40 ? 'dialog' : 'control';
+    category =
+      op === OP.MENU || op === OP.MENU2
+        ? 'menu'
+        : op >= 0x76
+          ? 'variable'
+          : op >= 0x40
+            ? 'dialog'
+            : 'control';
   } else if (op === OP_KAWAI) {
     const total = ctx.ip + 1 < codeEnd ? code[ctx.ip + 1]! : 0;
     if (total < 2 || ctx.ip + total > codeEnd) {
@@ -220,6 +227,29 @@ export function stepInstruction(
       ctx.ip = next;
       ctx.waitState = { kind: 'dialogue', requestId, choice: { bank: (bankPair >> 4) & 0xf || 1, addr } };
       return { kind: 'yield' };
+    }
+    case OP.MENU: {
+      // Das Menü ist eine Wirkung nach außen — wie Musik und Kampf wird es
+      // eingereiht, nicht ausgeführt (ADR-006). Der Kontext wartet, weil das
+      // Original das Skript anhält, solange das Menü offen ist.
+      const bankPair = u8(0);
+      const requestId = rt.nextRequestId++;
+      rt.hostRequests.push({
+        kind: 'menu',
+        selector: srcValue((bankPair >> 4) & 0xf, u8(1), false),
+        param: srcValue(bankPair & 0xf, u8(2), false),
+        requestId,
+      });
+      ctx.ip = next;
+      ctx.waitState = { kind: 'menu', requestId };
+      return { kind: 'yield' };
+    }
+    case OP.MENU2: {
+      // 🟡 Rohwert, keine Deutung: Der Operand nimmt sechs verschiedene Werte
+      // an und ist damit nachweislich keine Ja/Nein-Angabe.
+      rt.menuAccessRaw = u8(0);
+      ctx.ip = next;
+      return { kind: 'continue' };
     }
     case OP.WINDOW:
     case OP.WCLSE:

@@ -396,3 +396,53 @@ anderen Sprachfassung wäre eine.
 | Ursache: `data/lang-en` enthält nur `battle`, `kernel` und `movies` — **kein** `field`. Der Field-Bytecode ist sprachunabhängig; die Sprachfassung steckt in `kernel.bin`, nicht im Field-Archiv | ✅ erklärt |
 | **Konsequenz für O9:** Das ist keine unabhängige Stichprobe. Die verbleibenden 🟡-Längen brauchen einen Datensatz aus einem anderen **Release**, nicht aus einer anderen Sprache | 🟡 offen |
 | **Konsequenz für S37:** `kernel.bin` IST sprachabhängig — genau die Gegenprobe, die der EXE-Bogen für Namenstabellen braucht | ✅ nützlich |
+
+## S21 — Menü-Grundlagen: Assets, Savemap, Kernel-Records (2026-08-10)
+
+Probe: `menu-savemap-probe.rdtest.ts` (M1–M4). Datenbasis: 4 `menu_*.lgp`,
+4 `save*.ff7` mit 8 belegten Slots (davon einer sehr dünn), `KERNEL.BIN`.
+
+### M1 — Menü-Archive
+
+| Befund | Status |
+|---|---|
+| `menu_de/us/fr/sp.lgp` enthalten **je genau 50 Einträge, ausschließlich `.tex`** — keine Layouttabellen, keine Fontdateien, keine Icondaten in anderem Format | ✅ gemessen |
+| Alle vier Archive sind **gleich groß (1.705.214 B), aber inhaltlich verschieden** (vier verschiedene SHA-256). Die Sprachfassung steckt also **in den Texturen selbst** (eingebrannter Text), nicht in einer Textliste | ✅ gemessen |
+| **Konsequenz für das Menü:** Es gibt keine Layoutkonstanten zum Auslesen. Die Menümetrik muss eigen definiert werden (wie die Dialogmetrik aus S15) | 🟡 Eigenentwurf |
+
+### M2 — Savemap-Feldlage (aus dem 4340-B-Slot abgeleitet)
+
+| Befund | Status |
+|---|---|
+| **Charakterrecords: Basis 84, Schrittweite 132, 9 Records** (84 … 1272) | ✅ gemessen |
+| Schrittweite über das **Namensraster**: FF-Text-Namen (Zeichentabelle aus S13) treffen bei 100 + i·132; Kontrolle auf verwürfelten Slots: **0 Treffer** | ✅ Kontrolle |
+| Recordbasis über die **Kennungsspalte**: genau eine Spalte trägt in jedem Record einen Wert ≤ 10 und nimmt 9 verschiedene Werte an — sie liegt 16 Byte vor dem Namen ⇒ Basis 84 | ✅ gemessen |
+| Recordbelegung: `+0` Kennung (0…10), `+1` **Level**, `+2…+7` sechs Grundwerte, `+16…+27` Name (12 B, 0xFF-terminiert), `+44/+46` HP aktuell/max, `+48/+50` MP aktuell/max, `+64…+127` 16 Materiaplätze à 4 B | ✅/🟡 s. u. |
+| **Level verifiziert** über Konkordanz mit dem HP-Maximum: **0,974** gegen Kontrollniveau 0,638 (verwürfelte Zuordnung) | ✅ Kontrolle |
+| ⚠️ **Selbstbetrug abgefangen:** Die Konkordanzliste wird von den Offsets 47 und 45 angeführt (1,000 bzw. 0,986) — das sind die **oberen Bytes von HP max und HP aktuell selbst**. Eine Kennzahl, die gegen sich selbst misst, gewinnt immer. Sie bestätigen das Verfahren, sie konkurrieren nicht | ⚠️ methodische Lehre |
+| HP/MP über **Ordnungspaare** (aktuell ≤ Maximum in allen Records, Gegenrichtung als Kontrollniveau) plus Wertebereich: MP-Felder erreichen exakt **999**, HP-Felder ~10.238 — beides deckt sich mit den Obergrenzen des Originals | ✅ gemessen |
+| **Gil = u32@32, Spielzeit = u32@36**, beide zusätzlich bei 2940/2944 wiederholt (Vorschaublock ↔ Savemap). Gefunden über **Duplikatgruppen**: Offsets, deren Wertfolge über alle Slots gleich ist und dabei variiert | ✅ gemessen |
+| Auseinandergehalten über zwei unabhängige Kriterien: **Konkordanz beider Reihen 0,885** (mehr Gil ⇒ mehr Spielzeit, 26 Paare) und Wertebereich (50 Mio. Sekunden wären 578 Tage) | ✅ Kontrolle |
+| Spielzeiteinheit **Sekunden** — 1759 s ≈ 29 min bei 585 Gil ist stimmig, dieselbe Zahl als Frames (59 s) nicht | 🟡 plausibel, nicht bewiesen |
+| **Vorschaublock = Slot 4…83**, Savemap ab 84. Ergibt sich aus der Recordbasis, wurde nicht angenommen | ✅ abgeleitet |
+| **Partyaufstellung bei 1272** (3 Bytes), gefunden über „jedes Byte < 9 oder 0xFF **und** die belegten paarweise verschieden" — dieselbe Figur kann nicht zweimal in der Gruppe stehen. 5 Kandidaten im ganzen Slot, einer davon exakt am Ende des Recordarrays | ✅ Kreuzbestätigung |
+| Belegung von `+2…+7` (Reihenfolge der sechs Grundwerte) und `+28…+31` (Ausrüstung) | 🟡 aus Wertebereichen plausibel, nicht einzeln belegt |
+
+### M3 — Kernel-Sektionsrollen
+
+| Befund | Status |
+|---|---|
+| **Sektionen 0–8 = Recordtabellen** (keine Zeigertabelle), **9–26 = Textlisten** (Zeigertabelle am Anfang, Stringanzahl = erster Zeiger / 2) | ✅ gemessen |
+| Stringanzahlen: 10/18 → 256, 11/12/19/20/25 → 128, 13/14/17/21/22 → 32, 15/23 → 96, 16/24 → 64, 26 → 16 | ✅ gemessen |
+| ⚠️ **Messfallstrick behoben:** Die Spalten-Konstanz eines Recordarrays ist bei jedem **Vielfachen** der wahren Schrittweite mindestens so hoch wie bei ihr selbst. Das reine Maximum las 3584 B als 16×224 statt als 128×28. Genommen wird jetzt die **kleinste** Schrittweite, die den Bestwert nahezu erreicht — dieselbe Sorte Schatten wie der Groß-/Kleinschreibungsschatten der Zeichentabelle aus S13 | ⚠️ methodische Lehre |
+| Zuordnung einzelner Textsektionen zu ihren Recordtabellen über die Anzahl allein bleibt mehrdeutig (mehrere Tabellen mit 32 Records) | 🟡 offen |
+
+### M4 — Inventar und Item-Namen
+
+| Befund | Status |
+|---|---|
+| **Inventar ab Slot-Offset 1276**, 320 Einträge à u16 — direkt hinter der Partyaufstellung (1272 + 4). Güte 1,000 | ✅ gemessen |
+| **Eintrag = `Anzahl = wert >> 9`, `Kennung = wert & 0x1FF`.** Entschieden über die **Verteilung der Anzahl**: Die Aufteilung 9/7 liefert „Anzahl 1" als häufigsten Wert (40 Einträge), die Aufteilung 8/8 kennt die 1 **überhaupt nicht** — ein Anzahlfeld ohne Einzelstücke ist widerlegt | ✅ Kontrolle |
+| **Item-Namen = Textsektion 18**, Beschreibungen = Sektion 10 (beide 256 Einträge; getrennt über die mittlere Länge 7,1 gegen 13,0) | ✅ gemessen |
+| ⚠️ **Basisraten-Fehler abgefangen:** Der erste Anlauf kontrollierte mit „Kennung + 1" und erzeugte einen Scheinbefund — in einer zu 92 % belegten Liste löst auch die falsche Kennung fast immer auf (0,946 gegen 0,919, kein Abstand). Richtiges Kontrollniveau ist der **Füllgrad der Sektion**: Der Zugewinn über die Basisrate trennt die beiden 256er-Sektionen (+0,256 / +0,196) klar von allen übrigen (≤ +0,078, teils negativ) | ⚠️ methodische Lehre |
+| 2 von 37 vorkommenden Kennungen lösen in Sektion 18 nicht auf (0,946) — vermutlich Sonderposten außerhalb der Itemliste | 🟡 offen |

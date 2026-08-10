@@ -52,7 +52,9 @@ export type WaitState =
   | { kind: 'movement'; requestId: number }
   | { kind: 'sync'; entityIndex: number; slot: number }
   | { kind: 'transition' }
-  | { kind: 'battle'; requestId: number };
+  | { kind: 'battle'; requestId: number }
+  /** Menü offen; der Kontext läuft weiter, sobald der Wirt es schließt (S21). */
+  | { kind: 'menu'; requestId: number };
 
 export type ContextStatus = 'running' | 'completed' | 'faulted';
 
@@ -171,7 +173,16 @@ export type HostRequest =
   | { kind: 'sound'; soundId: number; pan: number }
   | { kind: 'battle'; encounterId: number; requestId: number }
   | { kind: 'field-change'; maplistIndex: number; requestId: number }
-  | { kind: 'save-offer'; requestId: number };
+  | { kind: 'save-offer'; requestId: number }
+  /**
+   * Menü öffnen (S21). `selector` und `param` bleiben **roh**: Die
+   * Operandenform ist realdaten-vermessen (Bankbyte, Auswahl mit 22 Werten,
+   * Parameter mit 67 Werten über 296 Vorkommen), die Bedeutung der einzelnen
+   * Auswahlwerte ist es nicht. Sie zu raten hieße, eine falsche Ansicht
+   * überzeugend aussehen zu lassen — der Wirt bildet sie stattdessen über eine
+   * austauschbare Tabelle ab und meldet, was er nicht kennt.
+   */
+  | { kind: 'menu'; selector: number; param: number; requestId: number };
 
 /** Externe, tick-synchron einsortierte Ereignisse (UI, Solver, …). */
 export type RuntimeEvent =
@@ -179,7 +190,8 @@ export type RuntimeEvent =
   | { kind: 'movement-arrived'; requestId: number }
   /** Kampf beendet; `outcome` wird laut Vertragstabelle in Variablen gespiegelt. */
   | { kind: 'battle-finished'; requestId: number; outcome: number }
-  | { kind: 'transition-done'; requestId: number };
+  | { kind: 'transition-done'; requestId: number }
+  | { kind: 'menu-closed'; requestId: number };
 
 export interface FieldRuntimeState {
   schemaVersion: typeof RUNTIME_SCHEMA_VERSION;
@@ -204,6 +216,13 @@ export interface FieldRuntimeState {
    * des Snapshots, weil er das Verhalten beeinflusst.
    */
   randomEncountersDisabled: boolean;
+  /**
+   * Zustand von `MENU2` (0x4A) — der Zugriffssperre auf das Menü. 🟡 Der
+   * Operand nimmt im Bestand **sechs** verschiedene Werte an (8212 Vorkommen),
+   * ist also keine Ja/Nein-Angabe. Er wird deshalb roh mitgeführt, damit der
+   * Wirt entscheidet; dieselbe Zurückhaltung wie bei `BTLON`.
+   */
+  menuAccessRaw: number;
   /** Telemetrie der UNKNOWN-Politik: op → Übersprung-Zähler. */
   unknownSkips: Record<number, number>;
   /** Requests an nicht existente Entitäten/Slots (diagnostiziert, nie geraten). */
