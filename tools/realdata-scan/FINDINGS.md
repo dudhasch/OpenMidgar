@@ -11,7 +11,7 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 |---|---|
 | Header/TOC/Datenvorsätze: 0 Quarantäne-Einträge über alle Archive | ✅ Struktur bestätigt |
 | **Lookup-Tabelle exakt aus TOC reproduzierbar** (kein einziges W-LGP-LOOKUP) | ✅ Bucket-Funktion (Ziffern-Faltung, `_`→k, `-`→l, col 0 = kein 2. Zeichen) ist damit realdaten-validiert |
-| W-LGP-SHADOWED ×1798 (v. a. battle.lgp) | ✅ erwartete Duplikatnamen; „letzter gewinnt" verifiziert unkritisch |
+| W-LGP-SHADOWED ×1798 (v. a. battle.lgp) | ✅ erwartete Duplikatnamen; „letzter gewinnt“ verifiziert unkritisch |
 | W-LGP-CONFLICTTBL ×1 | 🟡 Einzelfall, bei Bedarf nachziehen |
 | flevel (en) 703 Field-Einträge + 26 Sonstige; gflevel (de) 729 Einträge | ℹ️ Release-Varianz dokumentiert |
 
@@ -19,7 +19,7 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 
 | Befund | Status |
 |---|---|
-| LZS + 9-Sektionen-Zeigertabelle: 702/702 parsen (einziger „Fatal": `maplist`, kein Field) | ✅ Containermodell bestätigt |
+| LZS + 9-Sektionen-Zeigertabelle: 702/702 parsen (einziger „Fatal“: `maplist`, kein Field) | ✅ Containermodell bestätigt |
 | Walkmesh-Sektion (u32 count + 24B-Tris + 6B-Access): 702/702, 81.542 Dreiecke (2–496/Field) | ✅ bestätigt |
 | Adjazenz-Symmetrie: nur 2 Asymmetrie-Warnungen über alle Fields | ✅ Modell bestätigt |
 | Trigger-Sektion: 516-Byte-Layout 702/702 | ✅ bestätigt |
@@ -51,7 +51,7 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | `BTLON` = `0x71` (Zufallskämpfe an/aus), 102 Vorkommen. 🟡 Polarität des Operanden nicht belegt — der Rohwert wird durchgereicht | ✅ identifiziert, 🟡 Semantik |
 | **Nebenbefund: Die abgeleitete Operandenlängentabelle hat Lücken.** Gegen die Strukturgrößen aus Makou Reactor geprüft, weichen 4 von 8 Stichproben ab: `BTMD2` 0x22 (1 statt 4), `BTRLD` 0x23 (4 statt 2), `BTLTB` 0x4B (0 statt 1), `BTLMD` 0x72 (1 statt 2). `BATTLE`, `BTLON`, `MAPJUMP` und `WAIT` stimmen. Die betroffenen Opcodes sind selten — genau dort trägt der Spannen-Abschluss als Gütefunktion am wenigsten | 🟡 systematischer Abgleich offen (O9) |
 | Musik: 94 Titel, alle Kommentar-Header lesbar. **87 % tragen `LOOPSTART`, kein einziger `LOOPLENGTH`** | ✅ prägt das Schleifenmodell: von `LOOPSTART` bis Dateiende |
-| `audio.fmt` (54.668 B), erster Anlauf: Nur die Eintragsgrößen 4 und 79 teilen die Datei glatt; beste Quoten 66 % / 51 % / 46 % | ⚠️ Methodenfehler: Die Teilersuche setzt „kein Vorspann" voraus |
+| `audio.fmt` (54.668 B), erster Anlauf: Nur die Eintragsgrößen 4 und 79 teilen die Datei glatt; beste Quoten 66 % / 51 % / 46 % | ⚠️ Methodenfehler: Die Teilersuche setzt „kein Vorspann“ voraus |
 | **`audio.fmt`-Eintragsgröße = 74 Byte, aus den Daten gemessen.** Statt Layouts zu raten, wurden häufige u32-Konstanten gesammelt und ihre Positionsabstände histogrammiert: **87,1 %** aller Abstände sind 74, der Zweitplatzierte liegt bei 3,5 %. 738 Einträge à 74 B passen in die Datei | ✅ Formatfakt (hypothesenfrei gemessen) |
 | **Im Eintrag steckt ein WAVEFORMATEX** — sichtbar über die Wertevielfalt je Byteposition: Formatkennung **2 (MS-ADPCM)**, 1 Kanal, **44100 Hz**, nAvgBytesPerSec 21504, nBlockAlign 1024, **4 Bit/Sample**, cbSize **32**. Ein WAVEFORMATEX mit 32 B Zusatz ist 50 B lang; 6 × u32 Kopffelder + 50 B ergeben exakt die gemessenen 74 B | ✅ Struktur belegt |
 | **Offen bleibt der Vorspann.** Der aus dem WAVEFORMATEX abgeleitete Versatz 10 trifft die Formatkonstanten in 265/738 Einträgen, der Zweitplatzierte (0) in 198/738 — Faktor **1,34**. Nach Projektmaßstab ist das kein Befund. Außerdem bleiben 46 Byte unverbucht, und nur ~36 % der Einträge teilen dieselben Formatkonstanten (die Klangbank ist heterogen) | 🟡 Layout zu 2/3 erschlossen, nicht geschlossen |
@@ -68,16 +68,16 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | Die Datei endet mit **2 Nullbytes außerhalb des Sektionsschemas**. Der Parser lässt genau diesen Rest zu — aber nur, wenn er wirklich genullt ist | ✅ Formatfakt |
 | **Messfallstrick:** Die beiden denkbaren Kopfauslegungen sind für Sektionen unter 64 KB *byteidentisch*. Die Sektionsanzahl trennt sie nicht; entschieden wird über die entpackte Länge im Kopf | ⚠️ im Parser dokumentiert |
 | Sektionen 0–8 tragen Recorddaten, **9–26 Text** (Dateityp 9) mit u16-Zeigertabelle am Sektionsanfang | ✅ Bestand |
-| **Zeichentabellen-Versatz = 0x20, aus den Daten abgeleitet** (Gütefunktion „wie deutsch sieht das aus?"), identisch in der deutschen und der englischen Fassung | ✅ belegt |
-| **Zweiter Messfallstrick:** Der scheinbare Zweitplatzierte (Versatz 0) liegt nur 6 % zurück — weil die Gütefunktion kleinschreibt und ASCII-Groß-/Kleinbuchstaben genau 32 auseinanderliegen. Versatz 0 ist ein *Schatten* von 0x20, keine Alternative. Gegen den ersten unabhängigen Kandidaten beträgt der Abstand Faktor **1,64** (de) bzw. 1,38 (en) | ⚠️ ohne diese Einsicht wäre der Befund als „knapp" fehlgedeutet worden |
+| **Zeichentabellen-Versatz = 0x20, aus den Daten abgeleitet** (Gütefunktion „wie deutsch sieht das aus?“), identisch in der deutschen und der englischen Fassung | ✅ belegt |
+| **Zweiter Messfallstrick:** Der scheinbare Zweitplatzierte (Versatz 0) liegt nur 6 % zurück — weil die Gütefunktion kleinschreibt und ASCII-Groß-/Kleinbuchstaben genau 32 auseinanderliegen. Versatz 0 ist ein *Schatten* von 0x20, keine Alternative. Gegen den ersten unabhängigen Kandidaten beträgt der Abstand Faktor **1,64** (de) bzw. 1,38 (en) | ⚠️ ohne diese Einsicht wäre der Befund als „knapp“ fehlgedeutet worden |
 | Textabdeckung: Mit dem linearen Fenster allein dekodieren 70,3 % der Zeichenketten vollständig; die beiden dominanten Restbytes 0xF9 (594×) und 0xF8 (164×) als Steuersequenzen ergänzt, steigt der Wert auf **98,93 %** und der Anteil unbekannter Bytes fällt von 5,4 % auf **0,04 %** | ✅ 🟡 die Deutung von 0xF8/0xF9 bleibt Hypothese |
 | `kernel2.bin` ist LZS-komprimiert und entpackt mit dem vorhandenen Dekoder zu 27.390 B (deutsch) | ✅ Pfad trägt |
 | Spielstände: 5 Dateien à 65.109 B unter `save/`; Aufteilung 9-B-Kopf + **15 Slots à 4340 B**. Belegte Slots sind sicher unterscheidbar (leer > 99,6 % genullt, belegt ≤ 39 %) | ✅ tragfähig, 🟡 Kopflänge arithmetisch mehrdeutig (9/24/39/54 gehen alle auf) |
 | **Prüfsumme — erster Anlauf gescheitert, und ein beinahe geglaubter Fehlschluss:** Fünf CRC-16-Varianten zeigten zunächst 89 % Treffer. Die Nachrechnung ergab, dass diese Treffer **exakt den leeren Slots** entsprechen, für die eine CRC mit Startwert 0 trivial 0 liefert. Bei den belegten Slots traf **keine** Variante | ⚠️ Messfallstrick, im zweiten Anlauf aufgelöst |
 | **Prüfsumme geklärt (zweiter Anlauf):** CRC-16/CCITT, Polynom `0x1021`, Startwert `0xFFFF`, unreflektiert, **Nachlauf-XOR `0xFFFF`**, über `slot[4…4340]` = **4336 B**. Ergebnis als u16 LE am Slotanfang; die Bytes 2–3 gehören zum selben Feld (DWord, nur unteres Word belegt) und stehen deshalb außerhalb des Prüfbereichs. **8/8** beschriebene Slots treffen, **0/67** genullte | ✅ Formatfakt |
-| Der erste Anlauf scheiterte an **zwei** Abweichungen gleichzeitig (Bereich ab +2 statt +4, kein Nachlauf-XOR). Die Probe belegt beide einzeln: Jede Teilkorrektur allein trifft **0/7**. Dass genullte Slots jetzt durchfallen, ist ein Gütemerkmal — mit Nachlauf-XOR ergibt eine Nullfolge nicht 0, das alte Artefakt ist konstruktiv unmöglich | ⚠️ Lehre: „fast richtig" gab es hier nicht |
+| Der erste Anlauf scheiterte an **zwei** Abweichungen gleichzeitig (Bereich ab +2 statt +4, kein Nachlauf-XOR). Die Probe belegt beide einzeln: Jede Teilkorrektur allein trifft **0/7**. Dass genullte Slots jetzt durchfallen, ist ein Gütemerkmal — mit Nachlauf-XOR ergibt eine Nullfolge nicht 0, das alte Artefakt ist konstruktiv unmöglich | ⚠️ Lehre: „fast richtig“ gab es hier nicht |
 | **Kopflänge über die Prüfsumme entschieden:** Von den arithmetisch gleichwertigen Aufteilungen trifft nur **9/4340** (8/8); 24/4339, 39/4338 und 54/4337 liegen bei 0/8 | ✅ frühere 🟡 aufgelöst |
-| **Belegtheitsregel korrigiert:** Die 95-%-Nullanteil-Schwelle verwarf einen Slot, der eine **gültige** Prüfsumme trägt. Belegt heißt jetzt „nicht vollständig genullt"; die Prüfsumme wird getrennt gemeldet statt in die Heuristik gemischt | ✅ korrigiert |
+| **Belegtheitsregel korrigiert:** Die 95-%-Nullanteil-Schwelle verwarf einen Slot, der eine **gültige** Prüfsumme trägt. Belegt heißt jetzt „nicht vollständig genullt“; die Prüfsumme wird getrennt gemeldet statt in die Heuristik gemischt | ✅ korrigiert |
 
 ## S12 — Operandenlängen und Bewegungs-Opcodes (2026-08-09)
 
@@ -88,7 +88,7 @@ ausschließlich aggregierte Formatbefunde — keine Originaldaten.
 | 48 Längen bleiben **mehrdeutig** (mehrere Werte gleich gut, weil der Opcode zu selten vorkommt) — für den Skip-Pfad brauchbar, nicht als Strukturbeleg | 🟡 einzeln prüfen, wer sie implementiert |
 | Wirkung im Interpreter: **unknown-op-Faults von 7241 auf 0**, Fields ohne jeden Fault von 1 auf **526/702**; Gesamt-Fault-Rate rund **3 %** der Kontexte (S12-Ziel war < 20 %) | ✅ Akzeptanzkriterium erfüllt |
 | **Feldaufteilung XYZI (0xA5) und MOVE (0xA8) bestätigt**: 98,36 % der XYZI-Ziele und 99,66 % der MOVE-Ziele liegen tatsächlich **im Walkmesh** des eigenen Fields. Byteverschobene Kontrolle: 0,50 % bzw. 0,14 %; Kontrolle gegen ein fremdes Field: 42 % bzw. 43 % | ✅ realdaten-validiert (4637 XYZI, 7607 MOVE) |
-| Die vermuteten Bankpaarbytes sind zu 98,3 % exakt 0 („Literal, keine Bank") — dadurch ist die Einzelmetrik „triangleId im Bereich" kein scharfer Test, erst die Kombination mit der Positionsprüfung trägt | ℹ️ Messfallstrick dokumentiert |
+| Die vermuteten Bankpaarbytes sind zu 98,3 % exakt 0 („Literal, keine Bank“) — dadurch ist die Einzelmetrik „triangleId im Bereich“ kein scharfer Test, erst die Kombination mit der Positionsprüfung trägt | ℹ️ Messfallstrick dokumentiert |
 
 ## S11 — Field-Sitzung, Gateway-Bestand, Tiefen-Eichung (2026-08-09)
 
@@ -120,7 +120,7 @@ sondern ein Festfeld ist. Danach lief das Accounting-Raster sofort auf.
 | `modelCount` reicht bis **16** (Modus 9), `animCount` Modus 3; Modellnamen 15…30 Zeichen, Animationsnamen ausnahmslos 8 | ℹ️ Bestand |
 | u16 hinter dem Modellnamen ist ein **binäres Flag**: nur 0 (47,6 %) und 1 (52,4 %) | 🟡 Bedeutung offen |
 | `tail` hinter Animationsnamen: 1 in 97,1 %, Rest breit gestreut (0, 2…254) | 🟡 kein Konstantenfeld |
-| 30-B-Block: letzte 3 Bytes sind sehr plausibel eine graue Umgebungsfarbe (Mittel 88,8/87,4/87,9, praktisch nie 0) — Gegenhypothese „Zähler" widerlegt. Die Deutung als 3 × (i16-Richtung + RGB) trägt teilweise: Richtungen sind **unnormiert** (\|v\| p5…p95 = 14167…50067), und je 9-B-Einheit tragen 3 Bytes auffällig wenige verschiedene Werte | 🟡 `decodeModelLightBlock` ist ausdrücklich Deutungsvorschlag; `blockRaw` bleibt maßgeblich |
+| 30-B-Block: letzte 3 Bytes sind sehr plausibel eine graue Umgebungsfarbe (Mittel 88,8/87,4/87,9, praktisch nie 0) — Gegenhypothese „Zähler“ widerlegt. Die Deutung als 3 × (i16-Richtung + RGB) trägt teilweise: Richtungen sind **unnormiert** (\|v\| p5…p95 = 14167…50067), und je 9-B-Einheit tragen 3 Bytes auffällig wenige verschiedene Werte | 🟡 `decodeModelLightBlock` ist ausdrücklich Deutungsvorschlag; `blockRaw` bleibt maßgeblich |
 
 ## S9 — Tile-Semantik, R2-Entscheid, Hintergrund-Komposition (2026-08-09)
 
@@ -133,7 +133,7 @@ des jeweiligen Fields, dann Entscheidungstests gegen Gegenkandidaten.
 |---|---|
 | **`paletteId` ist u8@24, nicht u16@20** — 99,87 % der Tiles < Seitenzahl (S8-Annahme u16@20 lag bei 54 %) | ✅ **Formatkorrektur** |
 | `textureId` = u8@34: 99,85 % der Tiles verweisen auf einen im Field vorhandenen Slot; 271 Fields mit exakter Mengengleichheit, 426 mit Teilmenge, 5 Verletzungen. Gegenkandidaten u8@30/@32/@36 verletzen 34/41/22 Fields | ✅ belegt |
-| `uvX` u32@44 / `uvY` u32@48 = `round(src/256 · 1e7)` — ein vom Original mitgeführter UV-Cache. Er folgt **`src2` (u8@16/@18), sobald gesetzt, sonst `src`**: Regel trifft 98,91 %, „immer src" nur 84,6 %, „immer src2" 20,9 % | ✅ belegt (Kreuzprüfung gegen redundantes Feld) |
+| `uvX` u32@44 / `uvY` u32@48 = `round(src/256 · 1e7)` — ein vom Original mitgeführter UV-Cache. Er folgt **`src2` (u8@16/@18), sobald gesetzt, sonst `src`**: Regel trifft 98,91 %, „immer src“ nur 84,6 %, „immer src2“ 20,9 % | ✅ belegt (Kreuzprüfung gegen redundantes Feld) |
 | `z` = u16@26: 12 Bit, in Layer 0 **ausnahmslos 4095** (342.792/342.792 Tiles) = hinterste Ebene | ✅ Ordnung belegt |
 | **`z` ist KEINE metrische Tiefe**: zwischen z und der kameraseitigen Sichtdistanz ist über 666 Fields kein konstanter Faktor nachweisbar (Verhältnisstreuung p10…p90 über drei Größenordnungen) | 🟡 nur Sortierschlüssel — Eichung in S11 |
 | `layerControl` = u16@20 ist **je Layer konstant** (L0: 0, L1: 16, L2: 32, L3: 2…15 je Tile) — keine Palettenangabe. Rasterweite bestätigt das teilweise: Layer 2 zeichnet 32-px-Kacheln (44 Fields, Quellkoordinaten 100 % 32-aligned), Layer 0/1 16-px | 🟡 Zweck offen, Kachelkante daraus abgeleitet |
@@ -153,7 +153,7 @@ im Kachelinneren. Gemessen wird das Verhältnis beider Farbabstände (ideal 1):
 
 Deckung der Basisebene (Layer 0+1) bei den 135 Fields mit bemalter Fläche
 320×240: **97,1 %** mit der Regel „Basisebene deckend, darüber Index 0
-transparent"; die Alternative „Rohwert 0 transparent" verliert 4 Punkte an
+transparent“; die Alternative „Rohwert 0 transparent“ verliert 4 Punkte an
 echtem Schwarz. Atlas-Packing: max. **1997 Kachelvarianten** je Field, damit
 **1 Atlas** (2048²) für jedes der 702 Fields — die Masterplan-Grenze von 4
 wird deutlich unterschritten.
@@ -208,7 +208,7 @@ Offene Semantikfragen (Achsen, Eulerorder, BGRA, …): [R4-Notiz](../../docs/R4-
 ## S5 — Solver auf echten Walkmeshes
 
 140.400 randomisierte Schritte über 702 Fields: **0 Invariantenverletzungen**
-(„immer im Mesh"), 93.411 Kantenübertritte, 67.427 Slides, 21 Clamp-Notanker
+(„immer im Mesh“), 93.411 Kantenübertritte, 67.427 Slides, 21 Clamp-Notanker
 (0,015 % — numerische Randfälle, kein Durchtunneln).
 
 ## Konsequenzen
@@ -219,7 +219,7 @@ Offene Semantikfragen (Achsen, Eulerorder, BGRA, …): [R4-Notiz](../../docs/R4-
    `script-span-probe.rdtest.ts`, 2026-08-09):** Alle 29 Fälle stammen aus
    *einem* Field (eine Entität, Slots 3–31) und tragen exakt den Wert
    `stringTableOffset` — der bekannte Sentinel „ungenutzter Slot wiederholt
-   letzten Entry ans Bytecode-Ende". Parser akzeptiert `== stringTableOffset`
+   letzten Entry ans Bytecode-Ende“. Parser akzeptiert `== stringTableOffset`
    jetzt als leeren Span; Realdaten-Sweep ist damit E-SCR-SPAN-frei.
 3. ~~Die FOV-Basis-Entscheidung (R2) kann jetzt mit echten Kameras +
    Backgrounds kalibriert werden~~ **Erledigt (S9): FOV-Basis = 240**, siehe
@@ -265,7 +265,7 @@ Realdaten stammen.
 | **Knappster Wert: der Main-Thread-Task** mit 7,42 ms gegen 8 ms (7 % Luft). Es ist die längste von 702 Tick-Etappen zu je 60 Takten; der Median liegt bei 0,35 ms. Kein Verstoß, aber die einzige Zahl, die bei künftiger Tick-Arbeit beobachtet gehört | ⚠️ Beobachtungsposten |
 | **Lastprofil des Field-Wechsels:** Atlasaufbau 1823,7 ms und LZS 1102,7 ms von 3684,0 ms Gesamtarbeit über 702 Wechsel — zusammen **79,4 %**. Die IO-Etappe (Slice-Read) ist mit 448,6 ms überraschend klein; das Verzeichnis trägt | ✅ ADR-010-Grundlage |
 | **Soak über 500 Field-Wechsel auf echten Fields:** GPU-Buchführung kehrt exakt auf 0 zurück (500 Erwerbe, 500 Freigaben, 0 Fehlfreigaben), Heap **+1,07 %** gegen die Steady-State-Baseline, Verlauf flach von Wechsel 50 bis 500. Der Sitzungsdigest des ersten Rotationsfields ist im 476. Zyklus identisch zum ersten | ✅ leckfrei + zustandsfrei |
-| **Heap-Baseline muss nach einer Aufwärmrunde genommen werden.** Gegen den Zustand vor dem ersten Wechsel gemessen meldete ein Lauf 5,85 % „Abweichung" — das waren JIT- und Cache-Einmalkosten, kein Leck. Der flache Verlauf ab Wechsel 50 belegt das. Eine Baseline vor der Aufwärmphase misst die Einmalkosten mit | ⚠️ methodische Lehre |
+| **Heap-Baseline muss nach einer Aufwärmrunde genommen werden.** Gegen den Zustand vor dem ersten Wechsel gemessen meldete ein Lauf 5,85 % „Abweichung“ — das waren JIT- und Cache-Einmalkosten, kein Leck. Der flache Verlauf ab Wechsel 50 belegt das. Eine Baseline vor der Aufwärmphase misst die Einmalkosten mit | ⚠️ methodische Lehre |
 | **57 LGP-Archive der Installation, 0 mit fatalem Headerfehler, 0 Einträge in Quarantäne**, Terminator und Lookup-Tabelle in allen 57 reproduzierbar | ✅ R5-Grundlage |
 | **Release-Fingerprint muss inhaltsstrukturell sein.** Der vorhandene Archiv-Fingerprint enthält Pfad und mtime (Cache-Key nach ADR-008) und ist als Release-Kennung unbrauchbar — eine Kopie derselben Datei bekommt einen anderen Wert. Der neue Fingerprint hasht nur die TOC-Struktur | ✅ Formatentscheidung |
 | **Trennschärfe des Fingerprints in beide Richtungen belegt:** 10 Paare identischer Dateien (Hauptbaum ↔ Sicherungskopie, verschiedene Pfade und mtimes) liefern identische Werte; 5 Archivrollen (`condor`, `disc`, `snowboard`, `sub` je 4 Fassungen, `flevel` 2) liefern verschiedene | ✅ Sensitivität + Stabilität |
@@ -278,7 +278,7 @@ Realdaten stammen.
 
 ## `audio.fmt` — Vorspann gelöst (2026-08-10)
 
-Der Befund oben („FFNx parst `audio.fmt` nicht") bleibt richtig, war aber nur
+Der Befund oben („FFNx parst `audio.fmt` nicht“) bleibt richtig, war aber nur
 das Ende **einer** Spur. FF7SND benennt die Struktur, und sie hält gegen die
 eigenen Daten.
 
@@ -311,8 +311,8 @@ animierte Frames kippen (R4-B2, bisher 10/76 aufrecht). **Sie ist widerlegt.**
 | Befund | Status |
 |---|---|
 | Kujata führt eine **indizierte** Liste mit 100 Einträgen (id 0..99). Alle **94** lokalen OGG-Namen kommen darin vor; sechs Einträge haben lokal keine Datei, ein Name ist doppelt vergeben | 🟡 Kandidat |
-| **Die daraus abgeleitete scharfe Vorhersage fällt durch:** „kein `MUSIC`-Operand ≥ 100" — verletzt in **36 von 935** Vorkommen | 🔴 nicht erfüllt |
-| **Nicht entscheidungsfähig, und das ist der eigentliche Befund.** Der Kandidat ist mit 3,9 % zwar halb so schlecht wie die Kontrollmenge (Byte vor dem Opcode, 8,4 %) — aber die Ausreißer sind über viele Werte gestreut statt auf einen Sentinel wie 0xFF konzentriert, und ihr Anteil liegt in der Größenordnung der bekannten Fault-Rate des Spannen-Durchlaufs (~3 %, S12). Die Messung kann „Liste stimmt, Durchlauf verrutscht" nicht von „Liste stimmt nicht" trennen | ⚠️ blockiert auf O9 |
+| **Die daraus abgeleitete scharfe Vorhersage fällt durch:** „kein `MUSIC`-Operand ≥ 100“ — verletzt in **36 von 935** Vorkommen | 🔴 nicht erfüllt |
+| **Nicht entscheidungsfähig, und das ist der eigentliche Befund.** Der Kandidat ist mit 3,9 % zwar halb so schlecht wie die Kontrollmenge (Byte vor dem Opcode, 8,4 %) — aber die Ausreißer sind über viele Werte gestreut statt auf einen Sentinel wie 0xFF konzentriert, und ihr Anteil liegt in der Größenordnung der bekannten Fault-Rate des Spannen-Durchlaufs (~3 %, S12). Die Messung kann „Liste stimmt, Durchlauf verrutscht“ nicht von „Liste stimmt nicht“ trennen | ⚠️ blockiert auf O9 |
 | **O2 GESCHLOSSEN (2026-08-10, S37).** Die Zuordnung steht in `music.idx` **und** in einer 99-Einträge-Zeigertabelle der EXE (RVA `0x9684c8`, Eintrag 0 = Platzhalter). Beide liefern **dieselbe Permutation, 98/98**; die Kontrolle (Versatz 0) trifft 0/98. Der Lokator hält in 7/7 Programmdateien. **`musicId` ist 1-basiert, `music.idx` 0-basiert.** Die 36 Ausreißer oben werden dadurch nicht kleiner — ob der `MUSIC`-Operand diesen Index direkt trägt, bleibt an O9 gebunden | ✅ [decompile-findings.md](../../docs/decompile-findings.md) §3 |
 | Nebenbefund: Feldmusik nutzt nur **34** verschiedene Indizes von 94 Titeln | ✅ Zahl |
 
@@ -351,7 +351,7 @@ für posten gegen die eigenen Daten gemessen.
 |---|---|
 | **Bei den Wort-Varianten der IF-Familie ist auch die LINKE Adresse zwei Byte breit.** Die VM las dort ein Byte, wodurch Vergleichsoperator und Sprungziel um eine Stelle verrutschten. Betrifft 0x16 (n=4733) und 0x17 (n=300) messbar | 🔴 echter Fehler, behoben |
 | 0x18/0x19 sind auf der Gütefunktion **indifferent** und wurden aus **Formgleichheit** mitgezogen — dieselbe Instruktionsform muss dieselbe Länge haben. Als 🟡 markiert, weil das ein Formargument ist, kein Messergebnis | 🟡 begründet übernommen |
-| **Kontrolle:** Dieselben vier je ein Byte zu weit gesetzt → 99,52 % gegen 99,92 %. Die Gütefunktion misst also nicht bloß „länger ist besser" | ✅ Kontrolle fällt durch |
+| **Kontrolle:** Dieselben vier je ein Byte zu weit gesetzt → 99,52 % gegen 99,92 %. Die Gütefunktion misst also nicht bloß „länger ist besser“ | ✅ Kontrolle fällt durch |
 
 ### Was O9 nebenbei aufgedeckt hat
 
@@ -366,7 +366,7 @@ für posten gegen die eigenen Daten gemessen.
 Der Spannen-Abschluss ist gegenüber falscher **Semantik** vollständig
 invariant: Er belegt, dass die Längen aufgehen, nicht dass ein Opcode das
 Richtige tut. Zwei Opcodes mit vertauschten Längen liefern denselben
-Abschluss, solange ihre Summe stimmt. Das ist die „blinde Gütefunktion" aus
+Abschluss, solange ihre Summe stimmt. Das ist die „blinde Gütefunktion“ aus
 dem Methodenkatalog — hier struktureller Natur und nicht behebbar. Deshalb
 bleiben die 0,06 % Rest und die drei nicht-strikten Übernahmen 🟡.
 
@@ -387,7 +387,7 @@ anderen Sprachfassung wäre eine.
 | **Das Vorzeichen entscheidet die Messung nicht** (−90° und +90° liegen 180° auseinander, dagegen ist die Box blind — beide 63,1 %). Es kommt aus Sichtprüfung und Algebra | 🟡 Grenze benannt |
 | **Den Translations-Umbau kann sie prinzipiell nicht prüfen:** Die Ausdehnung einer Punktwolke ist verschiebungsinvariant. Abgesichert stattdessen durch einen Fixture-Test mit in allen drei Komponenten verschiedener Translation | 🟡 Grenze benannt |
 | **63,1 % sind nicht 100 %.** B2 ist entschieden, R4 als Ganzes nicht abgeschlossen | 🟡 Rest offen |
-| **Rückwirkend erklärt:** Der Eulerreihenfolgen-Sweep konnte keinen Sieger haben, weil der Fehler außerhalb seines Suchraums lag; „Bindpose 95 % aufrecht" war ein Artefakt, weil in der Bindpose alle Rotationen 0 sind und die Wurzel weder Rotation noch Translation trägt — der Fehler *kann* dort nicht auftreten | ⚠️ methodische Lehre |
+| **Rückwirkend erklärt:** Der Eulerreihenfolgen-Sweep konnte keinen Sieger haben, weil der Fehler außerhalb seines Suchraums lag; „Bindpose 95 % aufrecht“ war ein Artefakt, weil in der Bindpose alle Rotationen 0 sind und die Wurzel weder Rotation noch Translation trägt — der Fehler *kann* dort nicht auftreten | ⚠️ methodische Lehre |
 
 ## Sprachfassung — `flevel` ist nicht sprachabhängig (2026-08-10)
 
@@ -403,8 +403,8 @@ anderen Sprachfassung wäre eine.
 | Befund | Status |
 |---|---|
 | **Der Kindversatz lief nach `+parent.length`, richtig ist `−parent.length`.** Von 50 gerenderten Renderketten trugen ausschließlich die vier als brauchbar erkannten dieses Vorzeichen | ✅ gelöst |
-| **Die Bewertung ist in sich konsistent — das ist der Beleg.** Die zwei als richtig erkannten Zellen (#14, #15) sind derselbe Transform in zwei Zerlegungen (Rx(180°)); die zwei als „180° gedreht" erkannten (#10, #11) ebenfalls (Rx(0°)), und sie liegen exakt 180° daneben. Beide Paare wurden unabhängig vergeben | ✅ Selbstkonsistenz |
-| Damit hatte Kujata mit `[0,0,−parentBone.length]` recht. Die frühere Messung „Kujatas Versatzvorzeichen verschlechtert alles" war ein Artefakt der blinden Gütefunktion | ⚠️ Korrektur |
+| **Die Bewertung ist in sich konsistent — das ist der Beleg.** Die zwei als richtig erkannten Zellen (#14, #15) sind derselbe Transform in zwei Zerlegungen (Rx(180°)); die zwei als „180° gedreht“ erkannten (#10, #11) ebenfalls (Rx(0°)), und sie liegen exakt 180° daneben. Beide Paare wurden unabhängig vergeben | ✅ Selbstkonsistenz |
+| Damit hatte Kujata mit `[0,0,−parentBone.length]` recht. Die frühere Messung „Kujatas Versatzvorzeichen verschlechtert alles“ war ein Artefakt der blinden Gütefunktion | ⚠️ Korrektur |
 | Wurzelwinkel −90° und Versatzreihenfolge (entlang der **Eltern**-Achse) waren bereits richtig | ✅ bestätigt |
 | **Nachweis numerisch:** Die Produktionskette reproduziert wurzelrelativ exakt Konfiguration #15 (Assertion in der Probe) | ✅ verdrahtet |
 | **Nachweis gegen Überanpassung:** Drei weitere Modelle in Front-, Seiten- und Draufsicht durch dieselbe Kette — alle aufrecht, Segmente zusammenhängend | ✅ Kontrolle |
@@ -426,3 +426,47 @@ sah dabei überzeugend aus. **Für Fragen nach einer Richtung im Raum ist die
 Sichtprüfung kein Notbehelf, sondern das schärfere Instrument.** Der Beitrag
 der Automatik lag darin, den Suchraum vollständig aufzuspannen, nicht ihn zu
 bewerten.
+
+## S28 — Weltkarten-Terrain (`data/wm`), Probe vom 2026-08-10
+
+Werkzeug: `world-probe.rdtest.ts`. Hypothesenquelle: FFNx/ff7-landscaper/Qhimm
+(nur Hypothesengeber; jede Zeile unten ist gegen die eigenen Daten gemessen).
+Overlay-Hinweis: `mods/` existiert und enthält wm-/world-Pfade — gemessen wurde
+ausschließlich `data/wm` (Originalbestand).
+
+| Befund | Status |
+|---|---|
+| Bestand: WM0/WM2/WM3 je als `.MAP` (69/12/4 Blöcke) und `.BOT` (332/48/16 Blöcke), ALLE sechs Dateien exakte Vielfache von 0xB800 (47104 B); dazu 4 Sprach-LGPs gleicher Größe | ✅ Inventar |
+| **Blockgrammatik:** je Block 16 u32-Offsets (blockrelativ, erster = 0x40, monoton) auf LZS-Meshes (u32 Länge + Strom): **85/85 MAP-Blöcke**, um 2 B verschobene Kontrolle **0/85** | ✅ Formatfakt |
+| **Mesh-Grammatik:** dekomprimiert `u16 triCount · u16 vertCount · tri[12 B] · vert[8 B] · normal[8 B]` — **1360/1360 Meshes byteexakt aufgehend** (Accounting), Lochquote 0 | ✅ Formatfakt |
+| **Vertex:** i16 x · i16 h · i16 z · u16 — x,z ∈ [0, 8192] in 1104/1104 WM0-Meshes, h frei (−1269…4086) ⇒ Mesh-Grundriss 8192², Block = 4×4 Meshes = 32768² | ✅ Formatfakt |
+| **Nahtstetigkeit** (Bildkohärenz-Analogon): benachbarte Meshes teilen Randpunkte (t,h) **828/828 Paare perfekt (Quote 1,0)**; Nullwert-Zweitrechnung: ohne 541 Flachpaare bleiben 287 strukturierte Paare bei 1,0; Fremdpaar-Kontrolle 0,56 | ✅ Formatfakt |
+| **Blockanordnung WM0:** Primärraster **9 Spalten × 7 Zeilen** (Blöcke 0–62): Blockgrenz-Nähte 440/440 perfekt (1,0); Kontrollanordnung 7×9: 0,764 (Ozeanflächen matchen trivial — deshalb ist nur die 1,0 beweisend) | ✅ Formatfakt |
+| WM0-Blöcke 63–68: 6 Alternativblöcke (Story-Varianten). Welcher Block welche Rasterzelle ersetzt und woran das Script das schaltet | 🔴 offen (S29-Kandidat) |
+| **`.BOT`-Dateien:** identische Block-/Mesh-Grammatik, alle 6336 Meshes exakt; Digest-Kreuzvergleich: **Unikatmengen von MAP und BOT sind identisch** (512/512, 190/190, 12/12) ⇒ keine eigene Geometrie, nur andere Anordnung derselben Meshes | ✅ gemessen; Zweck der Anordnung 🟡 |
+| Dreiecks-Byte 3, untere 5 Bits: 25+ verschiedene Werte mit plausibler Häufigkeitsordnung (Klasse 3 dominiert = Wiese?); obere 3 Bits fast nur 0/1 | 🟡 Wertevielfalt belegt, SEMANTIK unbelegt — Geländeklassen-Matrix bleibt austauschbare Tabelle (S29) |
+| Dreieck 12 B: v0/v1/v2 u8 (⇒ ≤256 Verts/Mesh), Byte 3 = Attribut, 6 B UV-Kandidaten, u16 Texturwort | 🟡 nur Längen belegt; UV/Textur-Deutung braucht den Texturpfad |
+| Sprach-LGPs: gleich groß, byteweise VERSCHIEDEN (Stichprobe); `world_gm.lgp`: 985 Einträge — .tex 415, .p/.rsd je 228, .a 77, .hrc 29, **.ev 3**, .tbl 2, .bin 1, .ta 1, 1 ohne Endung | ✅ Inventar; Modellkette = bekannte S7-Formate |
+| Die 3 `.ev`-Einträge (WM0/2/3-Scripts?) und der endungslose Eintrag (Texte?) | 🟡 S29-Gegenstand |
+| **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
+| **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
+
+## S29 — World-Script (`.ev`) und Fahrzeugproben, 2026-08-10
+
+Werkzeuge: `world-ev-probe.rdtest.ts`, `world-vehicle-probe.rdtest.ts`.
+Hypothesengeber: ff7-landscaper/Qhimm (Beschreibung, keine Autorität — zwei
+Beschreibungen wurden von den Daten korrigiert, s. u.).
+
+| Befund | Status |
+|---|---|
+| `world_gm.lgp` trägt drei `.ev` à exakt 0x7000 B (wm0/wm2/wm3) | ✅ Inventar |
+| **Call-Tabelle fix 0x400 B**: bis 256 Paare (u16 Kennung, u16 Wortoffset relativ zu Wort 512), 0xFFFF-Sentinel; Kennungstyp = Bits 14–15 (0 System, 1 Modell mit Modellnummer in Bits 8–13, 2 Mesh); IDs monoton; jedes Funktionsziel liegt am Codeanfang oder direkt hinter 0x203/0x100 (143+26+38 = 207/207) | ✅ Formatfakt |
+| **Methodische Lehre (teuer):** Eine dynamisch gelesene Tabelle (Ende am Sentinel) setzte die Codebasis auf Wort 288 statt 512 — ALLE Sprungmessungen lagen dadurch exakt auf Kontrollniveau. Wenn jede Deutung „zufällig“ aussieht, zuerst den BEZUGSRAHMEN anzweifeln, nicht die Deutungen | ⚠️ dokumentiert |
+| **Grammatik:** u16-wortbasierte Stack-Maschine mit EIGENER Opcode-Menge. Operandenlängen: Push-Familie 0x110/114/117/118/119/11b/11c/11d/11f und Sprünge 0x200/0x201 je 1 Wort, alle übrigen beobachteten 0; 0x203 beendet. **Funktions-Abschluss 175/175** | ✅ Formatfakt |
+| **Sprungziel = codebasis-relative Wortadresse: 732/732 auf Instruktionsgrenzen** (Kontrollen: +1-Verschiebung 62 %, funktionsrelativ 36 %); alle Sprünge im Bestand vorwärts (Assembler/VM erlauben rückwärts innerhalb der Funktion) | ✅ Formatfakt |
+| **Grammatikfrage der Roadmap ENTSCHIEDEN:** Die Field-Bytetabelle schließt die World-Funktionen nur zu 24 %/44 %/6 % (gegen 99,73 % auf flevel) ⇒ eigener Interpreter, keine Field-Erweiterung | ✅ gemessen |
+| **Mesh-Kennungs-Koordinaten: (Kennung>>4)&0x3FF = zeile·36 + spalte** — die Community-Beschreibung („x = div 36“) passt nur 46/49, die Vertauschung **49/49** ins 36×28-Raster. Zweite korrigierte Beschreibung dieser Session | ✅ realdaten-entschieden |
+| Stack-SEMANTIK der Rechen-/Vergleichs-/Write-Opcodes: per Fixture-Sollverlauf festgelegt (u16-Wrap, Pop-Reihenfolge, Bitzerlegung addr>>3/addr&7) — am Original NICHT belegt | 🟡 dokumentierte Festlegung |
+| Kommando-Opcodes (0x204, 0x300er …): **UNKNOWN-Politik** (Fault + überspringen). VM-Lauf über alle 143 wm0-Funktionen: 143/143 enden regulär, 4867 Instruktionen, unknown-Quote 23,6 % (top: 0x305, 0x306, 0x32d, 0x307, 0x303) | ✅ Abdeckung gemessen; Semantik 🔴 |
+| **Erreichbarkeitsprobe** (Dreiecksgraph WM0, 142 586 Dreiecke): Wasserkandidat = **Klasse 3** (dominante Klasse der modalen Flachhöhe 0 — die S28-Vermutung „Wiese“ war falsch); Matrix „ohne Wasser“: 53 614 erreichbar, verdrehte Matrix (nur Wasser, Landstart): **0**, ohne Matrix: 142 586 ⇒ die Matrix ändert die Erreichbarkeit messbar, die Probe ist nicht blind. Erster Anlauf der Wassererkennung („flach auf MINIMALhöhe“) traf eine Senke (~300 Dreiecke) — die MODALE Flachhöhe trägt | ✅ Messanlage; Klassensemantik bleibt 🟡, Matrix bleibt austauschbare 🔵-Tabelle |
+| Anlass der Mesh-Funktionsausführung (welche Funktionsnummer beim Betreten läuft), Alternativblock-Schaltung (WM0 63–68), Original-Einstiegspunkte World↔Field, Begegnungstabellen der Weltkarte | 🔴 offen |
