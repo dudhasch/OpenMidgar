@@ -18,7 +18,7 @@ import {
   type PreparedScript,
   type RuntimeSnapshot,
 } from '@webmidgar/interpreter';
-import { DEFAULT_STEPS_PER_CHECK, EncounterModel, parseEncounterTables } from './encounter.js';
+import { DANGER_PRO_PRUEFUNG, EncounterModel, parseEncounterTables, type EncounterCounters } from './encounter.js';
 import { decodeFieldDialogs } from './dialog.js';
 
 /**
@@ -41,6 +41,13 @@ export interface FieldInput {
   /** Aktionstaste; die Sitzung wertet nur die steigende Flanke. */
   confirm: boolean;
   cancel: boolean;
+  /**
+   * Gehen statt Rennen. Vorgabe ist **Rennen** — so hält es das Original,
+   * und darauf beziehen sich die Gefahrenwerte des Schrittzähler-Modells
+   * (`encounter.ts`): Gehen bringt nur ein Viertel des Gefahrenzuwachses bei
+   * gleicher Schrittzählung. Das ist die Grundlage des Step-Routings.
+   */
+  walking?: boolean | undefined;
 }
 
 export const NEUTRAL_INPUT: FieldInput = { moveX: 0, moveY: 0, confirm: false, cancel: false };
@@ -164,12 +171,12 @@ export interface FieldSessionOptions {
    * ganz (z. B. Story-Durchläufe im ADR-011-Testmodus).
    */
   encounters?: boolean | undefined;
-  /** 🔵 Prüfabstand des Ratenmodells in bewegten Takten. */
-  encounterStepsPerCheck?: number | undefined;
+  /** 🔵 Gefahrenschwelle je Prüfung (Schrittzähler-Modell, s. `encounter.ts`). */
+  encounterDangerThreshold?: number | undefined;
 }
 
 export interface FieldSessionSnapshot {
-  schemaVersion: 3;
+  schemaVersion: 4;
   fieldId: string;
   tick: number;
   player: PlayerState | null;
@@ -195,9 +202,16 @@ export interface FieldSessionSnapshot {
    * dieselbe Fehlerklasse wie die moveStalls beim Schritt 1 → 2.
    */
   encounterSteps: number;
+  /**
+   * Vollständiger Zählerstand des Schrittzähler-Modells (Schema 3 → 4):
+   * `fractions`, `stepId`, `danger`, `offset`, `formationId`. Ohne die vier
+   * zusätzlichen Zähler verlöre eine gesicherte Sitzung ihre Schrittroute —
+   * dieselbe Fehlerklasse wie bei `moveStalls` und `encounterSteps` zuvor.
+   */
+  encounterCounters: EncounterCounters | null;
 }
 
-export const SESSION_SCHEMA_VERSION = 3;
+export const SESSION_SCHEMA_VERSION = 4;
 
 const DEFAULT_SPEED = 6;
 
@@ -338,7 +352,7 @@ export class FieldSession {
       const tables = parseEncounterTables(bundle.rawSections[7]);
       const table = tables[0];
       if (table && table.enabled && table.standard.length > 0) {
-        this.encounterModel = new EncounterModel(table, options.encounterStepsPerCheck ?? DEFAULT_STEPS_PER_CHECK);
+        this.encounterModel = new EncounterModel(table, options.encounterDangerThreshold ?? DANGER_PRO_PRUEFUNG);
       }
     }
   }
@@ -447,7 +461,7 @@ export class FieldSession {
     // nicht abgeschaltet hat. Der Wurf nutzt den Interpreter-PRNG (Snapshot).
     const movedThisTick = this.player?.moving === true && (mx !== 0 || my !== 0);
     if (movedThisTick && this.runtime && this.encounterModel && !this.runtime.state.randomEncountersDisabled) {
-      const battleId = this.encounterModel.onMovedTick(this.runtime.state);
+      const battleId = this.encounterModel.onMovedTick(this.runtime.state, input.walking !== true);
       if (battleId !== null) {
         const requestId = this.runtime.state.nextRequestId++;
         // Gleicher Request-Typ wie der BATTLE-Opcode — für den Wirt ist ein
@@ -673,7 +687,8 @@ export class FieldSession {
       prevConfirm: this.prevConfirm,
       moveStalls: [...this.moveStalls.entries()].sort((a, b) => a[0] - b[0]),
       runtime: this.runtime ? snapshotRuntime(this.runtime.state) : null,
-      encounterSteps: this.encounterModel?.stepAccum ?? 0,
+      encounterSteps: this.encounterModel?.fractions ?? 0,
+      encounterCounters: this.encounterModel?.zaehler() ?? null,
     };
   }
 
@@ -705,7 +720,10 @@ export class FieldSession {
     this.activeTriggers = new Set(snapshot.activeTriggers);
     this.prevConfirm = snapshot.prevConfirm;
     this.moveStalls = new Map(snapshot.moveStalls);
-    if (this.encounterModel) this.encounterModel.stepAccum = snapshot.encounterSteps;
+    if (this.encounterModel) {
+      if (snapshot.encounterCounters) this.encounterModel.setzeZaehler(snapshot.encounterCounters);
+      else this.encounterModel.fractions = snapshot.encounterSteps;
+    }
     return { ok: true, warnings };
   }
 

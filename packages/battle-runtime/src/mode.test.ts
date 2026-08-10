@@ -247,7 +247,7 @@ describe('Zufallskämpfe (S33): Ratenmodell + BTLON', () => {
   const laufInput: FieldInput = { moveX: 1, moveY: 0, confirm: false, cancel: false };
 
   function countBattles(bundle: FieldBundle, ticks: number, seed = 1): { battles: number; ids: number[] } {
-    const session = new FieldSession(bundle, { seed, dialogMode: 'auto', encounterStepsPerCheck: 8 });
+    const session = new FieldSession(bundle, { seed, dialogMode: 'auto', encounterDangerThreshold: 256 });
     let battles = 0;
     const ids: number[] = [];
     for (let t = 0; t < ticks; t++) {
@@ -284,11 +284,11 @@ describe('Zufallskämpfe (S33): Ratenmodell + BTLON', () => {
 
   it('Snapshot/Restore mitten im Prüffenster erhält den Schrittzähler', () => {
     const bundle = encounterBundle({ rate: 128 });
-    const s1 = new FieldSession(bundle, { seed: 4, dialogMode: 'auto', encounterStepsPerCheck: 16 });
+    const s1 = new FieldSession(bundle, { seed: 4, dialogMode: 'auto', encounterDangerThreshold: 512 });
     for (let t = 0; t < 11; t++) s1.tick(laufInput);
     const snap = structuredClone(s1.snapshot());
-    expect(snap.encounterSteps).toBeGreaterThan(0);
-    const s2 = new FieldSession(bundle, { seed: 4, dialogMode: 'auto', encounterStepsPerCheck: 16 });
+    expect(snap.encounterCounters).not.toBeNull();
+    const s2 = new FieldSession(bundle, { seed: 4, dialogMode: 'auto', encounterDangerThreshold: 512 });
     expect(s2.restore(snap).ok).toBe(true);
     for (let t = 0; t < 200; t++) {
       const dir = Math.floor(t / 50) % 2 === 0 ? 1 : -1;

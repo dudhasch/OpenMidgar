@@ -238,10 +238,25 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * `diagonal 7dec0ebab96b619a`, `gleiten 331df99d295c41c2`,
  * `skript 03dad5854e045fdf`.
  */
+/**
+ * **Fortschreibung 2026-08-11 (Schrittzähler-Modell).** Erneut alle drei
+ * Werte, erneut EINE benennbare Ursache: Sitzungsschema 3 → 4. Das
+ * Zufallskampf-Modell führt statt eines einzelnen Schrittzählers jetzt die
+ * dokumentierte Zählerhierarchie (`fractions`, `stepId`, `danger`, `offset`,
+ * `formationId`), und alle fünf liegen im Snapshot — sonst verlöre eine
+ * gesicherte Sitzung ihre Schrittroute. Die Gegenprobe trägt wie immer: Auch
+ * `diagonal` und `gleiten` wandern mit, obwohl ihre Fixture gar keine
+ * Encounter-Tabelle hat und die Zähler dort konstant bleiben. Wäre nur
+ * `skript` gewandert, hätte die Encounter-Änderung die Bewegungsrechnung
+ * berührt — DAS wäre der Fehler gewesen.
+ *
+ * Vorherige Werte (Stand nach F22/BGON): `diagonal a979df074f55443b`,
+ * `gleiten dff830fea2efbfc3`, `skript 4df6cdd6d9f1e15c`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: 'a979df074f55443b',
-  gleiten: 'dff830fea2efbfc3',
-  skript: '4df6cdd6d9f1e15c',
+  diagonal: '264718afa7d478d5',
+  gleiten: '430f8b8a0770156f',
+  skript: 'dfdfd745ed5452e0',
 };
 
 export interface VektorVergleich {

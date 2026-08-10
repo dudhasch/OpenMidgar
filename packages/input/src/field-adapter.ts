@@ -15,12 +15,17 @@ export function toFieldInput(sample: ActionSample): FieldInput {
     moveY: Math.sign(sample.axisY),
     confirm: sample.held.includes('ok'),
     cancel: sample.held.includes('cancel'),
+    // Gehen statt Rennen, solange „Abbrechen" gehalten wird — die Belegung des
+    // Originals. Für das Schrittzähler-Modell (encounter.ts) ist das der
+    // Unterschied zwischen +64 und +16 Gefahr je Schrittzyklus und damit die
+    // Grundlage jeder Step-Route.
+    walking: sample.held.includes('cancel'),
   };
 }
 
 /** Aufzeichnung als Tick→FieldInput-Funktion, für Replays über die Session. */
 export function fieldInputPlan(recording: ActionRecording): (tick: number) => FieldInput {
   const byTick = new Map(recording.frames.map((f) => [f.tick, toFieldInput(f)]));
-  const neutral: FieldInput = { moveX: 0, moveY: 0, confirm: false, cancel: false };
+  const neutral: FieldInput = { moveX: 0, moveY: 0, confirm: false, cancel: false, walking: false };
   return (tick) => byTick.get(tick) ?? neutral;
 }

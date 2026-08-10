@@ -182,6 +182,30 @@ Alle offenen Sichtfindings mit bekanntem Fixpfad umgesetzt; 615 Tests grün.
 | F27 | Gehen/Rennen aktiviert (Slots 1/2 nach tatsächlicher Ortsveränderung; Schwelle 9 Einheiten/Takt für Rennen). Das frühere Kippen war eine Folge von F20 — `spielerProbe` misst identische Wurzellage für alle drei Slots. Clip-Wechsel behalten den alten Clip bis zur Bindung (kein Bindpose-Flackern) | ✅ |
 | F22′ | **BGON (0xE0) / BGOFF (0xE1) / BGCLR (0xE4) im Interpreter**: `bgStates` (param → Bitmaske) im Runtime-Zustand; Demo nutzt Script-Bits, Reihum nur noch als Fallback für unberührte Parameter. Gemessen: `uutai1` {1:9, 2:63, 4:2}, `mds7pb_1` {5:1, 6:1}, `junonr2` {18:128} — die Scripts schalten real | ✅ Replay-Digests fortgeschrieben (bewusster engineCompat-Schritt, dokumentiert in replay-vektoren.ts); BGROL/BGROL2 bleiben übersprungen 🟡 |
 
+## Schrittzähler-Modell für Zufallskämpfe (2026-08-11)
+
+Quelle: Speedrun-Dokumentation „Step Count" (FF7 Comprehensive Speedrun
+Tutorial pt 3). Sie beschreibt die Zählerhierarchie, auf der Step-Routing
+beruht — und damit genau das, was unser bisheriges Ersatzmodell („alle 24
+bewegten Takte würfeln") nicht abbilden konnte.
+
+| # | Bereich | Beobachtung | Status |
+|---|---|---|---|
+| F14 | Field/Encounter | **Zufallskämpfe viel zu dicht** (Runde 1: „Encounter 302/303 alle ~100 bewegte Takte" im Bahnhofsvorplatz). Ursache war das grobe Ersatzmodell ohne Schrittzählung und ohne Gehen | ✅ behoben — gemessen in `md1stin`: **384 Takte** bis zum Kampf beim Rennen (12,8 s bei 30 Hz) statt ~100 |
+| F44 | Field/Encounter | Zählerhierarchie nachgebaut: `fractions` (Überlauf 256, +32 je bewegtem Bild), `stepId` (+2 je Überlauf, also alle 8 Bilder), `danger` (+64 rennend / **+16 gehend**), `offset` (+13 je `stepId`-Überlauf), `formationId` (+2 bzw. +3 je Kampf). Alle fünf liegen im Snapshot — sonst verlöre eine gesicherte Sitzung ihre Schrittroute | ✅ Sitzungsschema 3 → 4; 7 Abnahmetests |
+| F45 | Field/Eingabe | **Gehen als Eingabe**: `FieldInput.walking` (Vorgabe Rennen wie im Original), belegt auf „Abbrechen halten". Gemessen in `md1stin`: Rennen 384 Takte, Gehen **1536 Takte** — exakt Faktor 4 bei identischer Schrittzählung, und beide treffen dieselbe Prüfnummer. Genau das ist der „Limbo"-Effekt der Doku: dieselbe Strecke, dieselben Schritte, aber die Gefahrenschwelle wird nicht erreicht | ✅ |
+
+**Was aus der Doku abgeleitet und nicht gemessen ist (🔵):** Die Doku nennt
+„jedes Bild" für `fractions` und zugleich „alle 8 Bilder" für den Überlauf —
+daraus folgt der Zuwachs 256/8 = 32 je Bild; wörtlich steht er dort nicht.
+Die **Gefahrenschwelle je Prüfung** ist ebenfalls unbeziffert;
+`DANGER_PRO_PRUEFUNG = 1024` ist der freie Parameter (Rennen: eine Prüfung je
+16 Schrittzyklen). Belegt aus dem Format bleiben allein Tabelle, Rate und die
+6-Bit-Wahrscheinlichkeiten. Die Formationsnummer wandert nach der
+beschriebenen Regel (+2/+3 je nach aktuellem Wert), ist aber noch nicht mit
+der Formationsauswahl selbst verdrahtet — die läuft weiter über die
+gewichteten Tabellenplätze.
+
 ## Testprotokoll (fortlaufend)
 
 - ✅ Boot über Dev-HTTP-Quelle: 8 Archive indexiert, maplist (787 Namen), KERNEL.BIN, scene.bin, WM0.MAP, wm0.ev, Spielstand geladen.
