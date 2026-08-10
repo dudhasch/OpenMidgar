@@ -18,6 +18,12 @@ export const DEFAULT_APP_IDS = [39140];
 export const DEFAULT_RESULT_TTL_MS = 300_000;
 export const DEFAULT_PORT = 8787;
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--;
+  return end === value.length ? value : value.slice(0, end);
+}
+
 function required(env: Record<string, string | undefined>, key: string): string {
   const value = env[key];
   if (value === undefined || value.trim() === '') {
@@ -60,7 +66,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number, key: string
 
 export function loadConfig(env: Record<string, string | undefined>): RelayConfig {
   const steamWebApiKey = required(env, 'STEAM_WEB_API_KEY');
-  const realm = required(env, 'REALM').replace(/\/+$/, '');
+  const realm = stripTrailingSlashes(required(env, 'REALM'));
   const allowedOrigins = parseOrigins(required(env, 'ALLOWED_ORIGINS'));
   const appIds = parseAppIds(env['STEAM_APP_IDS']);
   const resultTtlMs = parsePositiveInt(env['RESULT_TTL_MS'], DEFAULT_RESULT_TTL_MS, 'RESULT_TTL_MS');
