@@ -242,6 +242,56 @@ export function composeScriptSection(spec: ScriptSpec): Uint8Array {
   return bytes;
 }
 
+// --- Encounter (Sektion 7) ---------------------------------------------------
+
+export interface EncounterTableSpec {
+  /** Default: aus dem Inhalt abgeleitet (1, sobald ein Slot belegt ist). */
+  enabled?: number;
+  rate?: number;
+  /** Bis zu 6 Standardslots als [Anteil, Formations-ID]; Rest wird genullt. */
+  standard?: [number, number][];
+  /** Bis zu 4 Sonderslots als [Anteil, Formations-ID]. */
+  special?: [number, number][];
+  /** Zum Erzeugen von Quarantäne-/Diagnose-Fixtures. */
+  padding?: number;
+}
+
+export interface EncounterSpec {
+  tables?: [EncounterTableSpec?, EncounterTableSpec?];
+  /** Erzwingt eine abweichende Sektionslänge (Defekt-Fixture). */
+  sectionLenOverride?: number;
+}
+
+/**
+ * Zweitimplementierung der Encounter-Sektion (24 B je Tabelle, 2 Tabellen).
+ * Bewusst unabhängig vom Parser: die 6/10-Teilung wird hier erneut gerechnet.
+ */
+export function composeEncounterSection(spec: EncounterSpec = {}): Uint8Array {
+  const TABLE = 24;
+  const bytes = new Uint8Array(spec.sectionLenOverride ?? TABLE * 2);
+  const view = new DataView(bytes.buffer);
+  for (let t = 0; t < 2; t++) {
+    const table = spec.tables?.[t];
+    const base = t * TABLE;
+    if (!table || base + TABLE > bytes.length) continue;
+    const std = table.standard ?? [];
+    const spc = table.special ?? [];
+    const belegt = std.length > 0 || spc.length > 0;
+    bytes[base] = table.enabled ?? (belegt ? 1 : 0);
+    bytes[base + 1] = table.rate ?? 0;
+    for (let i = 0; i < 6; i++) {
+      const s = std[i];
+      if (s) view.setUint16(base + 2 + i * 2, ((s[0] & 0x3f) << 10) | (s[1] & 0x03ff), true);
+    }
+    for (let i = 0; i < 4; i++) {
+      const s = spc[i];
+      if (s) view.setUint16(base + 14 + i * 2, ((s[0] & 0x3f) << 10) | (s[1] & 0x03ff), true);
+    }
+    view.setUint16(base + 22, table.padding ?? 0, true);
+  }
+  return bytes;
+}
+
 // --- Container --------------------------------------------------------------
 
 export interface FieldContainerSpec {
@@ -264,16 +314,18 @@ export function composeFieldContainer(spec: FieldContainerSpec): FieldFixtureLay
   let cursor = headerEnd;
   const datas: Uint8Array[] = [];
   for (let s = 1; s <= count; s++) {
-    // Füller für ungenutzte Sektionen; 3/4/9 brauchen minimale GÜLTIGE
+    // Füller für ungenutzte Sektionen; 3/4/7/9 brauchen minimale GÜLTIGE
     // Strukturen, da der Container sie semantisch parst.
     const filler =
       s === 3
         ? composeModelLoaderSection()
         : s === 4
           ? composePaletteSection({ pages: [] })
-          : s === 9
-            ? composeBackgroundSection()
-            : new Uint8Array(8);
+          : s === 7
+            ? composeEncounterSection()
+            : s === 9
+              ? composeBackgroundSection()
+              : new Uint8Array(8);
     const data = spec.sections[s] ?? filler;
     sectionOffsets[s] = cursor;
     datas.push(data);

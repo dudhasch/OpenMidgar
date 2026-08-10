@@ -10,3 +10,4 @@ export * from './sections/script.js';
 export * from './sections/model-loader.js';
 export * from './sections/palette.js';
 export * from './sections/background.js';
+export * from './sections/encounter.js';

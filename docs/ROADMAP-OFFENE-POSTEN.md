@@ -18,7 +18,7 @@ Messung lügt".
 | `audio.fmt`-Layout | 🔴 | 🟡 Eintragsgröße 74 B gemessen, WAVEFORMATEX belegt, Vorspann offen |
 | Musikindex → Dateiname | 🔴 | 🟡 Zielmenge geschlossen (94/94), Permutation offen |
 | Kampf-Opcode | 🔴 | 🟢 **gelöst** (`BATTLE` = 0x70, verdrahtet und getestet) |
-| R4-Sichtprüfungen B1–B8 | ⏳ | ✅ **durchgeführt** (Gegenprüfung 2026-08-10: 6 entschieden, 3 unbelegt-belastbar, B7 widerlegt → neuer Posten O10) |
+| R4-Sichtprüfungen B1–B8 | ⏳ | ✅ **vollständig abgeschlossen** (2026-08-10, zwei Schritte: Gegenprüfung, dann Resttafel — **alle** B1–B10 entschieden, B7 war ein Definitionsfehler) |
 
 ## Stand nach der Repo-Recherche 2026-08-10
 
@@ -52,11 +52,29 @@ vorhergesagt; sie wurde nur nicht befragt. Das ist ein dritter Fehlertyp neben
 „falsche Suchmenge" und „blinde Gütefunktion": **die Antwort lag in einer
 Rechnung, die schon dastand.**
 
-**Offen geblieben:** Nur 32,4 % von `audio.dat` sind referenziert; 48,5 MB
-adressiert diese Tabelle nicht. 🟡
+**~~Offen geblieben:~~ ✅ nachgetragen 2026-08-10.** Hier stand, nur 32,4 % von
+`audio.dat` seien referenziert und 48,5 MB adressiere die Tabelle nicht. **Die
+Prämisse war falsch.** `audio.fmt` ist kein Feld gleich großer Einträge,
+sondern eine Folge von **26 Bänken**, jede mit einer 42 B kurzen
+Abschlussmarke. Der O1-Durchlauf hielt die **erste** dieser Marken für das
+Dateiende und las danach ein um 42 B versetztes Raster.
+
+Neu belegt: `audio.fmt` byteexakt verbraucht (**724 × 74 + 26 × 42 = 54.668**,
+Rest 0), `audio.dat` zu **100,0000 %** überdeckt, 0 Lücken, 0 Überlappungen.
+MS-ADPCM-Prädiktortest über alle 66.332 Blockanfänge **100 %**, Kontrollen
+(Offsets rotiert) 77,1 % / 58,9 %. Getrennt gerechnet besteht der *neue*
+Bereich den Test genauso gut wie der längst belegte.
+
+**Und es war derselbe Fehlertyp wie bei O1 selbst — in derselben Datei:**
+`54.668 mod 74 = 56`. Ein reines 74-B-Raster kann `audio.fmt` gar nicht
+füllen; die 56 Bytes wurden als „Rest" abgelegt statt befragt. Sie sind genau
+`26 × 42 mod 74` — der Fingerabdruck der 26 Marken. Auch das
+Abstandshistogramm aus O1-alt zeigte es: 87,1 % statt ~100 % bei 74, mit
+**116 B (= 74 + 42) auf Platz 5**. **Die Antwort lag zum zweiten Mal in einer
+Rechnung, die schon dastand.**
 
 **Erst danach** lohnt sich der MS-ADPCM-Dekoder (reiner TS-Code,
-Node-testbar) — jetzt mit belegten Bereichsgrenzen.
+Node-testbar) — jetzt mit belegten Bereichsgrenzen über die *ganze* Datei.
 
 ## O1-alt — der Weg dorthin (historisch)
 
@@ -148,12 +166,44 @@ Tabelle."* Genau dieser Satz stand nirgends.
 Variable gespiegelt wird und in welche. Der Interpreter schreibt bewusst
 nichts, statt eine Adresse zu raten. 🟡
 
-## O3b — Sektion 7 (Encounter-Tabelle) erschließen (Ziel: S23)
+## O3b — Sektion 7 ✅ erschlossen (2026-08-10)
 
-Durch O3 nicht mehr blockierend, aber weiterhin unerschlossen — und für
-Zufallskämpfe nötig. Standardverfahren: Accounting plus die Strukturkarte
-„Wertevielfalt je Byteposition", also das Verfahren, das bei `audio.fmt` die
-Eintragsgröße freigelegt hat.
+Layout, Bedeutung der Slots und der **Ort** der Daten sind belegt. Vollständig
+in [FINDINGS.md](../tools/realdata-scan/FINDINGS.md), Abschnitt „O3b".
+
+**Wo die Daten liegen — drei Orte, sauber getrennt:** Field-Sektion 7 hält
+*welcher* Kampf *wie oft*; `data/battle/scene.bin` hält, *was* ein Kampf ist
+(Gegner, Geometrie, Kampfort, KI); `enc_w.bin` in `world_us.lgp` dasselbe für
+die Weltkarte. Der **Schnitt der ID-Mengen von Sektion 7 und `enc_w.bin` ist
+0** — Field und Weltkarte teilen sich den Formationsnummernraum
+überschneidungsfrei.
+
+**Layout:** `u8 enabled · u8 rate · u16 standard[6] · u16 special[4] · u16
+padding`, je 24 B, zweimal = 48 B. **702/702 byteexakt.**
+
+**Der Wahrheitstest war nicht die Plausibilität der IDs, sondern eine
+Summenprobe:** Sind die oberen 6 Bit Wahrscheinlichkeitsanteile, muss ihre
+Summe konstant sein. Gemessen **genau ein Wert, 64, in 197/197** belegten
+Tabellen; alle Kontrollen (andere Bit-Splits, verschobene Wortbasis,
+Big-Endian) liefern 19–57 % bzw. 82–84 verschiedene Summen.
+
+**Nullwert-Zweitrechnung war hier entscheidend:** **1207 der 1404 Tabellen
+sind vollständig genullt** (520 der 702 Fields haben keine Zufallskämpfe).
+Genau daran krankte der alte S17-Eintrag, der das Layout schon als ✅ führte —
+seine vier Vorhersagen bestanden 1207 Tabellen trivial.
+
+**Und der naheliegende Referenzschluss taugte nichts:** „Löst jede ID auf?"
+besteht 1083/1083 — aber `id+1` und `id+4` **ebenfalls zu 100 %**, weil 1000
+der 1024 Formationen belegt sind. Der scharfe Test ist der **Kampfort**:
+195/195 einheitlich gegen Kontrollen bei 73–116/195 und Neuziehung **0/195**.
+Verschärft auf die 35 Tabellen, in denen allein `id & 3` entscheidet: **35/35**
+gegen 5–14/35. Damit ist `scene = id >> 2`, `formation = id & 3` gemessen.
+
+**Offen:** `rate`-Formel liegt in der EXE (🔴, Clean-Room); Umschalter auf
+Tabelle 1 nur eingegrenzt (Opcode 0x4B: 14/15 gegen 4/167 und 6/520 — 🔵
+Kandidat, 15 Fields sind kein Beleg); 272 belegte Formationen von keiner der
+drei Quellen erreicht (🟡); **`enc_w.bin`-Satzformat** folgt nicht dem
+Field-Raster und ist ein eigener Posten (🔴).
 
 ## O9 — Operandenlängen ✅ gelöst (2026-08-10)
 
@@ -367,10 +417,10 @@ ist sie ein Migrationsproblem.
 
 | Posten | Session | Blockiert |
 |---|---|---|
-| O1 `audio.fmt` | S23 (vorziehbar) | Soundeffekte |
+| ~~O1 `audio.fmt`~~ | ✅ vollstaendig | — (26 Baenke, audio.dat zu 100,0000 % adressiert) |
 | O2 Musikindex | S23 | korrekte Musikauswahl (Engine läuft ohne) |
 | ~~O3 Kampf-Opcode~~ | ✅ erledigt | — |
-| O3b Sektion 7 | S23 | Zufallskämpfe |
+| ~~O3b Sektion 7~~ | ✅ erschlossen | — (Parser verdrahtet; `rate`-Formel 🔴 in der EXE) |
 | O9 Längentabelle | S20 | 0,22 % Overrun im Interpreter |
 | ~~O4 R4-Sichtprüfung~~ | ✅ abgeschlossen | — (alle B1–B10 entschieden, inkl. Resttafel) |
 | ~~O10 Höhenversatz Figur↔Walkmesh~~ | ✅ gelöst (Resttafel) | — (Modellursprung = Bodenkontakt, 3/3; waagerechte Wurzeltranslation bleibt 🟡) |

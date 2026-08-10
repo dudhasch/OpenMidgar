@@ -28,6 +28,10 @@ export type FieldDiagnosticCode =
   | 'E-MDL-COUNT' // Model-Loader: Modell-/Animationszähler unplausibel
   | 'W-MDL-NAME' // Model-Loader: Dateifeld ohne verwertbaren Modellnamen
   | 'W-MDL-SCALE' // Model-Loader: Skalatext nicht als Zahl lesbar
+  | 'E-ENC-SIZE' // Encounter: Sektion nicht 48 B (2 × 24) — Sektion unbrauchbar
+  | 'W-ENC-PROBSUM' // Encounter: Standardanteile summieren sich nicht auf 64
+  | 'W-ENC-PAD' // Encounter: Padding-Wort nicht genullt
+  | 'W-ENC-FLAG' // Encounter: enabled passt nicht zum Tabelleninhalt
   | 'E-MAPLIST-SIZE'; // maplist: Zähler passt nicht zur Eintragslänge
 
 export type FieldSeverity = 'fatal' | 'error' | 'warning';

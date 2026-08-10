@@ -254,6 +254,47 @@ export interface FieldModelManifest {
   models: FieldModelEntry[];
 }
 
+/**
+ * Ein Slot der Encounter-Tabelle (Sektion 7). Ein u16 trägt **zwei** Werte:
+ * Wahrscheinlichkeitsanteil in den oberen 6 Bit, globale Formations-ID in den
+ * unteren 10 (`& 0x03FF`). `raw == 0` = ungenutzter Slot.
+ */
+export interface FieldEncounterSlot {
+  /** Anteil an 64 (Standardslots) bzw. absoluter Anteil (Sonderslots). ✅ */
+  probability: number;
+  /**
+   * Globale Formationsnummer — dieselbe Nummernebene wie der Operand des
+   * `BATTLE`-Opcodes. ✅ Referenzschluss gegen `scene.bin`:
+   * `scene = id >> 2`, `formation = id & 3`.
+   */
+  formationId: number;
+  /** Unzerlegtes Wort (die 6/10-Teilung bleibt nachvollziehbar). */
+  raw: number;
+}
+
+export interface FieldEncounterTable {
+  /** `enabledRaw != 0`; gemessen genau dann, wenn die Tabelle Inhalt hat. */
+  enabled: boolean;
+  enabledRaw: number;
+  /** 🟡 Begegnungsrate — acht Werte im Bestand, alle Vielfache von 8 (24…240). */
+  rate: number;
+  /** Sechs Standardkämpfe; ihre Anteile summieren sich auf 64. ✅ */
+  standard: FieldEncounterSlot[];
+  /** Vier Sonderanflüge (Rücken-/Seiten-/Zangenangriff, `ENC_SPECIAL_ROLE`). */
+  special: FieldEncounterSlot[];
+  /** Summe der Standardanteile — 64 in allen 197 belegten Tabellen. */
+  probabilitySum: number;
+  /** u16 am Tabellenende; 1404/1404 genullt. */
+  padding: number;
+}
+
+/** Encounter-Sektion (Sektion 7) — Layout realdaten-validiert (702/702). */
+export interface FieldEncounters {
+  schemaVersion: 1;
+  /** Zwei Tabellen à 24 B; Tabelle 1 ist nur in 15 Fields belegt (🟡 Umschalter). */
+  tables: [FieldEncounterTable, FieldEncounterTable];
+}
+
 /** 1-basierte Sektionsnummern des PC-Field-Containers (🟢 Grundstruktur). */
 export const SECTION = {
   SCRIPT: 1,
@@ -282,6 +323,7 @@ export interface FieldBundle {
   triggers?: FieldTriggers;
   palette?: FieldPalette;
   background?: FieldBackground;
+  encounters?: FieldEncounters;
   /** Ohne gültiges Walkmesh ist das Field nicht betretbar (Masterplan 1.5). */
   enterable: boolean;
   diagnostics: FieldDiagnostic[];

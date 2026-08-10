@@ -3,6 +3,7 @@ import { decompressLzsEntry, LzsError, type LzsOptions } from './lzs.js';
 import { SECTION, type FieldBundle } from './nam.js';
 import { parseBackgroundSection } from './sections/background.js';
 import { parseCameraSection } from './sections/camera.js';
+import { parseEncounterSection } from './sections/encounter.js';
 import { parseModelLoaderSection } from './sections/model-loader.js';
 import { parsePaletteSection } from './sections/palette.js';
 import { parseScriptSection } from './sections/script.js';
@@ -125,6 +126,7 @@ export function parseFieldContainer(bytes: Uint8Array, fieldId: string): FieldPa
   trySection(SECTION.TRIGGERS, (d) => parseTriggersSection(d, fieldId, diagnostics), (v) => (bundle.triggers = v));
   trySection(SECTION.PALETTE, (d) => parsePaletteSection(d, fieldId, diagnostics), (v) => (bundle.palette = v));
   trySection(SECTION.BACKGROUND, (d) => parseBackgroundSection(d, fieldId, diagnostics), (v) => (bundle.background = v));
+  trySection(SECTION.ENCOUNTER, (d) => parseEncounterSection(d, fieldId, diagnostics), (v) => (bundle.encounters = v));
 
   bundle.enterable = bundle.walkmesh !== undefined;
   return { ok: true, bundle, diagnostics };

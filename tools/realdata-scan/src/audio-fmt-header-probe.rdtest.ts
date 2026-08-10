@@ -40,8 +40,19 @@ import { describe, expect, it } from 'vitest';
  * werden; täte man es, sähe jede Quote schlagartig schlechter aus, ohne dass
  * die Auslegung falsch wäre. Genau daran ist der zweite Anlauf gescheitert.
  *
- * **Offen bleibt** (🟡, kleiner als vorher): `audio.dat` ist 71.738.528 B
- * groß, referenziert sind davon 23.227.348 B — 32,4 %. Die restlichen 48,5 MB
+ * **NACHTRAG S38 — der Rest ist gelöst, und diese Probe misst die falsche
+ * Datei-Struktur.** Was hier als „Abschlussmarke" gilt, ist nur die
+ * Abschlussmarke der **ersten Bank**. `audio.fmt` ist kein Feld gleich großer
+ * Einträge: Es ist eine Folge von 26 Bänken, jede beendet durch eine
+ * **42 B kurze** Abschlussmarke (`Length == 0`, danach 18 nie beschriebene
+ * WAVEFORMATEX-Bytes mit 0xCD). Dahinter geht es mit 74-B-Sätzen weiter — um
+ * 42 Byte versetzt, weshalb der starre Durchlauf dort Müll sah und abbrach.
+ * Mit der richtigen Regel überdecken 724 Sätze `audio.dat` zu **100 %**.
+ * Siehe `audio-bank-probe.rdtest.ts`. Diese Probe bleibt als Beleg des
+ * 24-B-Vorspanns und der Bank-0-Lückenlosigkeit bestehen.
+ *
+ * **Historischer Stand (überholt):** `audio.dat` ist 71.738.528 B groß,
+ * referenziert sind davon 23.227.348 B — 32,4 %. Die restlichen 48,5 MB
  * werden von dieser Tabelle nicht adressiert.
  *
  * Urheberrecht/Datenschutz: ausschließlich Zähler, Quoten, Wertebereiche.

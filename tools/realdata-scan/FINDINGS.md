@@ -643,3 +643,104 @@ trifft schon zufällig ~6,7 %, eigen wie kontrolliert.
 | **O5 ist geschlossen — als Messergebnis, nicht als Deutung.** Beide Ausgangshypothesen sind widerlegt, die dritte aus den Quellen ebenfalls. Die Frage ist erledigt statt offen | ✅ abgeschlossen |
 | Neue Fehlerklasse **`W-LGP-CHECKBYTE`**, rein warnend, **opt-in** über `ScanOptions.validateCheckByte` (Standard: aus). Sie unterscheidet „Wert im Bestand unbelegt" von „bekannter Wert, falsche Eintragsart" und quarantänisiert nichts — die Regel ist über einen Bestand gemessen, nicht aus dem Format hergeleitet, und darf keinen Import scheitern lassen | ✅ Fehlererkennung nachgeliefert |
 | Die Regel steht als eigenes Modul mit ausgeschriebener Herleitung (`packages/formats-lgp/src/check-byte.ts`); der Fixture-Writer führt sie als **Zweitimplementierung**, damit der Roundtrip zwei unabhängige Formatverständnisse vergleicht statt sich selbst | ✅ Projektstandard gewahrt |
+
+## `audio.fmt` — die 48,5 MB sind adressiert, die Datei ist bankweise (2026-08-10)
+
+O1 galt als gelöst und ließ 67,6 % von `audio.dat` als „unadressiert" offen.
+Das war kein Restproblem, sondern ein Auslegungsfehler: **`audio.fmt` ist kein
+Feld gleich großer Einträge.** Es ist eine Folge von **26 Bänken**; jede Bank
+ist eine Folge von 74-B-Klangsätzen und endet mit einer **42 B kurzen
+Abschlussmarke** (`Length == 0`, `Offset` = Schreibstand in `audio.dat`,
+danach 18 nie beschriebene WAVEFORMATEX-Bytes mit MSVC-Füllmuster `0xCD`).
+Der Durchlauf von O1 hielt die erste dieser Marken für das Dateiende.
+
+| Befund | Status |
+|---|---|
+| **Layout vollständig.** Klangsatz = 24 B Kopf + 18 B `WAVEFORMATEX` + 32 B ADPCM-Zusatz = **74 B**; Abschlussmarke = 24 B Kopf + 18 B = **42 B**. Unterschieden wird am Längenfeld: `Length == 0` ⇒ Abschlussmarke. Der Durchlauf verbraucht `audio.fmt` byteexakt: **724 × 74 + 26 × 42 = 54.668**, Rest **0** | ✅ Formatfakt |
+| **Der Beweis ist wieder das Accounting.** Die 724 Klangsätze überdecken `audio.dat` **lückenlos und überlappungsfrei von 0 bis 71.738.528 — 100,0000 %**: 0 Lücken (0 B), 0 Überlappungen (0 B), 0 außerhalb der Datei. Die letzte Abschlussmarke trägt exakt die Dateigröße | ✅ byteexakt |
+| **Die Kontrollhypothese ist mitgemessen, nicht behauptet.** Derselbe Lauf mit festem 74-B-Raster und Abbruch beim ersten `Length == 0` liefert 198 Einträge und 23.227.348 B = **32,38 %** — exakt der alte Stand. Die Differenz von 48.511.180 B liegt in den Bänken 1..25 | ✅ Gegenhypothese fällt durch |
+| **In den 48,5 MB liegt Audio, keine Füllung.** MS-ADPCM-Prädiktortest über **alle** Blockanfänge (Index < `wNumCoef`): **66.332/66.332 = 100,00 %**. Kontrollen an derselben Satzmenge: Offsets rotiert um 1 → 77,09 %, rotiert um 7 → 58,90 %, Versatz +512 → 26,36 %, Versatz +1 → 6,73 % | ✅ harter Test |
+| **Nullwert-Zweitrechnung, getrennt nach altem und neuem Bereich.** Bank 0 (23.227.348 B, 198 Sätze): 19.731/19.731 = 100 %, Kontrolle rotiert 70,38 %. Bänke 1..25 (48.511.180 B, 526 Sätze): 46.601/46.601 = 100 %, Kontrolle rotiert 79,99 %. Der neue Bereich besteht den Test **genauso gut** wie der längst belegte | ✅ beide Teilmengen |
+| **Keine trivialen Fälle in der gezählten Menge.** Sätze mit `Length == 0` in der Auswertung: **0**. Die 26 Abschlussmarken sind ausgeschlossen und tragen im Formatteil `0xCD` statt Nullen — sie können keine Quote trivial heben. Genau umgekehrt zum ersten Anlauf, wo mitgezählte Füllbytes die Quote auf 28,9 % drückten | ✅ Fallstrick geprüft |
+| **Vier unabhängige Vorhersagen aus dem `WAVEFORMATEX` halten über alle 724 Sätze:** `wSamplesPerBlock` == Microsoft-Formel `((nBlockAlign − 7·ch)·8)/(bits·ch) + 2` **724/724**; `nBlockAlign == 1024 · Kanalzahl` **724/724**; `wNumCoef == 7` mit sieben Koeffizientenpaaren **724/724**; `formatTag 2 / 4 Bit / cbSize 32` **724/724**. Abtastrate ausnahmslos 44100, 716 Sätze mono, 8 stereo | ✅ vier Wege |
+| **Feld +8 ⟺ Feld +20 (`Loop` ⟺ `End`): 724/724**, davon 90 mit Schleife (vorher 20 — die 70 zusätzlichen stecken in den Bänken 1..25) | ✅ zweiter Weg |
+| **Einheit der Schleifenmarken belegt.** `Start`/`End` sind Byteversätze im **dekodierten PCM16-Strom**: durch `2 · Kanalzahl` geteilt liegen beide Marken in **90/90** Fällen innerhalb der Frameanzahl, `Start < End` in 90/90. Die Kontrolle — Marken direkt als Frames gelesen — trifft in **0/90** | ✅ mit Kontrolle |
+| **Wie adressiert wird: flacher Index über alle Klangsätze, Abschlussmarken übersprungen.** Vorhersage „kein `SOUND`-Operand (0xF1) ≥ 724" hält über 702 Fields in **4348/4349 = 99,98 %** (ein einzelner Ausreißer, 1463 — Größenordnung der bekannten Spannen-Fault-Rate). Kontrollmenge (`uint16` unmittelbar vor dem Opcode, gleicher Bytecode, gleiche Verteilung): **71,26 %**. Abstand 28,7 Punkte | ✅ scharfe Vorhersage + Kontrolle |
+| **Die beiden Auslegungen sind getrennt:** Zählte das Spiel die 26 Abschlussmarken als Plätze mit (750 statt 724), müssten Operanden im Band 724..749 vorkommen. Es gibt **0** | ✅ trennt sauber |
+| **Bankbelegung:** 198, 10, 265, 0, 10, 35, 50, 0, 3, 37, 112, 0×8, 4, 0×6 Sätze. 16 der 26 Bänke sind leer und schieben den Schreibstand nicht weiter — das Muster einer Werkzeugkette, die je Eingabesatz eine Abschlussmarke schreibt, auch wenn nichts anzuhängen war | 🔵 Deutung |
+| **Was die Bänke fachlich bedeuten und wer sie auswählt, steht in keiner der beiden Dateien.** Der `SOUND`-Operand adressiert flach über alle Bänke hinweg; eine Bankauswahl kommt in den Felddaten nicht vor | 🔴 offen |
+| **Feld +12 (in FF7SND „Count") ist in 724/724 Sätzen 0.** Die Benennung trägt hier nichts; das Feld bleibt unbelegt | 🔴 offen |
+| **Negativbefund zu `nAvgBytesPerSec`:** Nur **104/724** tragen den rechnerisch richtigen Wert (22179 mono / 44359 stereo). **620** tragen `21 × nBlockAlign` (21504 bzw. 43008) — ein gerundeter Wert des Erzeugerwerkzeugs. Wer daraus Spieldauern ableitet, rechnet ~3 % falsch; zu nehmen sind `nBlockAlign` und `wSamplesPerBlock` | ⚠️ Falle |
+| **Die Lehre — derselbe Fehlertyp wie bei O1, in derselben Datei, zum zweiten Mal.** `54.668 mod 74 = 56`: Ein reines 74-B-Raster kann `audio.fmt` gar nicht füllen. Die 56 unerklärten Bytes wurden als „Rest" abgelegt — dabei sind sie genau `26 × 42 mod 74`, der Fingerabdruck der 26 Abschlussmarken. Dasselbe sagte das Abstandshistogramm aus O1-alt: 87,1 % bei Abstand 74 statt ~100 %, und auf Platz 5 stand **116 B mit 0,7 %** — das ist `74 + 42`, die Marke selbst. Beide Zahlen standen seit O1-alt im Protokoll | ⚠️ die Antwort lag in einer Rechnung, die schon dastand |
+
+**Umgesetzt.** `packages/audio/src/audio-fmt.ts` liest die Bankstruktur und
+meldet jeden unverbuchten Rest als Diagnose (`E-AFMT-REST`, `E-AFMT-NOTERM`,
+`E-AFMT-TRUNC`) statt ihn zu verschweigen; `auditAudioDat()` ist der
+Wahrheitstest als Funktion. Composer in
+`tools/fixture-gen/src/audio-composer.ts` (Dualitätsprinzip) — er füllt die
+Abschlussmarken absichtlich mit `0xCD`, damit die Fixtures denselben Fallstrick
+tragen wie die Realdaten. Proben:
+`tools/realdata-scan/src/audio-bank-probe.rdtest.ts` und
+`audio-sound-id-probe.rdtest.ts`. **Kein Audiodekoder** — der bleibt der
+nächste Schritt, jetzt mit vollständigen Bereichsgrenzen.
+
+## O3b — Sektion 7 erschlossen: Encounter-Tabelle (2026-08-10)
+
+Der S17-Eintrag oben nannte das Layout bereits ✅. Seine vier Vorhersagen
+(48 B, Padding genullt, `enabled` zweiwertig, IDs < 1024) waren **notwendig,
+aber nicht hinreichend** — jede einzelne besteht **1207 von 1404 Tabellen
+trivial, weil sie vollständig genullt sind**, und keine prüft eine
+Feldzuordnung. O3b ersetzt sie durch eine Accounting-Vorhersage und einen
+Referenzschluss. Proben:
+[`encounter-layout`](src/encounter-layout.rdtest.ts) ·
+[`encounter-closure`](src/encounter-closure.rdtest.ts).
+
+### Wo die Encounter-Daten liegen
+
+| Befund | Status |
+|---|---|
+| **Die Zufallskampf-Information ist auf drei Orte verteilt, und die Aufteilung ist gemessen.** Field-Sektion 7 hält *welcher* Kampf *wie oft* vorkommt; `data/battle/scene.bin` hält, *was* ein Kampf ist (Gegner, Formationsgeometrie, Kampfort, KI); `enc_w.bin` in `world_us.lgp` hält dieselbe Frage für die Weltkarte. Der Field-Container trägt **nichts** darüber hinaus — insbesondere keinen Kampfort, weil der aus `scene.bin` kommt | ✅ belegt |
+| **Field und Weltkarte teilen sich den Formationsnummernraum überschneidungsfrei.** Sektion 7 erreicht 434 Formationen, `enc_w.bin` 200 — der **Schnitt ist 0**. Sektion 7 fasst **keine** ID unter 256 an (0/434, Szenenbereich 64…244), `enc_w.bin` dagegen 193 von 200 unter 256 | ✅ zwei Wege |
+| **Negativbefund: `enc_w.bin` folgt NICHT dem Satzformat der Field-Sektion.** Auf demselben 24-B-Raster gelesen hält die Summenregel dort nur in 19 von 71 belegten Sätzen (in Sektion 7: 197/197). Die Weltkartentabelle ist ein eigener Posten | 🔴 offen (außerhalb O3b) |
+| **Ausgesprochene Suchmengen-Annahme** (Pflicht seit dem O3-Fehlschlag): „Die *Zufalls*kämpfe eines Fields stehen vollständig in Sektion 7 dieses Fields, und dort steht nichts anderes." Prüfbar, weil sie erzwingt, dass das Layout die Sektion **byteexakt aufbraucht** — mitgeprüft, hält | ✅ Annahme belegt |
+
+### Das Layout — und wodurch es belegt ist
+
+```text
+u8  enabled      0/1  · u8  rate
+u16 standard[6]  Wahrscheinlichkeit << 10 | Formations-ID & 0x03FF
+u16 special[4]   dito · u16 padding                       = 24 B je Tabelle
+2 Tabellen                                                = 48 B je Field
+```
+
+| Befund | Status |
+|---|---|
+| **Accounting: 702/702 Fields exakt 48 B, kein Rest.** 1404 Tabellen, Padding in **1404/1404** genullt, `enabled` genau dann 1, wenn die Tabelle Inhalt trägt (**1404/1404**) | ✅ byteexakt |
+| **Der Wahrheitstest ist die Summenprobe, nicht die Plausibilität der IDs.** Sind die oberen 6 Bit Wahrscheinlichkeitsanteile, MUSS ihre Summe über die sechs Standardslots konstant sein. Gemessen: **genau ein Wert, 64, in 197/197 belegten Tabellen** | ✅ Formatfakt |
+| **Jede Kontrolle fällt durch.** Bit-Split `>>8`/`>>9`/`>>11`/`>>12`: häufigste Summe nur 19,3 % / 31,0 % / 56,9 % / 55,3 %. Wortbasis um 1 bzw. 3 Byte verschoben: **84 bzw. 82 verschiedene Summen** statt einer. Big-Endian: 84 | ✅ Kontrolle trennt |
+| **Nullwert-Zweitrechnung — hier der entscheidende Schritt.** **1207 der 1404 Tabellen sind vollständig genullt; 520 der 702 Fields haben gar keine Zufallskämpfe.** Jede Quote oben ist ohne sie gerechnet; mit ihnen stünde überall 100 %, ohne dass irgendetwas belegt wäre | ⚠️ methodische Pflicht |
+| **Zweite, aus dem Layout ERZWUNGENE Vorhersage hält:** 6 Bit fassen höchstens 63, die Summe muss 64 sein — also kann keine belegte Tabelle mit einem einzigen Standardkampf auskommen. Gemessen **197/197**. Die Vorhersage fiel vor der Messung | ✅ zweiter Weg |
+
+### Referenzschluss gegen `scene.bin`
+
+| Befund | Status |
+|---|---|
+| **Der naheliegende Test taugt nichts — und das ist selbst ein Befund.** „Löst jede ID auf?" besteht **1083/1083** — aber `id+1` und `id+4` bestehen ihn **ebenfalls zu 100 %**, weil 1000 der 1024 Formationen belegt sind. Ein Test, den die Kontrolle genauso besteht, misst nichts | ⚠️ Lehre |
+| **Der scharfe Test ist der Kampfort.** Die Zufallskämpfe eines Fields müssen alle am selben Ort spielen. Gemessen: **195/195 Tabellen einheitlich**. Kontrollen: `id+1` 114/195, `id−1` 73/195, `id+4` 116/195, `id+64` 98/195; Neuziehung aus derselben Grundgesamtheit **0/195** | ✅ Referenzschluss |
+| **Verschärfung belegt auch die unteren zwei Bit.** Beschränkt auf die 35 Tabellen, in denen allein `id & 3` entscheidet: Kandidat **35/35**, Kontrollen `+1` 9/35, `+2` 5/35, `+3` 8/35, `−1` 14/35. Damit ist `scene = id >> 2`, `formation = id & 3` gemessen, nicht aus 256 × 4 = 1024 geraten | ✅ Sub-Index belegt |
+
+### Die vier Sonderslots — Bedeutung gemessen
+
+| Befund | Status |
+|---|---|
+| **Sonderslots referenzieren Formationen mit einem Anflugbit, das Standardslots nicht tragen.** Von 328 Standard-IDs trägt genau **eine** ein Bit aus `setup u16@18 & 0x07`. Je Slot: `special[0]` Bit 0x02 in 51/52, `special[1]` 49/50, `special[2]` 10/11, `special[3]` Bit 0x04 in **36/36** | ✅ trennt sauber |
+| **Geometrische Gegenprobe bestätigt die Benennung.** Von 328 Standardformationen stehen **327 vollständig vor** der Gruppe, keine dahinter. Von 106 Sonderformationen stehen **59 vollständig dahinter** (Rückenangriff) und **44 gleichzeitig davor und dahinter** (Zangenangriff). Zwei unabhängige Merkmale — Flagbit und Aufstellung | ✅ zwei Wege |
+
+### Was offen blieb
+
+| Befund | Status |
+|---|---|
+| **`rate` bleibt unerschlossen.** Acht Werte im Bestand (24, 32, 40, 48, 72, 128, 192, 240 — alle Vielfache von 8). Die Schrittzähler-Formel steht in der EXE; Disassemblieren ist ausgeschlossen (Clean-Room). Der Wert wird roh durchgereicht | 🔴 nicht auflösbar ohne zweite Quelle |
+| **Wer auf Tabelle 1 umschaltet, ist nicht belegt — aber stark eingegrenzt.** Nur **15 von 702** Fields haben beide Tabellen belegt. Differenzielle Opcode-Häufigkeit liefert **0x4B**: in **14/15** Fields mit zwei Tabellen, aber nur **4/167** mit einer und **6/520** ohne. 15 Fields sind zu wenig für einen Beleg | 🔵 Kandidat, nicht belegt |
+| **Deckungsrechnung geht nicht auf:** Von 1000 belegten Formationen erreichen Sektion 7 (434) und die literalen `BATTLE`-Operanden (118) zusammen 469 nicht; `enc_w.bin` deckt davon 197, es bleiben **272**. Kandidaten: `BATTLE` mit Bankvariable statt Literal, Weltkartenskripte, Minispiele | 🟡 Restfrage |
+| Drei Slots tragen eine ID bei Anteil 0 — ein Kampf, der nie ausgelöst werden kann. Der Parser reicht ihn durch und zieht ihn nie | 🟡 Kuriosum |
