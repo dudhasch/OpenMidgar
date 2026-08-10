@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <title>WebMidgar — S11 Field-Durchstich</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <style>
+    :root {
+      /* Safe-Area als CSS-Variablen — der Layout-Resolver (S27) liest sie aus. */
+      --sat: env(safe-area-inset-top, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+    }
     body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 72rem; padding: 0 1rem; }
     canvas { border: 1px solid #888; image-rendering: pixelated; display: block; }
     button, select { font: inherit; padding: .3rem .8rem; margin-right: .4rem; }

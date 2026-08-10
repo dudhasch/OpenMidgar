@@ -26,6 +26,7 @@ export default defineConfig({
       '@webmidgar/render-actor': r('../../packages/render-actor/src/index.ts'),
       '@webmidgar/interpreter-debug': r('../../packages/interpreter-debug/src/index.ts'),
       '@webmidgar/license-steam': r('../../packages/license-steam/src/index.ts'),
+      '@webmidgar/input': r('../../packages/input/src/index.ts'),
       '@webmidgar/fixture-gen': r('../../tools/fixture-gen/src/index.ts'),
       '@webmidgar/nfr-run': r('../../tools/nfr-run/src/index.ts'),
       '@webmidgar/pipeline': r('../../packages/pipeline/src/index.ts'),

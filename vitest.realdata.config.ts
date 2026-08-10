@@ -20,6 +20,7 @@ export default defineConfig({
       '@webmidgar/modding': r('./packages/modding/src/index.ts'),
       '@webmidgar/audio': r('./packages/audio/src/index.ts'),
       '@webmidgar/interpreter': r('./packages/interpreter/src/index.ts'),
+      '@webmidgar/input': r('./packages/input/src/index.ts'),
       '@webmidgar/formats-model': r('./packages/formats-model/src/index.ts'),
       '@webmidgar/render-actor': r('./packages/render-actor/src/index.ts'),
       '@webmidgar/interpreter-debug': r('./packages/interpreter-debug/src/index.ts'),
