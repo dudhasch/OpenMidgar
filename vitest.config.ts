@@ -26,6 +26,7 @@ export default defineConfig({
       '@webmidgar/telemetry': r('./packages/telemetry/src/index.ts'),
       '@webmidgar/io': r('./packages/io/src/index.ts'),
       '@webmidgar/cache': r('./packages/cache/src/index.ts'),
+      '@webmidgar/license-steam': r('./packages/license-steam/src/index.ts'),
       '@webmidgar/fixture-gen': r('./tools/fixture-gen/src/index.ts'),
       '@webmidgar/nfr-run': r('./tools/nfr-run/src/index.ts'),
     },

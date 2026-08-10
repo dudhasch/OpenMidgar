@@ -64,11 +64,13 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 | `packages/interpreter-debug` | Event-Timeline (JSON, asset-frei), Breakpoints + Einzelschritt |
 | `packages/formats-model` | Modellkette: hrc/rsd/p/tex/a → Skeleton/Binding/Mesh/Textur/Clip (Index-Flattening, Degradierung) |
 | `packages/render-actor` | Bindpose + Posenmathematik (Referenz), Animationsbindung, Three-Actor, Kapsel-Fallback |
+| `packages/license-steam` | Opt-in-Steam-Besitznachweis (Client): Popup/postMessage + Polling-Fallback, DOM über injizierte Interfaces |
 | `tools/calibration` | Kalibrierentscheidungen (FOV-Basis, Depth, Letterbox) als versioniertes Artefakt |
 | `tools/realdata-scan` | Diagnose-Scan gegen lokale Installation (`npx vitest run --config vitest.realdata.config.ts`) |
 | `tools/fixture-gen` | Eigenständige Writer für Golden Fixtures: LGP, Field-Composer, Script-Assembler + Defekt-Mutationen |
 | `tools/nfr-run` | NFR-Sollwerte als Daten, synthetische Fake-Installation, Messkampagne, Soak-Test, Replay-Vektoren, Math-Fingerprint, Release-Fingerprints |
-| `apps/demo` | Diagnose- und Kalibrierseiten: Import, Kamera/Tile-Depth, Walkmesh, Actor, Field-Hintergrund, NFR-Messlauf, R9-Digestvergleich, Math-Fingerprint, Beta-Seite |
+| `tools/steam-auth-relay` | Selbst-hostbarer Auth-Relay: Steam OpenID 2.0 (check_authentication, Nonce-Dedup) + Besitzprüfung (CheckAppOwnership mit GetOwnedGames-Fallback) |
+| `apps/demo` | Diagnose- und Kalibrierseiten: Import, Kamera/Tile-Depth, Walkmesh, Actor, Field-Hintergrund, NFR-Messlauf, R9-Digestvergleich, Math-Fingerprint, Beta-Seite, Steam-Lizenznachweis |
 
 ## Kommandos
 
