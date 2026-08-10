@@ -63,7 +63,11 @@ export function effectiveTileRef(
   tile: BackgroundTile,
   layerIndex: number,
 ): { x: number; y: number; textureId: number } {
-  if (tile.blending > 0 && layerIndex > 0) {
+  // `textureId2 > 0` gehört zur Bedingung: Ein Misch-Tile OHNE zweite
+  // Texturseite liest sonst die src2-Koordinate auf Seite 0 — also eine
+  // beliebige fremde Region. Das erzeugte grüne Flächen in `sinbil_1`,
+  // `min71` und `ujun_w` (Runde 3). Kujatas Renderer prüft dieselbe Bedingung.
+  if (tile.blending > 0 && layerIndex > 0 && tile.textureId2 > 0) {
     return { x: tile.srcX2, y: tile.srcY2, textureId: tile.textureId2 };
   }
   return { x: tile.srcX, y: tile.srcY, textureId: tile.textureId };

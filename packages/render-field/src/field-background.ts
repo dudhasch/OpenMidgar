@@ -117,15 +117,22 @@ export function buildFieldBackground(
     if (t.param !== 0) (zustaende.get(t.param) ?? zustaende.set(t.param, new Set()).get(t.param)!).add(t.state);
   }
 
-  // Deckend zuerst (Tiefe regelt dort die Ordnung), gemischte danach in
-  // Bildordnung: Layer aufsteigend, innerhalb des Layers hinten (großes z)
-  // zuerst — gemischte Stapel schreiben keine Tiefe, ihre Reihenfolge IST
-  // die Ordnung (F32).
+  /**
+   * Zeichenordnung **layerweise** (F32, nachgebessert nach Runde 3).
+   *
+   * Die erste Fassung zog ALLE gemischten Stapel ans Ende — damit lag eine
+   * Wasserfläche aus Layer 1 über den deckenden Kacheln der Layer 2 und 3
+   * (`sbwy4_6`, `ghotel`, `wcrimb_1`). Richtig ist die Bildordnung des
+   * Originals: Layer aufsteigend, darin hinten (großes z) zuerst, und erst
+   * ganz innen deckend vor gemischt. Deckende Kacheln schreiben Tiefe und
+   * dürfen später gezeichnete gemischte Flächen überdecken; gemischte
+   * schreiben keine und stören die Ordnung ihrer eigenen Ebene nicht.
+   */
   const sortiert = [...stapel.values()].sort(
     (a, b) =>
-      Number(a.blend !== 'opaque') - Number(b.blend !== 'opaque') ||
       a.layer - b.layer ||
-      b.zMax - a.zMax,
+      b.zMax - a.zMax ||
+      Number(a.blend !== 'opaque') - Number(b.blend !== 'opaque'),
   );
 
   const meshes: Mesh[] = [];

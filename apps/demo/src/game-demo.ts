@@ -404,6 +404,8 @@ function menuTick(frame: ActionFrame): void {
 // --- Dialog-Overlay: echter Text aus der Field-Stringtabelle + Auswahl ------------
 
 let dialogSel = 0;
+/** Schreibmaschine: bereits sichtbare Zeichen des laufenden Dialogs. */
+let dialogZeichen = 0;
 
 function updateDialogOverlay(): void {
   const pending = fieldSession?.pendingDialogs() ?? [];
@@ -414,13 +416,25 @@ function updateDialogOverlay(): void {
     return;
   }
   const first = pending[0]!;
-  if (dialogVisibleId !== first.requestId) dialogSel = 0;
+  if (dialogVisibleId !== first.requestId) {
+    dialogSel = 0;
+    dialogZeichen = 0; // neuer Dialog ⇒ Schreibmaschine von vorn
+  }
   dialogVisibleId = first.requestId;
   const text = fieldSession!.dialogText(first.dialogId) ?? `[Dialog ${first.dialogId} nicht dekodierbar]`;
-  const lines = text.split('\n');
+
+  /**
+   * Schreibmaschine: ein Zeichen je Takt, wie im Original. Zeilenumbrüche
+   * zählen nicht mit — sonst entstünde eine sichtbare Pause an jedem
+   * Zeilenende. Ein Tastendruck füllt den Rest sofort auf (s. `dialogTick`).
+   */
+  const sichtbar = dialogFertig(text) ? text : teiltextBis(text, dialogZeichen);
+  const lines = sichtbar.split('\n');
+  const gesamtZeilen = text.split('\n');
   const hatAuswahl = first.firstChoice !== null && first.lastChoice !== null;
-  const html = lines
-    .map((line, i) => {
+  const html = gesamtZeilen
+    .map((_, i) => {
+      const line = lines[i] ?? '';
       if (hatAuswahl && i >= first.firstChoice! && i <= first.lastChoice!) {
         const sel = i - first.firstChoice! === dialogSel ? ' sel' : '';
         return `<div class="choice${sel}">${escapeHtml(line)}</div>`;
@@ -432,21 +446,59 @@ function updateDialogOverlay(): void {
   dialogOverlayEl.classList.add('visible');
 }
 
+/** Anzahl darstellbarer Zeichen eines Textes (Umbrüche zählen nicht mit). */
+function zeichenZahl(text: string): number {
+  return text.length - (text.match(/\n/g)?.length ?? 0);
+}
+
+function dialogFertig(text: string): boolean {
+  return dialogZeichen >= zeichenZahl(text);
+}
+
+/** Text bis zum n-ten darstellbaren Zeichen, Umbrüche bleiben erhalten. */
+function teiltextBis(text: string, n: number): string {
+  let übrig = n;
+  let out = '';
+  for (const ch of text) {
+    if (ch === '\n') {
+      out += ch;
+      continue;
+    }
+    if (übrig <= 0) break;
+    out += ch;
+    übrig--;
+  }
+  return out;
+}
+
 function dialogTick(frame: ActionFrame): void {
   if (dialogVisibleId === null || !fieldSession) return;
   const pending = fieldSession.pendingDialogs();
   const first = pending.find((d) => d.requestId === dialogVisibleId);
   if (!first) return;
+  const text = fieldSession.dialogText(first.dialogId) ?? '';
+  const fertig = dialogFertig(text);
+  // Schreibmaschine: ein Zeichen je Takt, solange der Text läuft.
+  if (!fertig) dialogZeichen++;
+
   const choiceCount =
     first.firstChoice !== null && first.lastChoice !== null ? first.lastChoice - first.firstChoice + 1 : 0;
-  if (choiceCount > 0) {
+  // Die Auswahl ist erst bedienbar, wenn der Text vollständig steht — sonst
+  // wählte man in einem Fenster, das die Optionen noch gar nicht zeigt.
+  if (choiceCount > 0 && fertig) {
     if (frame.pressed.includes('up')) dialogSel = (dialogSel + choiceCount - 1) % choiceCount;
     if (frame.pressed.includes('down')) dialogSel = (dialogSel + 1) % choiceCount;
   }
   if (frame.pressed.includes('ok')) {
+    if (!fertig) {
+      // Erster Druck füllt den Text sofort auf, statt den Dialog zu schließen.
+      dialogZeichen = zeichenZahl(text);
+      return;
+    }
     fieldSession.resolveDialog(dialogVisibleId, choiceCount > 0 ? dialogSel : 0);
     dialogVisibleId = null;
     dialogSel = 0;
+    dialogZeichen = 0;
   }
 }
 
