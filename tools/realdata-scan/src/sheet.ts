@@ -1,7 +1,7 @@
 import { IndexService } from '@webmidgar/io';
 import {
   parseA, parseHrc, parseP, parseRsd, parseTex,
-  type AnimationClipSource, type MeshSource, type Skeleton, type TextureSource,
+  type AnimationClipSource, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource,
 } from '@webmidgar/formats-model';
 import { parseFieldEntry, splitAnimationName } from '@webmidgar/formats-field';
 import { ff7ToScene } from '@webmidgar/convert';
@@ -85,6 +85,15 @@ export interface RasterOpt {
    * dadurch nicht mehr um einzelne Pixel streiten.
    */
   aufkleberVersatz?: boolean;
+  /**
+   * **Festes Sichtfenster statt Einpassung.** Ohne dieses Feld skaliert jede
+   * Zelle auf ihren eigenen Inhalt — für Farb- und Formfragen richtig, für
+   * **Lagefragen fatal**: Eine Figur, die relativ zum Boden nach oben rutscht,
+   * würde von der Einpassung stillschweigend wieder zentriert, und die Tafel
+   * zeigte in jeder Zelle dasselbe Bild. Wer Höhenlagen vergleicht, muss allen
+   * Varianten eines Modells dasselbe Fenster geben.
+   */
+  fenster?: { cx: number; cy: number; halbHoehe: number };
 }
 
 /** Orthographische Frontansicht, Tiefenpuffer, Textur- oder Vertexfarbe. */
@@ -103,8 +112,16 @@ export function rasterize(tris: Dreieck[], opt: RasterOpt = {}): Buffer {
     if (p[2] < minZ) minZ = p[2];
     if (p[2] > maxZ) maxZ = p[2];
   }
-  const s = Math.min((W - 16) / Math.max(1e-6, maxX - minX), (H - 16) / Math.max(1e-6, maxY - minY));
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  let s: number, cx: number, cy: number;
+  if (opt.fenster) {
+    s = (H - 16) / Math.max(1e-6, 2 * opt.fenster.halbHoehe);
+    cx = opt.fenster.cx;
+    cy = opt.fenster.cy;
+  } else {
+    s = Math.min((W - 16) / Math.max(1e-6, maxX - minX), (H - 16) / Math.max(1e-6, maxY - minY));
+    cx = (minX + maxX) / 2;
+    cy = (minY + maxY) / 2;
+  }
   const scr = (p: Vec3): Vec3 => [W / 2 + (p[0] - cx) * s, H / 2 - (p[1] - cy) * s, p[2]];
 
   // Der Versatz muss klein gegen echte Tiefenunterschiede und gross gegen den
@@ -178,10 +195,24 @@ export interface Optionen {
   flipU: boolean;
   /** Vertexfarb-Permutation; null = Texturen verwenden. */
   vertexPerm: ((r: number, g: number, b: number) => Vec3) | null;
+  /**
+   * Abweichender Frame. Ohne Angabe Frame 0.
+   *
+   * Trägt die B3- und B4-Gegenhypothesen: Beide lassen sich als **veränderter
+   * Frame** ausdrücken (Wurzelhälften vertauscht bzw. Rotationsblöcke
+   * umsortiert), statt die Posenmathematik zu duplizieren. Damit prüft die
+   * Tafel denselben `computePose`, den auch die Produktion benutzt — eine
+   * zweite Posenimplementierung könnte sonst unbemerkt abweichen und die
+   * Urteile wären nicht auf den Renderpfad übertragbar.
+   */
+  frame?: AnimationFrame;
+  /** Höhenversatz in Szenenkoordinaten, nach ADR-009 aufgeschlagen (B7). */
+  versatzY?: number;
 }
 
 export function dreiecke(m: Modell, opt: Optionen): Dreieck[] {
-  const frame = m.clip.frames[0]!;
+  const frame = opt.frame ?? m.clip.frames[0]!;
+  const dy = opt.versatzY ?? 0;
   const poses = computePose(m.skeleton, frame, true);
   const perm = PALETTEN[opt.palette]!;
   const cache = new Map<TextureSource, Bild>();
@@ -210,7 +241,8 @@ export function dreiecke(m: Modell, opt: Optionen): Dreieck[] {
             const mp = transformPoint(mat, [
               mesh.positions[vi * 3]!, mesh.positions[vi * 3 + 1]!, mesh.positions[vi * 3 + 2]!,
             ]);
-            p.push(ff7ToScene(mp) as Vec3);
+            const sp = ff7ToScene(mp) as Vec3;
+            p.push([sp[0], sp[1] + dy, sp[2]]);
             const u = mesh.uvs[vi * 2] ?? 0;
             const v = mesh.uvs[vi * 2 + 1] ?? 0;
             uv.push([opt.flipU ? 1 - u : u, opt.flipV ? 1 - v : v]);
@@ -365,7 +397,7 @@ export function html(faelle: Fall[], opt: TafelOpt): string {
   const abschnitte = gruppen.map((g) => {
     const eigene = faelle.filter((f) => f.gruppe === g);
     const karten = eigene.map((f) => `
-      <figure data-id="${f.id}" data-gruppe="${f.gruppe}" data-variante="${f.variante}">
+      <figure data-id="${f.id}" data-gruppe="${f.gruppe}" data-variante="${f.variante}" data-detail="${f.detail.replace(/"/g, '&quot;')}">
         <img src="data:image/png;base64,${f.png.toString('base64')}" width="${W}" height="${H}" alt="${f.id}">
         <figcaption><b>${f.id}</b> — ${f.variante}<br><span class="d">${f.detail}</span></figcaption>
         <div class="wahl">
@@ -442,6 +474,10 @@ function sammeln() {
       id: k.dataset.id,
       gruppe: k.dataset.gruppe,
       variante: k.dataset.variante,
+      // Die Kennzahlen gehören ins JSON, nicht nur ins Bild: Ohne sie ist aus
+      // einem Urteil zwar die gewählte Variante ablesbar, aber nicht der Wert,
+      // den sie trägt — und genau der wird hinterher zur Regel.
+      detail: k.dataset.detail || '',
       urteil: gewaehlt ? gewaehlt.value : 'offen',
       notiz: notiz,
     };
