@@ -234,6 +234,13 @@ export interface AFrameSpec {
 
 export interface ASpec {
   frames: AFrameSpec[];
+  /**
+   * Rotationsreihenfolge als drei Bytes (0 = alpha/X, 1 = beta/Y, 2 = gamma/Z).
+   * Vorgabe [1, 0, 2] = YXZ — das ist der Wert, den **alle** 3209 echten
+   * `.a`-Dateien tragen (realdaten-belegt, Kontrollversätze bei exakt 0).
+   * Abweichende Werte sind nur für Defekt-Fixtures gedacht.
+   */
+  rotationOrder?: [number, number, number] | undefined;
 }
 
 export function composeA(spec: ASpec): Uint8Array {
@@ -244,6 +251,11 @@ export function composeA(spec: ASpec): Uint8Array {
   view.setUint32(0, 1, true); // version
   view.setUint32(4, nFrames, true);
   view.setUint32(8, nBones, true);
+  const order = spec.rotationOrder ?? [1, 0, 2];
+  bytes[12] = order[0];
+  bytes[13] = order[1];
+  bytes[14] = order[2];
+  // Byte 15 bleibt 0 — in allen 3209 echten Dateien genullt.
   let o = 36;
   const putVec = (v: Vec3f): void => {
     view.setFloat32(o, v[0], true);

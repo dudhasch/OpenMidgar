@@ -131,7 +131,10 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
           }
           if (absV < nVertexColors) {
             const co = offVertexColors + absV * 4;
-            // Ablage BGRA → RGBA (🟡).
+            // Ablage BGRA → RGBA. 🟢 Sichtgeprüft (B6a, 2026-08-10): An zwei
+            // figürlichen Modellen mit abgeschalteten Texturen wurde BGRA
+            // einstimmig bestätigt; unter RGBA werden Haare blau und
+            // Kleidung weinrot.
             colors.push(bytes[co + 2]!, bytes[co + 1]!, bytes[co]!, bytes[co + 3]!);
           } else {
             colors.push(255, 255, 255, 255);

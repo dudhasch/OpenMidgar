@@ -375,6 +375,8 @@ Vertragsregeln: (1) Runtime konsumiert **nur** diese Klassen, nie Rohformate. (2
 
 🟡 `Zu validieren`: Mobile-Zahlen sind Setzungen und werden nach erstem Geräteprofiling (mittleres Android-Gerät, iOS Safari) nachjustiert; Safari-Besonderheiten (FSA-API-Teilabdeckung, Worker-Module-Support-Historie) benötigen eine eigene Kompatibilitätsmatrix.
 
+**Messstand S20 (2026-08-10):** Alle Desktop-Zeilen sind gemessen und eingehalten — Belege, Etappenaufteilung und die eine verfehlte Variante (ungestückelter GPU-Upload, siehe ADR-021) im [NFR-Messbericht](NFR-BERICHT-S20.md). Die Mobile-Spalte ist unverändert **ungemessen** (ADR-019). Die automatisierten Läufe liegen in `tools/nfr-run` (Sollwerte als Daten, Fake-Installation, Soak) und `tools/realdata-scan/src/nfr-desktop.rdtest.ts`.
+
 ---
 
 # Phase 3: Field-System, Kameraprojektion und Walkmesh-Mathematik
@@ -679,9 +681,14 @@ Dialog-Record (`dialogues[]`): `{field, dialogueIndex, textKey → Ersetzungstex
 | ADR-007 | Mods rein deklarativ, kein Runtime-Code; Script-Patches als taxonomie-basierte Mnemonics mit guardHash | JS-Plugin-API; Rohbyte-Patches | Sicherheit + Versionstoleranz; geringere Ausdrucksstärke als Code-Mods | Akzeptiert |
 | ADR-008 | Cache-Keys enthalten Quell-Fingerprint + Parser-Version; Migration = Reparse statt In-place | Datenmigration je Schemaänderung | Einfachheit, Korrektheit; gelegentliche Reparse-Kosten nach Updates | Akzeptiert |
 | ADR-009 | Eine zentrale Koordinatenkonvertierung; Verbot lokaler Achsen-Flips | Subsystemlokale Konvertierung | Der historisch häufigste Portierungsfehler wird strukturell ausgeschlossen | Akzeptiert |
-| ADR-010 | WASM nur nach Profiling und nur für LZS/Texturkonvertierung | WASM-first für alle Parser; kein WASM | Geringere Komplexität im MVP; Option bleibt offen | Vorgeschlagen |
+| ADR-010 | **Kein WASM** — weder für LZS noch für Texturkonvertierung. Entschieden in S20 anhand des Realdaten-Lastprofils: beide Kandidaten machen 79,4 % der Wechselarbeit aus, aber diese Arbeit kostet nur 2,0 % des 500-ms-Budgets (p95 10,12 ms über 702 Fields). Neubewertungsbedingungen in [ADR-S20-HAERTUNG.md](ADR-S20-HAERTUNG.md) | WASM-first für alle Parser; WASM nur für die Hotspots | Eine Toolchain, ein LZS-Dekoder im Produktpfad; die Option bleibt an messbare Auslöser gebunden | **Verworfen** |
 | ADR-011 | Battle-System ist Post-MVP; Battle-Opcode liefert definierten Stub-Vertrag (sofortige Rückkehr mit konfigurierbarem Ergebnis) | Battle im MVP | Spielbarer Field-Kern früher erreichbar; Story-Progression durch Stub möglich | Akzeptiert |
 | ADR-012 | Audio (AKAO-abgeleitete Formate) Post-MVP; Audio-Opcodes werden geparst und als Ereignisse geloggt | Audio im MVP | Scope-Kontrolle; Timeline zeigt Audio-Trigger bereits für spätere Integration | Akzeptiert |
+| ADR-019 | Mobile-NFRs bleiben ungemessen (kein Referenzgerät); R7 offen | Zahlen aus Emulation ableiten | Ehrliche Lücke statt Scheinmessung; Nachhol-Auslöser benannt | Akzeptiert (Restrisiko) |
+| ADR-020 | R9 nur innerhalb V8 belegt (Node 22, Chromium 148, Chromium 151); Firefox/WebKit ungeprüft — inkl. Fixpoint-Härtungsplan | Freigabe ohne Cross-Engine-Nachweis | Ursachenklasse behoben (Winkelquantisierung, sqrt statt hypot); Restexposition benannt | Akzeptiert (Restrisiko) |
+| ADR-021 | GPU-Uploads werden gestückelt: Atlasseiten nie in einem `texImage2D`, sondern in Streifen ≤ 2048 × 256 je Frame | Ganze Seite je Upload | Frame-Budget von 2 ms wird eingehalten (1,0 ms p95 statt 5,4 ms); Bildaufbau über bis zu 8 Frames | Akzeptiert |
+| ADR-022 | R5-Matrix aus einer Installation (57 Archive, 5 registrierte Fingerprints) statt aus einer Community-Beta | Beta abwarten | Trennschärfe in beide Richtungen belegt; Stichprobe der Größe 1 bleibt Restrisiko bis 1.0 | Akzeptiert (Restrisiko) |
+| ADR-023 | GPU-Registry existiert als Messmodell in `tools/nfr-run`, nicht in der Renderschicht | Registry vorziehen, bevor es GPU-Ressourcen gibt | Lebenszyklus belegt (500/500 Erwerbe/Freigaben, exakte Rückkehr auf 0); Promotion mit der Renderer-Integration | Akzeptiert (Restrisiko) |
 
 ## Risiken und offene Forschung
 
@@ -691,11 +698,11 @@ Dialog-Record (`dialogues[]`): `{field, dialogueIndex, textKey → Ersetzungstex
 | P0 | R2: Tile-Depth → NDC-Kalibrierung und FOV-Basis (240 vs. 224) 🟡 | Figuren werden falsch verdeckt / Kamera passt nicht auf Hintergrund | Kalibrier-Testszenen; Parametersuche gegen goldene Referenzfälle in mehreren Fields | Vor Kamera-Kalibrierung (S4) |
 | P0 | R3: FSA-API-Berechtigungslebenszyklus (Persistenz von Handles, Re-Grant-Verhalten je Browser/Version) 🟡 | Kernversprechen „lokal, bequem" bricht; schlechte Wiedereinstiegs-UX | Browser-Testmatrix (Chromium/Edge/Brave; Firefox/Safari-Fallbackpfad) | Vor S1 |
 | P1 | R4: `.a`-Winkelkodierung und Bone-Adressierungsreihenfolge 🟡 | Animationen deformiert | „Bekannte Pose"-Fixtures; Sichtprüfung + Gelenkwinkel-Asserts | Vor Modell-Rendering |
-| P1 | R5: Release-Varianz (1998 vs. Steam) in Field-Containern und Archiven 🟡 | Parser bricht auf Nutzervarianten | Fingerprint-Matrix; Community-Beta mit Diagnose-Scan (asset-freie Reports) | Laufend, Gate vor Beta |
+| P1 | R5: Release-Varianz (1998 vs. Steam) in Field-Containern und Archiven 🟡 → **geschlossen per ADR-022** | Parser bricht auf Nutzervarianten | **S20 gemessen:** 57 Archive einer Installation, 0 fatal, 0 Quarantäne, 5 registrierte Release-Fingerprints, 52 unbekannte Varianten alle im best-effort-Pfad nutzbar ([R5-Matrix](R5-FINGERPRINT-MATRIX.md)) | Rest bis 1.0: drei unabhängige Installationen |
 | P1 | R6: Renderstate-Bitbelegung in `.p`/`.tex` (Blending, Colorkey-Interaktion) 🟡 | Falsche Transparenzen, Artefakte | A/B-Referenzszenen je Flag; konservative Defaults | Vor Field-Polish |
-| P2 | R7: IndexedDB-Quota/Eviction auf Mobilgeräten | Warm-Cache-Versprechen bricht | Quota-Telemetrie im Diagnosemodus; `persist()`-Erfolgsquote messen | Vor Mobile-Beta |
+| P2 | R7: IndexedDB-Quota/Eviction auf Mobilgeräten → **offen, geschlossen per ADR-019** | Warm-Cache-Versprechen bricht | Desktop-Kontingent gemessen (17.075 MB, belegt 1,08 MB, `persisted()=false`); mobil kein Referenzgerät, `persist()` bewusst nicht angefordert | Vor Mobile-Beta bzw. erstem mobilen Diagnosebericht |
 | P2 | R8: Walkmesh-Sonderfälle (degenerierte Dreiecke, Fächer, doppelte Kanten) in realen Fields | Klemmer/Durchtunneln | Property-Tests + Diagnose-Scan über alle Fields der Nutzerinstallation (lokal) | Vor S5-Abschluss |
-| P2 | R9: Deterministik über Browser hinweg (Fließkomma, Math-Implementierungen) | Replays nicht portabel | Digest-Vergleich identischer Replays über Browser; ggf. fixpoint-kritische Pfade härten | Vor Replay-Feature-Freigabe |
+| P2 | R9: Deterministik über Browser hinweg 🟢 **für V8**, sonst geschlossen per ADR-020 | Replays nicht portabel | **S20 gemessen und gehärtet:** Chromium 151 wich ab (`Math.atan2` unterscheidet sich zwischen V8-Ständen); Richtungswinkel quantisiert, `hypot`→`sqrt`; danach identisch über Node 22, Chromium 148, Chromium 151 ([R9-Bericht](R9-CROSSBROWSER.md)) | Firefox/WebKit vor Replay-Feature-Freigabe (S26) |
 | P3 | R10: Mod-Ökosystem erwartet mächtigere Patches als deklarativ möglich | Adoptionsrisiko des Mod-Systems | Community-Review des Patch-Schemas anhand realer Mod-Fallstudien | Nach MVP |
 
 ## Test- und Validierungsstrategie

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ff7DirToScene } from '@webmidgar/convert';
 import { texToRgba, type AnimationFrame, type MeshSource, type Skeleton, type TextureSource } from '@webmidgar/formats-model';
-import { DEFAULT_ROOT_PITCH_DEG, EULER_ORDER } from './pose.js';
+import { EULER_ORDER, ROOT_FRAME_FIX_DEG, rootFrameTranslationToModel } from './pose.js';
 
 /**
  * GPU-Adapter der Modellkette: Skeleton → Three-Bone-Hierarchie mit starren
@@ -96,7 +96,9 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
     if (bone.parentIndex < 0) {
       model.add(group);
     } else {
-      group.position.set(0, 0, skeleton.bones[bone.parentIndex]!.length);
+      // Kindversatz entgegen der Bone-Achse (R4, sichtgeprüft) — muss mit
+      // `computePose` in pose.ts übereinstimmen, sonst bricht die Dualität.
+      group.position.set(0, 0, -skeleton.bones[bone.parentIndex]!.length);
       boneGroups[bone.parentIndex]!.add(group);
     }
     for (const bundle of resolve(i)) group.add(buildMeshObject(bundle));
@@ -108,19 +110,25 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
 const DEG2RAD = Math.PI / 180;
 
 /**
- * Frame anwenden — die Konventionen der Referenzmathematik (pose.ts) plus den
- * Feldversatz auf der Wurzel. `rootPitchDeg` ist der EINZIGE Ort im
- * Renderpfad, an dem er gesetzt wird; `computePose` bleibt davon frei.
+ * Frame anwenden — die Konventionen der Referenzmathematik (pose.ts) inklusive
+ * der Wurzelrahmen-Korrektur.
+ *
+ * `rootFrameFix` ist **Vorgabe**, seit die Sichtprüfung und die Algebra
+ * unabhängig auf denselben Wert führen (s. `ROOT_FRAME_FIX_DEG`). Der Schalter
+ * bleibt, damit Sweeps und die Dualitätstests das rohe Verhalten weiterhin
+ * ansteuern können.
  */
 export function applyFrame(
   actor: Actor,
   skeleton: Skeleton,
   frame: AnimationFrame,
-  rootPitchDeg: number = DEFAULT_ROOT_PITCH_DEG,
+  rootFrameFix = true,
 ): void {
-  actor.model.position.set(...frame.rootTranslation);
+  const t = rootFrameFix ? rootFrameTranslationToModel(frame.rootTranslation) : frame.rootTranslation;
+  const pitch = rootFrameFix ? ROOT_FRAME_FIX_DEG : 0;
+  actor.model.position.set(t[0], t[1], t[2]);
   actor.model.rotation.set(
-    (frame.rootRotation[0] + rootPitchDeg) * DEG2RAD,
+    (frame.rootRotation[0] + pitch) * DEG2RAD,
     frame.rootRotation[1] * DEG2RAD,
     frame.rootRotation[2] * DEG2RAD,
     EULER_ORDER,

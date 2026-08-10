@@ -48,7 +48,20 @@ S24 braucht S21 (Fenster-/Textsystem ist schon aus S15 vorhanden — S21
 liefert die Menü-Ansichten, in denen die Slot-UI lebt). S25 ist der
 härteste Modding-Schritt und bewusst nach S22 angesetzt.
 
-### S20 — Härtung & Beta-Gate
+### S20 — Härtung & Beta-Gate ✅ abgeschlossen (2026-08-10)
+
+**Stand:** Alle Desktop-NFRs gemessen und eingehalten
+([NFR-Bericht](NFR-BERICHT-S20.md)); Soak über 500 Field-Wechsel leckfrei;
+R9 gemessen, ein echter Fund behoben ([R9-Bericht](R9-CROSSBROWSER.md));
+R5-Matrix über 57 Archive ([R5-Matrix](R5-FINGERPRINT-MATRIX.md));
+**ADR-010 verworfen**. Nicht erfüllbare Kriterien sind als Restrisiko
+geschlossen: **ADR-019** (kein Mobile-Referenzgerät), **ADR-020**
+(Firefox/WebKit ungeprüft), **ADR-022** (keine Community-Beta als
+Fingerprint-Quelle), **ADR-023** (GPU-Registry nur als Messmodell) —
+alle mit benanntem Nachhol-Auslöser in
+[ADR-S20-HAERTUNG.md](ADR-S20-HAERTUNG.md). **Das Gate ist offen:
+S21 ff. dürfen starten.**
+
 
 | Feld | Inhalt |
 |---|---|

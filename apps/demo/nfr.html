@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — S20 NFR-Messlauf (Browser)</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; font-size: 12px; }
+    .ok { color: #0a7a2f; font-weight: 600; }
+    .fail { color: #b00020; font-weight: 600; }
+    h2 { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>S20 — NFR-Messlauf im Browser</h1>
+  <p>
+    Läuft ausschließlich gegen die <strong>synthetische Fake-Installation</strong> aus
+    <code>tools/fixture-gen</code> — keine Originaldaten, keine Verzeichniswahl nötig.
+    Gemessen werden: Replay-Digests (R9), Hauptthread-Long-Tasks bei Parsen im Worker,
+    GPU-Upload-Budget und der Speicherkontingent-Stand (R7).
+  </p>
+  <p id="status">Messung läuft …</p>
+  <p>
+    Hinweis zu <code>longTaskDetails</code>: Ein Long Task in der Phase
+    <code>messgeruest</code> ist der Aufbau der Fake-Installation durch die
+    Fixture-Writer — Testwerkzeug, keine Engine-Arbeit. Für den NFR-Sollwert
+    zählt ausschließlich die Phase <code>worker-parse</code>.
+  </p>
+  <h2>Ergebnis</h2>
+  <pre id="ergebnis">—</pre>
+  <script type="module" src="/src/nfr-demo.ts"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "@webmidgar/nfr-run",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@webmidgar/cache": "*",
+    "@webmidgar/field-runtime": "*",
+    "@webmidgar/fixture-gen": "*",
+    "@webmidgar/formats-field": "*",
+    "@webmidgar/formats-lgp": "*",
+    "@webmidgar/io": "*",
+    "@webmidgar/render-field": "*",
+    "@webmidgar/telemetry": "*"
+  }
+}

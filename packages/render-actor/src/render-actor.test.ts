@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { composeA, composeHrc, composeP } from '@webmidgar/fixture-gen';
-import { parseA, parseHrc, parseP, type Skeleton } from '@webmidgar/formats-model';
+import { parseA, parseHrc, parseP, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
 import { bindClip } from './binding.js';
 import { bindPoseFrame, computePose } from './pose.js';
 import { applyFrame, boneModelMatrix, buildActor, buildFallbackActor } from './actor.js';
@@ -30,15 +30,18 @@ function skeleton(): Skeleton {
 }
 
 describe('Referenzposen (handgerechnet)', () => {
-  it('Bindpose: Kette wächst entlang +Z um die Bone-Längen', () => {
+  it('Bindpose: Kette wächst entgegen der Bone-Achse um die Bone-Längen', () => {
+    // R4, sichtgeprüft: Der Kindversatz läuft nach −length, nicht +length.
+    // Das Fixture nutzt POSITIVE Längen (2/3/1), im Bestand sind sie negativ —
+    // dort wächst die Kette dadurch nach +Z.
     const sk = skeleton();
     const poses = computePose(sk, bindPoseFrame(sk));
     expect(poses[0]!.origin).toEqual([0, 0, 0]);
-    expect(poses[0]!.tip).toEqual([0, 0, 2]);
-    expect(poses[1]!.origin).toEqual([0, 0, 2]);
-    expect(poses[1]!.tip).toEqual([0, 0, 5]);
-    expect(poses[2]!.origin).toEqual([0, 0, 5]);
-    expect(poses[2]!.tip).toEqual([0, 0, 6]);
+    expect(poses[0]!.tip).toEqual([0, 0, -2]);
+    expect(poses[1]!.origin).toEqual([0, 0, -2]);
+    expect(poses[1]!.tip).toEqual([0, 0, -5]);
+    expect(poses[2]!.origin).toEqual([0, 0, -5]);
+    expect(poses[2]!.tip).toEqual([0, 0, -6]);
   });
 
   it('Akzeptanzfall: 90°-Gelenkwinkel ergeben exakt erwartete Weltpositionen', () => {
@@ -67,12 +70,13 @@ describe('Referenzposen (handgerechnet)', () => {
       expect(actual[1]).toBeCloseTo(expected[1], 5);
       expect(actual[2]).toBeCloseTo(expected[2], 5);
     };
+    // Handrechnung mit dem sichtgeprüften Versatz −length:
     close(poses[0]!.origin, [10, 20, 30]);
-    close(poses[0]!.tip, [12, 20, 30]); // Ry(90): +Z → +X
-    close(poses[1]!.origin, [12, 20, 30]);
-    close(poses[1]!.tip, [12, 17, 30]); // zusätzlich Rx(90): +Z → −Y
-    close(poses[2]!.origin, [12, 17, 30]);
-    close(poses[2]!.tip, [12, 16, 30]); // arm neutral: verlängert die −Y-Richtung
+    close(poses[0]!.tip, [8, 20, 30]); // Ry(90): −Z → −X
+    close(poses[1]!.origin, [8, 20, 30]);
+    close(poses[1]!.tip, [8, 23, 30]); // zusätzlich Rx(90): −Z → +Y
+    close(poses[2]!.origin, [8, 23, 30]);
+    close(poses[2]!.tip, [8, 24, 30]); // arm neutral: verlängert die +Y-Richtung
   });
 
   it('Wurzelrotation dreht die gesamte Kette', () => {
@@ -80,7 +84,7 @@ describe('Referenzposen (handgerechnet)', () => {
     const frame = bindPoseFrame(sk);
     frame.rootRotation = [0, 90, 0];
     const poses = computePose(sk, frame);
-    expect(poses[2]!.tip[0]).toBeCloseTo(6, 5); // +Z-Kette → +X
+    expect(poses[2]!.tip[0]).toBeCloseTo(-6, 5); // −Z-Kette → −X unter Ry(90)
     expect(poses[2]!.tip[2]).toBeCloseTo(0, 5);
   });
 });
@@ -110,7 +114,7 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
     const actor = buildActor(sk, () => []);
     // Ohne Feldversatz: Dieser Test belegt die Dualität der reinen
     // Referenzmathematik, nicht die Fassungs-Konvention.
-    applyFrame(actor, sk, frame, 0);
+    applyFrame(actor, sk, frame, false);
     for (let b = 0; b < sk.bones.length; b++) {
       const three = boneModelMatrix(actor, b); // column-major elements
       const ref = poses[b]!.matrix;
@@ -122,15 +126,70 @@ describe('Dualität Referenzmathematik ↔ Three-Szenegraph', () => {
     }
   });
 
+  it('Dualität gilt auch im KORRIGIERTEN Wurzelrahmen — dem Standardpfad', () => {
+    // Der Renderpfad läuft per Vorgabe MIT der Wurzelrahmen-Korrektur. Ohne
+    // diesen Test wäre ausgerechnet die Vorgabe ungeprüft und nur der
+    // abgeschaltete Sonderfall abgesichert.
+    //
+    // Die Wurzeltranslation ist bewusst ungleich null und in allen drei
+    // Komponenten verschieden: Wäre sie (0,0,0) oder symmetrisch, könnte der
+    // Test die Umbauregel `t → (x, −z, y)` gar nicht von der Identität
+    // unterscheiden und bliebe grün, auch wenn sie fehlte.
+    const sk = skeleton();
+    const frame: AnimationFrame = {
+      rootRotation: [11, -23, 47],
+      rootTranslation: [3, 5, -7],
+      rotations: new Float32Array([12, -34, 56, 0, 0, 0, -8, 90, 3]),
+    };
+    const poses = computePose(sk, frame, true);
+    const actor = buildActor(sk, () => []);
+    applyFrame(actor, sk, frame, true);
+    for (let b = 0; b < sk.bones.length; b++) {
+      const three = boneModelMatrix(actor, b);
+      const ref = poses[b]!.matrix;
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          expect(three.elements[c * 4 + r]).toBeCloseTo(ref[r]![c]!, 5);
+        }
+      }
+    }
+  });
+
+  it('Wurzelrahmen-Korrektur ist wirksam — Gegenprobe zum abgeschalteten Modus', () => {
+    // Kontrolle zum Test darüber: Beide Modi müssen sich messbar
+    // unterscheiden. Wären sie gleich, liefe die Dualität oben ins Leere und
+    // die Korrektur wäre faktisch wirkungslos.
+    const sk = skeleton();
+    const frame: AnimationFrame = {
+      rootRotation: [0, 0, 0],
+      rootTranslation: [0, 4, 0],
+      rotations: new Float32Array(sk.bones.length * 3),
+    };
+    const roh = computePose(sk, frame, false);
+    const fix = computePose(sk, frame, true);
+    // Translation: (0,4,0) → (0,−0,4) — die Höhe wandert von Y nach Z.
+    expect(roh[0]!.origin[1]).toBeCloseTo(4, 5);
+    expect(fix[0]!.origin[2]).toBeCloseTo(4, 5);
+    expect(fix[0]!.origin[1]).toBeCloseTo(0, 5);
+  });
+
   it('Scene-Wrapper: FF7-Höhenachse (+Z) landet auf Three-+Y', () => {
     const sk = skeleton();
     const actor = buildActor(sk, () => []);
-    applyFrame(actor, sk, bindPoseFrame(sk), 0);
+    applyFrame(actor, sk, bindPoseFrame(sk), false);
     actor.root.updateMatrixWorld(true);
-    // Kettenende (0,0,6)_ff7 muss in Scene-Koordinaten (0,6,0) liegen.
+
+    // Die Basis selbst, unabhängig von der Kette: FF7-(0,0,1) → Scene-(0,1,0).
+    const hoch = actor.root.localToWorld(new THREE.Vector3(0, 0, 1));
+    expect(hoch.x).toBeCloseTo(0, 5);
+    expect(hoch.y).toBeCloseTo(1, 5);
+    expect(hoch.z).toBeCloseTo(0, 5);
+
+    // Und durch die Kette: Bone 2 sitzt bei (0,0,−5)_ff7, ein Schritt entlang
+    // seiner lokalen +Z-Achse landet bei (0,0,−4) → Scene (0,−4,0).
     const tip = actor.boneGroups[2]!.localToWorld(new THREE.Vector3(0, 0, 1));
     expect(tip.x).toBeCloseTo(0, 5);
-    expect(tip.y).toBeCloseTo(6, 5);
+    expect(tip.y).toBeCloseTo(-4, 5);
     expect(tip.z).toBeCloseTo(0, 5);
   });
 });

@@ -65,7 +65,14 @@ function findMatch(
   const maxLen = Math.min(LZS_MAX_MATCH, input.length - i);
   if (maxLen < LZS_MIN_MATCH) return null;
   let best: { offset: number; length: number } | null = null;
+  const erstesByte = input[i]!;
   for (let offset = 0; offset < LZS_WINDOW; offset++) {
+    // Früher Ausstieg ohne Verhaltensänderung: passt schon das erste Byte
+    // nicht, wird `len` 0 und der Kandidat scheitert ohnehin an
+    // `len >= LZS_MIN_MATCH`. Der Test spart den inneren Vergleich für ~255
+    // von 256 Kandidaten — gemessen 1,8 s → 30 ms je 64-KiB-Seite beim Bau
+    // der NFR-Fixtures. Die erzeugten Ströme sind byteidentisch.
+    if (ring[offset] !== erstesByte) continue;
     // Kandidat verwerfen, wenn der Lesebereich in den während des Tokens
     // beschriebenen Bereich fällt (konservativ; hält Encoder trivial korrekt).
     const distance = (offset - ringPos + LZS_WINDOW) & LZS_WINDOW_MASK;

@@ -90,7 +90,8 @@ export function planTransition(
   const line = gateways[returnIndex]!.exitLine;
   const dx = line[1][0] - line[0][0];
   const dy = line[1][1] - line[0][1];
-  const len = Math.hypot(dx, dy) || 1;
+  // R9-Härtung: sqrt statt hypot (bitgenau festgelegt) — siehe session.ts.
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
   // Lotrichtungen der Austrittslinie.
   const nx = -dy / len;
   const ny = dx / len;

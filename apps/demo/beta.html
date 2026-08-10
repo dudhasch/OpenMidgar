@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — Beta: Einschränkungen &amp; Diagnose</title>
+  <style>
+    body { font: 15px/1.6 system-ui, sans-serif; margin: 2rem auto; max-width: 52rem; padding: 0 1rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    code { background: #f5f5f5; padding: 0 .2rem; }
+    .geht { color: #0a7a2f; }
+    .teils { color: #8a6d00; }
+    .nein { color: #b00020; }
+    ol li { margin-bottom: .4rem; }
+    .kasten { border-left: 4px solid #888; padding: .6rem 1rem; background: #fafafa; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <h1>WebMidgar — Beta</h1>
+  <p>
+    WebMidgar ist eine quelloffene Clean-Room-Reimplementierung der technischen
+    Laufzeitumgebung von <em>Final Fantasy VII (PC, 1998)</em> im Browser.
+    Es werden <strong>keine</strong> Originaldaten mitgeliefert, hochgeladen oder
+    verteilt. Die Daten der eigenen, rechtmäßig erworbenen Installation bleiben
+    auf dem eigenen Rechner und werden ausschließlich im Browser verarbeitet.
+  </p>
+
+  <h2>Versionsschema</h2>
+  <p>
+    Die Version hat die Form <code>MAJOR.MINOR.PATCH</code> und wird von einer
+    zweiten, davon unabhängigen Zahl begleitet: der <strong>Engine-Kompatibilität</strong>
+    (<code>engineCompat</code>), gegen die Mods geprüft werden.
+  </p>
+  <table>
+    <tr><th>Bestandteil</th><th>Wann er sich ändert</th></tr>
+    <tr><td><code>MAJOR</code></td><td>Bruch im Spielstands- oder Mod-Paketformat. Bestehende Spielstände brauchen eine dokumentierte Migration.</td></tr>
+    <tr><td><code>MINOR</code></td><td>Neue Fähigkeiten, abwärtskompatibel. Spielstände und Mods laufen weiter.</td></tr>
+    <tr><td><code>PATCH</code></td><td>Nur Fehlerbehebungen und Messwerte, keine Formatänderung.</td></tr>
+    <tr><td><code>engineCompat</code></td><td>Steigt, wenn sich der für Mods sichtbare Vertrag ändert (Opcode-Tabellen, Patch-Anker, Overlay-Kette). Ein Mod nennt die Spanne, die er unterstützt.</td></tr>
+  </table>
+  <p>
+    Beta-Stände tragen den Zusatz <code>-beta.N</code>. In der Beta kann
+    <code>engineCompat</code> auch in einer MINOR-Version steigen; ab 1.0 nicht mehr.
+  </p>
+  <p>
+    <strong>Replay-Digests</strong> sind an <code>engineCompat</code> gebunden: ein
+    Digest ist nur innerhalb derselben <code>engineCompat</code> vergleichbar. Ein
+    Vergleich über diese Grenze hinweg ist kein Fehlerbefund.
+  </p>
+
+  <h2>Was in der Beta geht — und was nicht</h2>
+  <table>
+    <tr><th>Bereich</th><th>Stand</th><th>Anmerkung</th></tr>
+    <tr><td>Import der lokalen Installation</td><td class="geht">geht</td><td>Verzeichniswahl über die File System Access API; Wiedereinstieg über erneute Freigabe.</td></tr>
+    <tr><td>Field-Erkundung, Bewegung, Kamera</td><td class="geht">geht</td><td>Walkmesh-Solver, Hintergrundkomposition mit Verdeckung, Field-Wechsel über Gateways.</td></tr>
+    <tr><td>Skripte und Story-Fortschritt</td><td class="geht">geht</td><td>Fixed-Tick-Interpreter; Restfehlerquote der Opcode-Semantik siehe Befundbericht.</td></tr>
+    <tr><td>Dialoge und Textsystem</td><td class="geht">geht</td><td>Umbruch, Seiten, Auswahl — in Takten, damit Replays exakt bleiben.</td></tr>
+    <tr><td>Spielstände</td><td class="geht">geht</td><td>Eigenes versioniertes Format; Original-<code>save*.ff7</code> werden gelesen.</td></tr>
+    <tr><td>Audio</td><td class="teils">teilweise</td><td>Musikwiedergabe mit Schleifenmarken; die Feinsemantik der AKAO-Parameter fehlt noch.</td></tr>
+    <tr><td>Modding</td><td class="teils">teilweise</td><td>Texturen und Assets über die Override-Kette; Skript-Patches und Dialogersetzungen sind noch nicht scharfgeschaltet.</td></tr>
+    <tr><td>Menü (Status, Inventar)</td><td class="nein">fehlt</td><td>Eigener Bogen nach der Härtung.</td></tr>
+    <tr><td>Kampfsystem</td><td class="nein">fehlt</td><td>Bewusste Architekturentscheidung: der Kampf-Opcode liefert einen definierten Stub, damit die Story durchläuft.</td></tr>
+    <tr><td>Weltkarte, Minispiele, Filmsequenzen</td><td class="nein">fehlt</td><td>Eigene Bögen nach 1.0.</td></tr>
+    <tr><td>Touch-Bedienung, mobiles Layout</td><td class="nein">fehlt</td><td>Auf Mobilgeräten ist derzeit nur die Leistung gemessen, nicht die Bedienbarkeit.</td></tr>
+  </table>
+
+  <h2>Browser</h2>
+  <table>
+    <tr><th>Browser</th><th>Stand</th><th>Anmerkung</th></tr>
+    <tr><td>Chrome / Edge (Chromium, aktuell)</td><td class="geht">unterstützt</td><td>Vollständiger Pfad inklusive File System Access API.</td></tr>
+    <tr><td>Firefox</td><td class="teils">eingeschränkt</td><td>Kein Verzeichniszugriff über die File System Access API; der Import läuft über den Ersatzpfad. Die Gleichheit der Replay-Digests ist für Firefox noch nicht nachgemessen.</td></tr>
+    <tr><td>Safari / WebKit</td><td class="nein">ungeprüft</td><td>Auf der Entwicklungsplattform nicht testbar. Kein Ausschluss, aber auch keine Zusage.</td></tr>
+  </table>
+
+  <h2>Diagnosebericht erzeugen und weitergeben</h2>
+  <div class="kasten">
+    Der Diagnosebericht ist <strong>nachweislich frei von Spieldaten</strong>. Er enthält
+    ausschließlich Zahlen und Prüfsummen: Fehlerklassen mit Anzahl, Größen, Zähler und
+    kurze Digests. Er enthält keine Dateinamen, keinen Spieltext, keine Spielernamen,
+    keine Pfade und keine Rohdaten. Eine automatisch geprüfte Positivliste stellt das
+    sicher — ein Bericht, der etwas anderes enthielte, ließe sich gar nicht erzeugen.
+  </div>
+  <ol>
+    <li>Installation wie gewohnt importieren, bis die Fähigkeitsmatrix erscheint.</li>
+    <li>Auf der Diagnoseseite <em>Diagnosebericht exportieren</em> wählen.</li>
+    <li>Die Datei ist eine JSON-Datei. Sie darf vor dem Verschicken geöffnet und gelesen werden — das ist ausdrücklich erwünscht.</li>
+    <li>Beim Fehlerbericht bitte angeben: Browser und Version, ob der Import kalt oder warm war, und was zuletzt sichtbar passiert ist.</li>
+  </ol>
+  <p>
+    Besonders wertvoll sind Berichte von <strong>Installationen, die vom bekannten Bestand
+    abweichen</strong> — andere Sprachfassungen, ältere Datenträgerfassungen, konvertierte
+    Installationen. Genau dafür trägt der Bericht den Release-Fingerprint: eine Kennung,
+    die eine Archivfassung identifiziert, ohne ihren Inhalt preiszugeben.
+  </p>
+
+  <h2>Bekannte Einschränkungen im Detail</h2>
+  <ul>
+    <li><strong>Unbekannte Installationsvarianten</strong> werden nicht abgelehnt, sondern im „best effort"-Pfad geladen: das Verzeichnis wird aufgebaut, die Diagnosetiefe steigt, defekte Einzelteile landen in Quarantäne statt im Abbruch.</li>
+    <li><strong>Speicherkontingent:</strong> Der Warm-Cache liegt in IndexedDB. Browser dürfen ihn jederzeit räumen; dann ist der nächste Start wieder ein Kaltstart. Das ist kein Fehler.</li>
+    <li><strong>Replay-Portabilität:</strong> Zwischen Node und Chromium sind die Digests nachgemessen identisch. Für andere Engines steht der Nachweis aus; siehe Cross-Browser-Bericht.</li>
+    <li><strong>Mobilgeräte:</strong> Es liegt kein Messprofil eines Referenzgeräts vor. Die mobilen Zielwerte sind unbelegte Setzungen und werden als solche geführt.</li>
+  </ul>
+
+  <p><a href="/index.html">← zurück zur Diagnoseübersicht</a> · <a href="/nfr.html">NFR-Messlauf</a></p>
+</body>
+</html>

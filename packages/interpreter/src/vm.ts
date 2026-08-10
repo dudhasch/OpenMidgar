@@ -175,13 +175,18 @@ export function stepInstruction(
       const word = op >= OP.IFSW;
       const longJump = op === OP.IFUBL || op === OP.IFSWL || op === OP.IFUWL;
       const bankPair = u8(0);
-      const addr = u8(1);
-      const rawValue = word ? u16(2) : u8(2);
-      const cmpAt = word ? 4 : 3;
+      // O9: Bei den Wort-Varianten ist die LINKE Seite ebenfalls zwei Byte
+      // breit — beide Seiten haben dieselbe Form. Vorher wurde links ein Byte
+      // gelesen, wodurch alles danach um eine Stelle verrutschte.
+      const rawLeft = word ? u16(1) : u8(1);
+      const valueAt = word ? 3 : 2;
+      const rawValue = word ? u16(valueAt) : u8(valueAt);
+      const cmpAt = word ? 5 : 3;
       const cmpOp = u8(cmpAt);
       const jumpArgAt = cmpAt + 1;
       const jump = longJump ? u16(jumpArgAt) : u8(jumpArgAt);
-      let a = readBank(rt, (bankPair >> 4) & 0xf, addr, word);
+      // Beide Seiten laufen jetzt über dieselbe Quellenregel (Bank 0 ⇒ Literal).
+      let a = srcValue((bankPair >> 4) & 0xf, rawLeft, word);
       let b = srcValue(bankPair & 0xf, rawValue, word);
       if (op === OP.IFSW || op === OP.IFSWL) {
         a = asSigned16(a);
