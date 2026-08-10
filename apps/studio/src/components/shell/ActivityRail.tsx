@@ -4,7 +4,7 @@
  */
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Home, Map, MessageSquare, Package, Skull, Swords, UserRound, Workflow } from 'lucide-react';
+import { Clapperboard, Home, Map, MessageSquare, Music, Package, ShoppingBag, Skull, Swords, UserRound, Users, Workflow } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,10 @@ const EINTRAEGE: { route: string; label: string; icon: LucideIcon; end?: boolean
   { route: '/felder', label: 'Felder', icon: Map },
   { route: '/gegner', label: 'Gegner', icon: Skull },
   { route: '/schlacht', label: 'Schlachten', icon: Swords },
+  { route: '/party', label: 'Party', icon: Users },
+  { route: '/items', label: 'Items', icon: ShoppingBag },
+  { route: '/musik', label: 'Musik', icon: Music },
+  { route: '/animation', label: 'Animation', icon: Clapperboard },
   { route: '/paket', label: 'Paket / Publish', icon: Package },
 ];
 
