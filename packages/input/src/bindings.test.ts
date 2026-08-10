@@ -13,11 +13,11 @@ describe('Belegungstabellen als Daten', () => {
     expect(parsed.table).toEqual(table);
   });
 
-  it('reservierte Plätze existieren nach dem Zurücklesen und bleiben null', () => {
+  it('reservierte Plätze existieren nach dem Zurücklesen und bleiben null; world ist seit S29 belegt', () => {
     const parsed = parseBindings(serializeBindings(defaultBindings()));
     expect(parsed.table!.battle).toBeNull();
-    expect(parsed.table!.world).toBeNull();
     expect(parsed.table!.minigame).toBeNull();
+    expect(parsed.table!.world).not.toBeNull();
   });
 
   it('verwirft defekte Einträge mit benannter Diagnose statt abzustürzen', () => {

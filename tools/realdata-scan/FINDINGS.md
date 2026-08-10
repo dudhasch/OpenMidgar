@@ -450,3 +450,23 @@ ausschließlich `data/wm` (Originalbestand).
 | Die 3 `.ev`-Einträge (WM0/2/3-Scripts?) und der endungslose Eintrag (Texte?) | 🟡 S29-Gegenstand |
 | **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
 | **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
+
+## S29 — World-Script (`.ev`) und Fahrzeugproben, 2026-08-10
+
+Werkzeuge: `world-ev-probe.rdtest.ts`, `world-vehicle-probe.rdtest.ts`.
+Hypothesengeber: ff7-landscaper/Qhimm (Beschreibung, keine Autorität — zwei
+Beschreibungen wurden von den Daten korrigiert, s. u.).
+
+| Befund | Status |
+|---|---|
+| `world_gm.lgp` trägt drei `.ev` à exakt 0x7000 B (wm0/wm2/wm3) | ✅ Inventar |
+| **Call-Tabelle fix 0x400 B**: bis 256 Paare (u16 Kennung, u16 Wortoffset relativ zu Wort 512), 0xFFFF-Sentinel; Kennungstyp = Bits 14–15 (0 System, 1 Modell mit Modellnummer in Bits 8–13, 2 Mesh); IDs monoton; jedes Funktionsziel liegt am Codeanfang oder direkt hinter 0x203/0x100 (143+26+38 = 207/207) | ✅ Formatfakt |
+| **Methodische Lehre (teuer):** Eine dynamisch gelesene Tabelle (Ende am Sentinel) setzte die Codebasis auf Wort 288 statt 512 — ALLE Sprungmessungen lagen dadurch exakt auf Kontrollniveau. Wenn jede Deutung „zufällig" aussieht, zuerst den BEZUGSRAHMEN anzweifeln, nicht die Deutungen | ⚠️ dokumentiert |
+| **Grammatik:** u16-wortbasierte Stack-Maschine mit EIGENER Opcode-Menge. Operandenlängen: Push-Familie 0x110/114/117/118/119/11b/11c/11d/11f und Sprünge 0x200/0x201 je 1 Wort, alle übrigen beobachteten 0; 0x203 beendet. **Funktions-Abschluss 175/175** | ✅ Formatfakt |
+| **Sprungziel = codebasis-relative Wortadresse: 732/732 auf Instruktionsgrenzen** (Kontrollen: +1-Verschiebung 62 %, funktionsrelativ 36 %); alle Sprünge im Bestand vorwärts (Assembler/VM erlauben rückwärts innerhalb der Funktion) | ✅ Formatfakt |
+| **Grammatikfrage der Roadmap ENTSCHIEDEN:** Die Field-Bytetabelle schließt die World-Funktionen nur zu 24 %/44 %/6 % (gegen 99,73 % auf flevel) ⇒ eigener Interpreter, keine Field-Erweiterung | ✅ gemessen |
+| **Mesh-Kennungs-Koordinaten: (Kennung>>4)&0x3FF = zeile·36 + spalte** — die Community-Beschreibung („x = div 36") passt nur 46/49, die Vertauschung **49/49** ins 36×28-Raster. Zweite korrigierte Beschreibung dieser Session | ✅ realdaten-entschieden |
+| Stack-SEMANTIK der Rechen-/Vergleichs-/Write-Opcodes: per Fixture-Sollverlauf festgelegt (u16-Wrap, Pop-Reihenfolge, Bitzerlegung addr>>3/addr&7) — am Original NICHT belegt | 🟡 dokumentierte Festlegung |
+| Kommando-Opcodes (0x204, 0x300er …): **UNKNOWN-Politik** (Fault + überspringen). VM-Lauf über alle 143 wm0-Funktionen: 143/143 enden regulär, 4867 Instruktionen, unknown-Quote 23,6 % (top: 0x305, 0x306, 0x32d, 0x307, 0x303) | ✅ Abdeckung gemessen; Semantik 🔴 |
+| **Erreichbarkeitsprobe** (Dreiecksgraph WM0, 142 586 Dreiecke): Wasserkandidat = **Klasse 3** (dominante Klasse der modalen Flachhöhe 0 — die S28-Vermutung „Wiese" war falsch); Matrix „ohne Wasser": 53 614 erreichbar, verdrehte Matrix (nur Wasser, Landstart): **0**, ohne Matrix: 142 586 ⇒ die Matrix ändert die Erreichbarkeit messbar, die Probe ist nicht blind. Erster Anlauf der Wassererkennung („flach auf MINIMALhöhe") traf eine Senke (~300 Dreiecke) — die MODALE Flachhöhe trägt | ✅ Messanlage; Klassensemantik bleibt 🟡, Matrix bleibt austauschbare 🔵-Tabelle |
+| Anlass der Mesh-Funktionsausführung (welche Funktionsnummer beim Betreten läuft), Alternativblock-Schaltung (WM0 63–68), Original-Einstiegspunkte World↔Field, Begegnungstabellen der Weltkarte | 🔴 offen |

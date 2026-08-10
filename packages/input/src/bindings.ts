@@ -84,14 +84,18 @@ function baseSet(): BindingSet {
   };
 }
 
-/** Standardbelegung. `field`/`dialog`/`menu` belegt, Rest reserviert (null). */
+/**
+ * Standardbelegung. `field`/`dialog`/`menu` seit S27 belegt, `world` seit S29
+ * (der Bogen, der den Kontext nutzt, füllt seinen Platz — S27-Vorgabe);
+ * `battle` und `minigame` bleiben reserviert (null).
+ */
 export function defaultBindings(): BindingTable {
   return {
     field: baseSet(),
     dialog: baseSet(),
     menu: baseSet(),
     battle: null,
-    world: null,
+    world: baseSet(),
     minigame: null,
   };
 }

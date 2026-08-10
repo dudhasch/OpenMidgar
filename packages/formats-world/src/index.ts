@@ -14,3 +14,18 @@ export {
   type WorldDiagnosticCode,
 } from './types.js';
 export { parseWorldMesh, parseWorldBlock, parseWorldMap, type ParseBlockResult } from './parse.js';
+export {
+  parseWorldEv,
+  EV_FILE_BYTES,
+  EV_CODE_BASE_WORDS,
+  EV_TABLE_SENTINEL,
+  WOP_RETURN,
+  WOP_RESET,
+  WOP_GOTO,
+  WOP_GOTO_IF_FALSE,
+  WOP_OPERAND1,
+  type WorldEv,
+  type EvFunction,
+  type EvFunctionType,
+  type EvDiagnostic,
+} from './ev.js';
