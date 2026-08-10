@@ -33,6 +33,45 @@ export const WORLD_GRIDS: Record<'wm0' | 'wm2' | 'wm3', WorldGrid> = {
   wm3: { cols: 2, rows: 2, primaryBlocks: 4, belegt: false },
 };
 
+/**
+ * WM0-Alternativblöcke 63–68 → ersetzte Rasterzelle. **REALDATEN-BELEGT**
+ * (`world-altblock-probe`, 2026-08-10), zwei voneinander unabhängige Maße:
+ *  (a) Mesh-Identität: jeder Alternativblock teilt 5–16 seiner 16 Meshes mit
+ *      GENAU EINEM Primärblock, mit allen 62 übrigen 0–8;
+ *  (b) Nahtstetigkeit an der Zielzelle (S28-Maß): 1,0 / 1,0 / 1,0 / 1,0 /
+ *      0,967 / 0,967 gegen einen Kontrollmedian von 0,055–0,570.
+ * Beide Maße liefern dieselbe Zuordnung. Der Index in dieser Liste ist der
+ * Versatz zu Block 63 (Alternativblock = 63 + Index).
+ */
+export const WM0_ALTERNATIVE_CELLS: readonly number[] = [50, 41, 42, 60, 47, 48];
+
+/**
+ * Gruppierung der Alternativblöcke zu Umschaltstufen. 🟡 REFERENZANGABE
+ * (ff7-landscaper `map-state.md`), NICHT gemessen: die Nahtprobe ist gegenüber
+ * der Gruppierung blind, weil auch die Alternativblöcke perfekte Ränder zu den
+ * PRIMÄRnachbarn haben (Quote 1,0) — die Änderungen liegen im Blockinneren.
+ * Die Stufenzuordnung „Weltfortschritt p ⇒ Gruppen 0…p−1 getauscht" ist eine
+ * 🔵 dokumentierte Eigenentscheidung; keine Quelle stellt diese Tabelle auf.
+ */
+export const WM0_ALTERNATIVE_GROUPS: ReadonlyArray<readonly number[]> = [[50], [41, 42], [60], [47, 48]];
+
+/**
+ * Blockindex einer Rasterzelle unter einem Weltfortschritt (0 = Urzustand).
+ * Für alles außer WM0 (grid.primaryBlocks ≠ 63) ist die Zelle ihr eigener
+ * Block — im Bestand hat nur WM0 Alternativblöcke.
+ */
+export function resolveBlockIndex(cell: number, grid: WorldGrid, worldProgress = 0): number {
+  if (grid.primaryBlocks !== 63 || worldProgress <= 0) return cell;
+  const stufen = Math.min(worldProgress, WM0_ALTERNATIVE_GROUPS.length);
+  for (let g = 0; g < stufen; g++) {
+    if (WM0_ALTERNATIVE_GROUPS[g]!.includes(cell)) {
+      const idx = WM0_ALTERNATIVE_CELLS.indexOf(cell);
+      if (idx >= 0) return grid.primaryBlocks + idx;
+    }
+  }
+  return cell;
+}
+
 export interface WorldTriangle {
   /** Vertexindizes (u8 — ein Mesh trägt höchstens 256 Vertices). */
   v0: number;

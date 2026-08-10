@@ -9,6 +9,7 @@ import {
   parseWorldMap,
   WORLD_BLOCK_EXTENT,
   WORLD_MESH_EXTENT,
+  WORLD_GRIDS,
   type WorldGrid,
 } from '@webmidgar/formats-world';
 import { buildMeshGeometry } from './geometry.js';
@@ -164,5 +165,43 @@ describe('wrapCell', () => {
     expect(wrapCell({ col: -1, row: -1 }, grid)).toEqual({ col: 8, row: 6 });
     expect(wrapCell({ col: 9, row: 7 }, grid)).toEqual({ col: 0, row: 0 });
     expect(wrapCell({ col: 4, row: 3 }, grid)).toEqual({ col: 4, row: 3 });
+  });
+});
+
+describe('Alternativblöcke im Streaming (S30)', () => {
+  const wm0 = WORLD_GRIDS.wm0;
+
+  it('Fortschrittswechsel macht genau die getauschten Slots ungültig — nicht mehr, nicht weniger', () => {
+    const streamer = new WorldStreamer(wm0, 1);
+    // Mittelpunkt so wählen, dass Zelle 50 (Spalte 5, Zeile 5) resident ist.
+    const x = 5 * WORLD_BLOCK_EXTENT + 1000;
+    const z = 5 * WORLD_BLOCK_EXTENT + 1000;
+    const erst = streamer.update(x, z);
+    expect(erst.load).toHaveLength(9);
+    expect(erst.load.map((s) => s.blockIndex)).toContain(50);
+    // Ohne Fortschrittswechsel ändert sich nichts.
+    expect(streamer.update(x, z).load).toEqual([]);
+
+    streamer.setWorldProgress(1);
+    const nach = streamer.update(x, z);
+    // Stufe 1 tauscht ausschließlich Zelle 50 → Block 63.
+    expect(nach.release.map((s) => s.blockIndex)).toEqual([50]);
+    expect(nach.load.map((s) => s.blockIndex)).toEqual([63]);
+    // Zurückschalten löst denselben Vorgang rückwärts aus (kein Einweg-Zustand).
+    streamer.setWorldProgress(0);
+    const zurueck = streamer.update(x, z);
+    expect(zurueck.release.map((s) => s.blockIndex)).toEqual([63]);
+    expect(zurueck.load.map((s) => s.blockIndex)).toEqual([50]);
+  });
+
+  it('Zellen ohne Alternative sind gegen den Fortschritt invariant (Gegenprobe)', () => {
+    const streamer = new WorldStreamer(wm0, 1);
+    const x = 1 * WORLD_BLOCK_EXTENT + 1000;
+    const z = 1 * WORLD_BLOCK_EXTENT + 1000;
+    streamer.update(x, z);
+    streamer.setWorldProgress(4);
+    const nach = streamer.update(x, z);
+    expect(nach.load).toEqual([]);
+    expect(nach.release).toEqual([]);
   });
 });

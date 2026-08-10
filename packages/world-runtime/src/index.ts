@@ -2,6 +2,8 @@ export {
   WorldScriptVM,
   type WorldVmFault,
   type WorldVmResult,
+  type WorldVmState,
+  type WorldCommand,
   type WorldWrite,
   type WorldMemorySnapshot,
 } from './script-vm.js';

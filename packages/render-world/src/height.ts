@@ -4,6 +4,7 @@ import {
   type WorldGrid,
   type WorldTerrain,
 } from '@webmidgar/formats-world';
+import { resolveBlockIndex } from '@webmidgar/formats-world';
 import { cellAt, cellToBlockIndex, wrapCell } from './layout.js';
 
 /**
@@ -26,9 +27,16 @@ export interface GroundSample {
  * außerhalb des Primärrasters werden gewickelt. Löcher (quarantinierte
  * Blöcke/Meshes, degenerierte Abdeckung) liefern null — nie einen Ratewert.
  */
-export function sampleGround(terrain: WorldTerrain, grid: WorldGrid, x: number, z: number): GroundSample | null {
+export function sampleGround(
+  terrain: WorldTerrain,
+  grid: WorldGrid,
+  x: number,
+  z: number,
+  /** Weltfortschritt 0–4: entscheidet über die WM0-Alternativblöcke. */
+  worldProgress = 0,
+): GroundSample | null {
   const cell = wrapCell(cellAt(x, z), grid);
-  const blockIndex = cellToBlockIndex(cell, grid);
+  const blockIndex = resolveBlockIndex(cellToBlockIndex(cell, grid), grid, worldProgress);
   const block = terrain.blocks[blockIndex];
   if (!block) return null;
   const extent = WORLD_MESH_EXTENT;

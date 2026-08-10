@@ -45,12 +45,18 @@ describe.skipIf(!available)('Realdaten: World-Runtime-Proben (S29)', () => {
     expect(ev.diagnostics).toEqual([]);
     const vm = new WorldScriptVM(ev);
     let fertig = 0;
+    let angehalten = 0;
     let instruktionen = 0;
     const faultArten = new Map<string, number>();
     const unbekannteOps = new Map<number, number>();
     for (const fn of ev.functions) {
       const r = vm.runFunction(fn, 50_000);
       if (r.finished) fertig++;
+      // Seit S30 sind die Kommandos scharf: eine Funktion darf jetzt an einem
+      // WARTEPUNKT anhalten (0x305/0x306) statt durchzulaufen. Beides ist ein
+      // regulärer Ausgang — entgleist ist nur, was weder das eine noch das
+      // andere erreicht.
+      else if (r.suspended) angehalten++;
       instruktionen += r.steps;
       for (const f of r.faults) {
         faultArten.set(f.kind, (faultArten.get(f.kind) ?? 0) + 1);
@@ -64,6 +70,7 @@ describe.skipIf(!available)('Realdaten: World-Runtime-Proben (S29)', () => {
         {
           funktionen: ev.functions.length,
           fertig,
+          angehalten,
           instruktionen,
           faultArten: [...faultArten.entries()],
           unknownQuote: instruktionen ? unknownGesamt / instruktionen : 0,
@@ -78,7 +85,10 @@ describe.skipIf(!available)('Realdaten: World-Runtime-Proben (S29)', () => {
     );
     // Verriegelt: Die belegte Grammatik trägt durch JEDE Funktion (die
     // Semantik der Kommandos bleibt offen — aber kein Lauf hängt/entgleist).
-    expect(fertig).toBe(ev.functions.length);
+    expect(fertig + angehalten).toBe(ev.functions.length);
+    // S30-Verschärfung: keine unbekannten Opcodes mehr, kein Underflow.
+    expect(unknownGesamt).toBe(0);
+    expect(faultArten.get('stack-underflow') ?? 0).toBe(0);
   });
 
   it('Mesh-Koordinaten-Deutung: Typ-2-Kennungen passen ins 36×28-Raster (Gegendeutung schlechter)', async () => {

@@ -23,7 +23,14 @@ const LAND = 3;
 const WASSER = 17;
 const BLOCK_EXTENT = WORLD_MESH_EXTENT * 4;
 
-function fixtureTerrain() {
+/** Das Fixture-Terrain ist deterministisch und wird nur GELESEN — einmal bauen. */
+let terrainCache: ReturnType<typeof baueTerrain> | null = null;
+function fixtureTerrain(): ReturnType<typeof baueTerrain> {
+  terrainCache ??= baueTerrain();
+  return terrainCache;
+}
+
+function baueTerrain() {
   const bloecke: WorldMeshSpec[][] = [];
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 2; col++) {
@@ -221,5 +228,82 @@ describe('S27-Adapter', () => {
       action: true,
       switchVehicle: true,
     });
+  });
+});
+
+describe('Weltfortschritt und Alternativblöcke (S30)', () => {
+  const WM0: WorldGrid = { cols: 9, rows: 7, primaryBlocks: 63, belegt: true };
+
+  /** Zelle (1,2) wird von der Startlage x=4000,z=20000 aus nach +x betreten. */
+  function sessionMitScript(code: Parameters<typeof assembleWorldEv>[0][0]['code']): WorldSession {
+    const ev = parseWorldEv(assembleWorldEv([{ id: meshFunctionId(1, 2, 0), code }]));
+    expect(ev.diagnostics).toEqual([]);
+    return session({ ev });
+  }
+
+  function bisScriptLaeuft(s: WorldSession): ReturnType<WorldSession['tick']> {
+    for (let i = 0; i < 60; i++) {
+      const r = s.tick(VOR);
+      if (r.ranFunctions.length > 0) return r;
+    }
+    throw new Error('Mesh-Funktion lief nicht an');
+  }
+
+  it('0x349 setzt den Weltfortschritt; über Snapshot/Restore tauscht er genau die gemessenen Zellen', () => {
+    const s = sessionMitScript([
+      { op: 'Reset' },
+      { op: 'PushConst', value: 2 },
+      { op: 'Raw', word: 0x349 },
+      { op: 'Return' },
+    ]);
+    expect(s.worldProgress).toBe(0);
+    bisScriptLaeuft(s);
+    expect(s.worldProgress).toBe(2);
+
+    // Der Fortschritt ist Sitzungszustand: er überlebt Snapshot/Restore und
+    // wirkt in einer WM0-Sitzung auf die Blockauflösung.
+    const wm0 = new WorldSession(fixtureTerrain(), WM0, { vehicles: [FUSS, BOOT], ev: s.vm!.ev });
+    expect(wm0.blockIndexForCell(50)).toBe(50);
+    expect(wm0.restore(s.snapshot()).ok).toBe(true);
+    expect(wm0.blockIndexForCell(50)).toBe(63);
+    expect(wm0.blockIndexForCell(41)).toBe(64);
+    expect(wm0.blockIndexForCell(42)).toBe(65);
+    expect(wm0.blockIndexForCell(60)).toBe(60); // Stufe 3 noch nicht erreicht
+  });
+
+  it('Kommandos gehen als DATEN an den Wirt (Opcode + gemessene Operanden)', () => {
+    const s = sessionMitScript([
+      { op: 'Reset' },
+      { op: 'PushConst', value: 22 },
+      { op: 'PushConst', value: 15 },
+      { op: 'Raw', word: 0x308 },
+      { op: 'Return' },
+    ]);
+    const r = bisScriptLaeuft(s);
+    expect(r.scriptFaults).toEqual([]);
+    expect(r.requests).toEqual([{ kind: 'script-command', opcode: 0x308, args: [22, 15] }]);
+  });
+
+  it('Wartepunkt: das Script hält Takte an und der angehaltene Zustand ist Teil des Snapshots', () => {
+    const s = sessionMitScript([
+      { op: 'Reset' },
+      { op: 'PushConst', value: 4 },
+      { op: 'Raw', word: 0x305 },
+      { op: 'Raw', word: 0x306 },
+      { op: 'Reset' },
+      { op: 'PushConst', value: 3 },
+      { op: 'Raw', word: 0x349 },
+      { op: 'Return' },
+    ]);
+    bisScriptLaeuft(s);
+    // Direkt nach dem Anlauf steht das Script am Wartepunkt: 0x349 lief NICHT.
+    expect(s.worldProgress).toBe(0);
+    expect(s.snapshot().script).not.toBeNull();
+    const digestAngehalten = s.digest();
+    for (let i = 0; i < 5; i++) s.tick(NEUTRAL_WORLD_INPUT);
+    expect(s.worldProgress).toBe(3);
+    expect(s.snapshot().script).toBeNull();
+    // Der angehaltene Zustand wirkt auf den Digest — er ist echter Zustand.
+    expect(s.digest()).not.toBe(digestAngehalten);
   });
 });

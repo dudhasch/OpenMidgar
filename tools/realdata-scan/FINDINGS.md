@@ -760,3 +760,62 @@ u16 special[4]   dito · u16 padding                       = 24 B je Tabelle
 | **Wer auf Tabelle 1 umschaltet, ist nicht belegt — aber stark eingegrenzt.** Nur **15 von 702** Fields haben beide Tabellen belegt. Differenzielle Opcode-Häufigkeit liefert **0x4B**: in **14/15** Fields mit zwei Tabellen, aber nur **4/167** mit einer und **6/520** ohne. 15 Fields sind zu wenig für einen Beleg | 🔵 Kandidat, nicht belegt |
 | **Deckungsrechnung geht nicht auf:** Von 1000 belegten Formationen erreichen Sektion 7 (434) und die literalen `BATTLE`-Operanden (118) zusammen 469 nicht; `enc_w.bin` deckt davon 197, es bleiben **272**. Kandidaten: `BATTLE` mit Bankvariable statt Literal, Weltkartenskripte, Minispiele | 🟡 Restfrage |
 | Drei Slots tragen eine ID bei Anteil 0 — ein Kampf, der nie ausgelöst werden kann. Der Parser reicht ihn durch und zieht ihn nie | 🟡 Kuriosum |
+
+## S29-Nachtrag — World-Kommando-Opcodes und WM0-Alternativblöcke (2026-08-10)
+
+Werkzeuge: `world-cmd-probe.rdtest.ts`, `world-altblock-probe.rdtest.ts` (beide
+neu), `world-vehicle-probe.rdtest.ts` (nachgezogen). Hypothesengeber:
+**ff7-landscaper**, **wiki.ffrtt.ru**, **FFNx** (nur Teilbestätigung).
+**Makou Reactor hat keinen Worldscript-Anteil** (0 Treffer) — als Quelle für
+diese Frage ein Fehlschlag, und das ist selbst ein Befund. Zwei
+Community-Aussagen wurden von den Daten widerlegt.
+
+*(Überschrift bewusst „S29-Nachtrag": Die Nummer S30 ist im Roadmapbogen für
+Kampf I vergeben und inzwischen belegt.)*
+
+### Teil 1 — Stelligkeit der Kommando-Opcodes: das 23,6-%-Loch aus S29
+
+Verfahren: **Anweisungsbilanz als Accounting.** Der Code zerfällt in
+Anweisungen ab `0x100` (Stack-Reset); jede muss ihren Stack exakt aufbrauchen.
+Das liefert je Anweisung eine Gleichung über den Netto-Deltas; die Pop-Zahl
+folgt danach aus den berechenbaren Stacktiefen.
+
+| Befund | Status |
+|---|---|
+| **2360 Anweisungen** über alle drei `.ev`; das lineare System der Netto-Deltas ist **widerspruchsfrei (0)** und bestimmt **92 von 96** freien Opcodes eindeutig | ✅ Formatfakt |
+| **Die Bilanz misst die Trennung, nicht sich selbst.** Dieselbe Rechnung mit Anweisungsgrenze an `0x201` ⇒ **110 Widersprüche**, an `0x110` ⇒ **1833**. Ohne diese Kontrolle wäre „widerspruchsfrei" wertlos, weil ein zu grobes Raster trivial aufgeht | ✅ Kontrolle bestanden |
+| **Pop-Zahlen** aus den Stacktiefen für **89 von 92** eindeutig. Offen genau 0x18/0x19/0x1b (Delta 0, Mindesttiefe 1 ⇒ Pop 0 oder 1 nicht entscheidbar) | ✅ gemessen |
+| **Nullwert-Zweitrechnung:** 11 der 89 sind 0-stellig und bestehen die Bilanz trivial. Ohne sie bleiben **78 nichttriviale** Stelligkeiten; Belegdichte oben: 0x304 (134×), 0x300 (118×), 0x309/0x303 (je 106×), 0x308 (105×) | ✅ gemessen |
+| **Grenze, die die Messung selbst benennt:** 0x305/0x306 (218 Anweisungen) und 0x326/0x327 (3) treten **nur paarweise** auf (unpaarige Vorkommen: **0**). Messbar ist allein die Paarsumme, nicht die Aufteilung | 🟡 Grenze dokumentiert |
+| **Referenzabgleich:** von 65 eindeutig gemessenen, in der Referenz benannten Opcodes stimmen **65/65** (Quote 1,0). Kontrolle mit um eine Listenposition verschobener Referenz: **31/65 = 0,477**. Die Aufruf-Familie 0x204–0x223 stimmt zusätzlich 24/24, ist als Kontrolle aber **entartet** (Referenz konstant 1) und wird getrennt gezählt | ✅ gemessen |
+| **Referenz WIDERLEGT:** landscaper und Wiki geben 0x305 **und** 0x306 je 1 Pop (Summe 2). Gemessen ist die Paarsumme **1**. Übernommen wird 1/0, weil FFNx 0x306 als den ausführenden Warte-Opcode belegt — die Aufteilung bleibt 🟡 | ✅ realdaten-entschieden |
+| **Referenz an eigenen Daten BESTÄTIGT (Sonderregister):** 0x11b nutzt {0,1,4,5,6,7,8,9,10,12,13,14,15,16}, 0x11f genau {2,3}, 0x117 {11} — **überschneidungsfrei und zusammen lückenlos 0–16**. Unter der Byte-/Wort-Deutung müsste Wort 2 die Bytes 4/5 überdecken (2 Kollisionen); sie sind getrennt belegt | ✅ realdaten-entschieden |
+| **Scharfschaltung, am Bestand gemessen:** VM über alle 143 wm0-Funktionen — **unknown-op 0** (S29: 23,6 %), **stack-underflow 0**, 143/143 regulär (83 durchgelaufen, 60 an einem Wartepunkt angehalten) | ✅ Abdeckung |
+| **Semantikprobe (0x308/0x309):** Der Einstiegsschalter auf Sonderregister 6 liefert 48 Ortseinträge. Mit 0x308 = Mesh-Zelle und 0x309 = Lage im Mesh liegen **43/48 = 0,896** auf Nicht-Wasser, die Karte selbst nur zu **0,337** (2000 Zufallspunkte). Alle Zellen im 36×28-Raster, Lagewerte in [51, 8104] ⊂ [0, 8192] | ✅ gemessen |
+| Bedeutung der übrigen Kommandos (Fenster, Kamera, Modelle, Ton …) | 🔴 unbelegt — die VM führt sie als **Daten** aus (`script-command`-HostRequest), nicht als Wirkung |
+| 0x301 kommt im Bestand nicht vor und steht in keiner Quelle | 🔴 UNKNOWN-Politik bleibt |
+
+### Teil 2 — WM0-Alternativblöcke 63–68
+
+Am **Terrain** entschieden, ohne Script und ohne Referenz, mit zwei
+unabhängigen Maßen über je alle 63 Kandidatenzellen (die 62 falschen Zellen
+sind die Kontrolle).
+
+| Alt-Block | ersetzt Zelle | Raster (Zeile, Spalte) | Mesh-Identität | Naht-Quote | Kontroll-Median |
+|---|---|---|---|---|---|
+| 63 | **50** | 5, 5 | 15/16 | 1,0000 | 0,3922 |
+| 64 | **41** | 4, 5 | 4/16 | 1,0000 | 0,3400 |
+| 65 | **42** | 4, 6 | 15/16 | 1,0000 | 0,0548 |
+| 66 | **60** | 6, 6 | 14/16 | 1,0000 | 0,5695 |
+| 67 | **47** | 5, 2 | 14/16 | 0,9671 | 0,4605 |
+| 68 | **48** | 5, 3 | 14/16 | 0,9669 | 0,3691 |
+
+| Befund | Status |
+|---|---|
+| **Zuordnung [50, 41, 42, 60, 47, 48]** — zwei unabhängige Maße, dieselbe Antwort, kein Gleichstand | ✅ Formatfakt |
+| **Referenzdeckung:** landscaper und Wiki nennen dieselbe Reihenfolge — festgestellt **nach** der eigenen Messung, nicht davor | ✅ |
+| **Was sich ändert:** Block 64 ändert 11/16 Meshes (Lage, UV, Textur, Normalen) — die Junon-Änderung liegt praktisch vollständig dort. 63/66/67/68 ändern 1–2 Meshes. **Block 65 unterscheidet sich von Zelle 42 nur in den NORMALEN eines Meshes**, ist also geometrisch identisch | ✅ gemessen |
+| **Umschaltung: 0x349**, ausschließlich in der Initialisierungsfunktion (7 Vorkommen), über eine **monotone Schwellenkaskade auf Savemap-Wort 0**: ≥638 → 1, ≥1000 → 2, ≥1197 → 3, ≥1199 → 3 oder 4 (bitabhängig); sonst 0. Wertemenge exakt {1,2,3,4} + Vorgabe 0 = **5 Stufen** | ✅ gemessen (Struktur) |
+| **NEGATIVBEFUND, mit validierter Suche:** **Kein** Kommando-Opcode trägt an **keiner** der vier Literal-Operandenpositionen die Blöcke 63–68 oder die sechs Zielzellen über Rauschniveau (99 geprüfte Opcode/Positions-Stellen über alle drei `.ev`). Die Suche ist validiert, weil dieselbe Suche 0x308 als Mesh-Zellen-Träger findet (>20 Unikate). Die Umschaltung steht **nicht als Blockindex im Script** — 0x349 trägt eine **Stufe** | ✅ Negativbefund |
+| **Kopplung Stufe → Alternativgruppe: nicht belegbar.** Keine Quelle stellt die Tabelle auf, und die eigene Gütefunktion ist **blind** — auch die Alternativblöcke haben perfekte Ränder zu den Primärnachbarn (Naht 1,0), die Änderungen liegen im Blockinneren | 🔴 / 🔵 kumulative Stufenregel dokumentiert |
+| **Community-Beschreibung korrigiert:** Das Wiki schreibt „the last 5 meshes 63, 64, 65, 66, 67 and 68" — sechs Indizes unter der Überschrift „5", und nennt Blöcke „meshes". An den Daten eindeutig: **6 Blöcke à 16 Meshes**. Die zusätzlich vermutete Gold-Saucer-Variante existiert nicht; es sind genau vier Gruppen | ✅ realdaten-entschieden |

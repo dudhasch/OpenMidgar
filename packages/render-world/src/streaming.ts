@@ -1,4 +1,5 @@
 import type { WorldGrid } from '@webmidgar/formats-world';
+import { resolveBlockIndex } from '@webmidgar/formats-world';
 import { cellAt, cellToBlockIndex, wrapCell, type BlockCell } from './layout.js';
 
 /**
@@ -39,6 +40,18 @@ export class WorldStreamer {
     private readonly radius = 1,
   ) {}
 
+  /**
+   * Weltfortschritt 0–4. Er entscheidet, welcher BLOCK unter einer Rasterzelle
+   * liegt (WM0-Alternativblöcke, `resolveBlockIndex`). Eine Änderung macht die
+   * betroffenen Slots ungültig — sie erscheinen im nächsten `update` als
+   * release + load, nicht stillschweigend als „schon resident".
+   */
+  private worldProgress = 0;
+
+  setWorldProgress(progress: number): void {
+    this.worldProgress = progress;
+  }
+
   get residentSlots(): StreamSlot[] {
     return [...this.resident.values()];
   }
@@ -52,15 +65,21 @@ export class WorldStreamer {
       for (let dc = -this.radius; dc <= this.radius; dc++) {
         const cell = { col: center.col + dc, row: center.row + dr };
         const wrapped = wrapCell(cell, this.grid);
-        const blockIndex = cellToBlockIndex(wrapped, this.grid);
+        const blockIndex = resolveBlockIndex(cellToBlockIndex(wrapped, this.grid), this.grid, this.worldProgress);
         const key = `${cell.col}:${cell.row}`;
         wanted.set(key, { cell, blockIndex, key });
       }
     }
     const load: StreamSlot[] = [];
     const release: StreamSlot[] = [];
-    for (const [key, slot] of wanted) if (!this.resident.has(key)) load.push(slot);
-    for (const [key, slot] of this.resident) if (!wanted.has(key)) release.push(slot);
+    for (const [key, slot] of wanted) {
+      const da = this.resident.get(key);
+      if (!da || da.blockIndex !== slot.blockIndex) load.push(slot);
+    }
+    for (const [key, slot] of this.resident) {
+      const will = wanted.get(key);
+      if (!will || will.blockIndex !== slot.blockIndex) release.push(slot);
+    }
     for (const slot of release) this.resident.delete(slot.key);
     for (const slot of load) this.resident.set(slot.key, slot);
     return { load, release, generation: this.generation, residentCount: this.resident.size };

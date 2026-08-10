@@ -149,11 +149,14 @@ describe('Sollverläufe je Kategorie', () => {
     expect(r.writes).toEqual([{ addr: 0, value: 0 }]);
   });
 
-  it('UNKNOWN-Politik: ein Kommando-Opcode (0x305) faultet und wird übersprungen, der Lauf endet regulär', () => {
+  it('UNKNOWN-Politik gilt weiter: 0x301 ist in keiner Messung belegt, faultet und wird übersprungen', () => {
+    // 0x301 kommt im GESAMTEN Bestand (wm0/wm2/wm3) nicht vor — es gibt also
+    // weder eine gemessene Stelligkeit noch eine Referenzangabe. Genau dafür
+    // bleibt die Fault-Politik: melden, überspringen, nie raten.
     const vm = vmMit({
       id: systemFunctionId(1),
       code: [
-        { op: 'Raw', word: 0x305 },
+        { op: 'Raw', word: 0x301 },
         { op: 'PushConst', value: 11 },
         { op: 'PushConst', value: 1 },
         { op: 'Write' },
@@ -162,8 +165,154 @@ describe('Sollverläufe je Kategorie', () => {
     });
     const r = vm.runFunction(vm.findSystemFunction(1)!);
     expect(r.finished).toBe(true);
-    expect(r.faults).toEqual([expect.objectContaining({ kind: 'unknown-op', opcode: 0x305 })]);
+    expect(r.faults).toEqual([expect.objectContaining({ kind: 'unknown-op', opcode: 0x301 })]);
     expect(vm.savemap.get(11)).toBe(1);
+  });
+
+  it('Kommando mit gemessener Stelligkeit: 0x308 nimmt 2 Operanden in Push-Reihenfolge, wirkt aber NICHT', () => {
+    const vm = vmMit({
+      id: systemFunctionId(1),
+      code: [
+        { op: 'Reset' },
+        { op: 'PushConst', value: 22 },
+        { op: 'PushConst', value: 15 },
+        { op: 'Raw', word: 0x308 },
+        { op: 'Reset' },
+        { op: 'PushConst', value: 7 },
+        { op: 'Raw', word: 0x304 },
+        { op: 'Return' },
+      ],
+    });
+    const r = vm.runFunction(vm.findSystemFunction(1)!);
+    expect(r.finished).toBe(true);
+    // Kein Fault mehr, kein Stack-Rest — die Anweisungsbilanz geht auf.
+    expect(r.faults).toEqual([]);
+    expect(r.commands).toEqual([
+      { opcode: 0x308, args: [22, 15] },
+      { opcode: 0x304, args: [7] },
+    ]);
+    // Die BEDEUTUNG bleibt außerhalb der VM: kein Speicher wurde berührt.
+    expect(r.writes).toEqual([]);
+    expect(vm.snapshotMemory()).toEqual({ savemap: [], temp: [], special: [] });
+  });
+
+  it('Anweisungsbilanz: eine Anweisung mit falscher Operandenzahl meldet stack-underflow', () => {
+    // Gegenprobe zur Stelligkeitsmessung: 0x324 ist mit 4 Pops gemessen —
+    // werden nur 3 Werte gepusht, MUSS die VM das melden statt zu raten.
+    const vm = vmMit({
+      id: systemFunctionId(1),
+      code: [
+        { op: 'Reset' },
+        { op: 'PushConst', value: 60 },
+        { op: 'PushConst', value: 140 },
+        { op: 'PushConst', value: 200 },
+        { op: 'Raw', word: 0x324 },
+        { op: 'Return' },
+      ],
+    });
+    const r = vm.runFunction(vm.findSystemFunction(1)!);
+    expect(r.faults).toEqual([expect.objectContaining({ kind: 'stack-underflow', opcode: 0x324 })]);
+  });
+
+  it('Wartepunkt: 0x305/0x306 hält an und wird verlustfrei fortgesetzt', () => {
+    const vm = vmMit({
+      id: systemFunctionId(1),
+      code: [
+        { op: 'Reset' },
+        { op: 'PushConst', value: 3 },
+        { op: 'Raw', word: 0x305 },
+        { op: 'Raw', word: 0x306 },
+        { op: 'Reset' },
+        { op: 'PushConst', value: 77 },
+        { op: 'PushConst', value: 5 },
+        { op: 'Write' },
+        { op: 'Return' },
+      ],
+    });
+    const state = vm.startFunction(vm.findSystemFunction(1)!);
+    const erst = vm.run(state);
+    expect(erst.suspended).toBe(true);
+    expect(erst.finished).toBe(false);
+    expect(state.waitFrames).toBe(3);
+    expect(vm.savemap.has(77)).toBe(false); // nach dem Wartepunkt noch nichts
+    // Der Wirt zählt die Takte herunter — die VM hat keine Wanduhr.
+    state.waitFrames = 0;
+    const zweit = vm.run(state);
+    expect(zweit.finished).toBe(true);
+    expect(vm.savemap.get(77)).toBe(5);
+  });
+
+  it('Aufruf-Familie: 0x204+k ruft Funktion k des Modells vom Stack und kehrt zurück', () => {
+    const vm = vmMit(
+      {
+        id: systemFunctionId(1),
+        code: [
+          { op: 'Reset' },
+          { op: 'PushConst', value: 5 }, // Modellnummer
+          { op: 'Raw', word: 0x204 + 2 }, // Funktion 2 dieses Modells
+          { op: 'Reset' },
+          { op: 'PushConst', value: 90 },
+          { op: 'PushConst', value: 1 },
+          { op: 'Write' },
+          { op: 'Return' },
+        ],
+      },
+      {
+        id: modelFunctionId(5, 2),
+        code: [
+          { op: 'Reset' },
+          { op: 'PushConst', value: 91 },
+          { op: 'PushConst', value: 2 },
+          { op: 'Write' },
+          { op: 'Return' },
+        ],
+      },
+    );
+    const r = vm.runFunction(vm.findSystemFunction(1)!);
+    expect(r.finished).toBe(true);
+    // Reihenfolge belegt den Rücksprung: erst der Rumpf des Modells, dann der Rest.
+    expect(r.writes).toEqual([
+      { addr: 91, value: 2 },
+      { addr: 90, value: 1 },
+    ]);
+  });
+
+  it('Aufruf ins Leere faultet als bad-call, ohne den Lauf zu zerstören', () => {
+    const vm = vmMit({
+      id: systemFunctionId(1),
+      code: [
+        { op: 'Reset' },
+        { op: 'PushConst', value: 63 },
+        { op: 'Raw', word: 0x204 + 7 },
+        { op: 'Return' },
+      ],
+    });
+    const r = vm.runFunction(vm.findSystemFunction(1)!);
+    expect(r.finished).toBe(true);
+    expect(r.faults).toEqual([expect.objectContaining({ kind: 'bad-call' })]);
+  });
+
+  it('Sonderregister: 0x117/0x11b/0x11f teilen EINEN Indexraum (gemessen)', () => {
+    const vm = vmMit({
+      id: systemFunctionId(1),
+      code: [
+        { op: 'PushConst', value: 70 },
+        { op: 'PushSpecialByte', addr: 2 },
+        { op: 'Write' },
+        { op: 'PushConst', value: 71 },
+        { op: 'PushSpecialWord', addr: 2 },
+        { op: 'Write' },
+        { op: 'PushConst', value: 72 },
+        { op: 'PushSpecialBit', addr: 2 },
+        { op: 'Write' },
+        { op: 'Return' },
+      ],
+    });
+    vm.special.set(2, 5412);
+    vm.runFunction(vm.findSystemFunction(1)!);
+    expect(vm.savemap.get(70)).toBe(5412);
+    expect(vm.savemap.get(71)).toBe(5412);
+    expect(vm.savemap.get(72)).toBe(5412);
   });
 
   it('Budget: eine Endlosschleife endet mit budget-Fault, nie mit Hänger', () => {

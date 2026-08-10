@@ -7,7 +7,13 @@ import {
   type WorldMeshSpec,
 } from '@webmidgar/fixture-gen';
 import { parseWorldBlock, parseWorldMap, parseWorldMesh } from './parse.js';
-import { WORLD_BLOCK_BYTES, WORLD_MESH_EXTENT } from './types.js';
+import {
+  WORLD_BLOCK_BYTES,
+  WORLD_MESH_EXTENT,
+  WORLD_GRIDS,
+  WM0_ALTERNATIVE_CELLS,
+  resolveBlockIndex,
+} from './types.js';
 
 /**
  * Roundtrip-Suite Writer ↔ Parser (S28): Der Composer in fixture-gen ist die
@@ -148,5 +154,42 @@ describe('Weltkarten-Block und -Karte: Roundtrip und Quarantäne', () => {
     const kanteLinks = links.vertices.filter((v) => v.x === WORLD_MESH_EXTENT).map((v) => [v.z, v.h]);
     const kanteRechts = rechts.vertices.filter((v) => v.x === 0).map((v) => [v.z, v.h]);
     expect(kanteLinks).toEqual(kanteRechts);
+  });
+});
+
+describe('WM0-Alternativblöcke (S30)', () => {
+  it('Zuordnung Alternativblock → Rasterzelle ist die gemessene Reihenfolge', () => {
+    // REALDATEN-BELEGT (world-altblock-probe): Mesh-Identität UND Naht-
+    // stetigkeit liefern unabhängig voneinander dieselbe Zuordnung.
+    expect(WM0_ALTERNATIVE_CELLS).toEqual([50, 41, 42, 60, 47, 48]);
+    expect(new Set(WM0_ALTERNATIVE_CELLS).size).toBe(6);
+    // Jede Zelle liegt im 9×7-Primärraster.
+    for (const z of WM0_ALTERNATIVE_CELLS) expect(z).toBeLessThan(63);
+  });
+
+  it('resolveBlockIndex tauscht stufenweise und lässt alles andere unberührt', () => {
+    const grid = WORLD_GRIDS.wm0;
+    // Stufe 0: Urzustand — keine einzige Zelle wird getauscht.
+    for (let z = 0; z < 63; z++) expect(resolveBlockIndex(z, grid, 0)).toBe(z);
+    // Stufe 1 tauscht genau Zelle 50 gegen Block 63.
+    expect(resolveBlockIndex(50, grid, 1)).toBe(63);
+    expect(resolveBlockIndex(41, grid, 1)).toBe(41);
+    // Stufe 2 nimmt die Junon-Gruppe dazu (kumulativ, 🔵 dokumentiert).
+    expect(resolveBlockIndex(41, grid, 2)).toBe(64);
+    expect(resolveBlockIndex(42, grid, 2)).toBe(65);
+    expect(resolveBlockIndex(60, grid, 2)).toBe(60);
+    // Stufe 4: alle sechs getauscht, genau sechs Zellen betroffen.
+    const getauscht = [];
+    for (let z = 0; z < 63; z++) if (resolveBlockIndex(z, grid, 4) !== z) getauscht.push(z);
+    expect(getauscht.sort((a, b) => a - b)).toEqual([41, 42, 47, 48, 50, 60]);
+    expect(resolveBlockIndex(60, grid, 3)).toBe(66);
+    expect(resolveBlockIndex(47, grid, 4)).toBe(67);
+    expect(resolveBlockIndex(48, grid, 4)).toBe(68);
+  });
+
+  it('Karten ohne Alternativblöcke bleiben unberührt (nur WM0 hat welche)', () => {
+    for (const g of [WORLD_GRIDS.wm2, WORLD_GRIDS.wm3]) {
+      for (let z = 0; z < g.primaryBlocks; z++) expect(resolveBlockIndex(z, g, 4)).toBe(z);
+    }
   });
 });

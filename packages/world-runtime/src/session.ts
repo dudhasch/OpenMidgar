@@ -1,8 +1,19 @@
 import { canonicalJson, fnv1a64HexOfString } from '@webmidgar/interpreter';
 import type { WorldEv, WorldGrid, WorldTerrain } from '@webmidgar/formats-world';
-import { WORLD_MESH_EXTENT } from '@webmidgar/formats-world';
+import {
+  WORLD_MESH_EXTENT,
+  WORLD_PROGRESS_MAX,
+  WOP_SET_WORLD_PROGRESS,
+  resolveBlockIndex,
+} from '@webmidgar/formats-world';
 import { sampleGround } from '@webmidgar/render-world';
-import { WorldScriptVM, type WorldMemorySnapshot, type WorldVmFault } from './script-vm.js';
+import {
+  WorldScriptVM,
+  type WorldCommand,
+  type WorldMemorySnapshot,
+  type WorldVmFault,
+  type WorldVmState,
+} from './script-vm.js';
 
 /**
  * WorldSession (S29) — Fixed-Tick-Sitzung der Weltkarte im ADR-006-Vertrag:
@@ -74,7 +85,13 @@ export const NEUTRAL_WORLD_INPUT: WorldTickInput = { turn: 0, throttle: 0, actio
 
 export type WorldHostRequest =
   | { kind: 'world-transition'; locationIndex: number; destMaplistIndex: number }
-  | { kind: 'encounter-check'; roll: number; walkClass: number };
+  | { kind: 'encounter-check'; roll: number; walkClass: number }
+  /**
+   * Ein vom Script ausgeführtes Kommando. Die STELLIGKEIT ist gemessen, die
+   * BEDEUTUNG nicht (🔴) — deshalb reicht die Sitzung Opcode und Operanden
+   * unverändert an den Wirt durch, statt eine Wirkung zu erfinden.
+   */
+  | { kind: 'script-command'; opcode: number; args: number[] };
 
 export interface WorldTickResult {
   tick: number;
@@ -101,6 +118,10 @@ export interface WorldSessionSnapshot {
   stepCounter: number;
   rngState: number;
   memory: WorldMemorySnapshot | null;
+  /** 0–4; 0x349 setzt ihn, er entscheidet über die WM0-Alternativblöcke. */
+  worldProgress: number;
+  /** Angehaltenes Script (Wartepunkt) — Teil des Snapshots (ADR-006). */
+  script: WorldVmState | null;
 }
 
 /**
@@ -148,6 +169,14 @@ export class WorldSession {
   private stepCounter = 0;
   private rngState: number;
   private currentMesh: { mx: number; my: number } | null = null;
+  /**
+   * Weltfortschritt 0–4 (0x349). GEMESSEN ist, dass genau dieser Opcode in der
+   * Initialisierungsfunktion über eine monotone Schwellenkaskade auf dem
+   * Savemap-Wort 0 belegt wird; die Kopplung Stufe → Alternativgruppe ist
+   * 🔵 dokumentierte Eigenentscheidung (s. `WM0_ALTERNATIVE_GROUPS`).
+   */
+  worldProgress = 0;
+  private script: WorldVmState | null = null;
 
   constructor(
     readonly terrain: WorldTerrain,
@@ -223,7 +252,7 @@ export class WorldSession {
       const speed = this.vehicle.speed * input.throttle;
       const zielX = this.x + dx * speed;
       const zielZ = this.z + dz * speed;
-      const boden = sampleGround(this.terrain, this.grid, zielX, zielZ);
+      const boden = sampleGround(this.terrain, this.grid, zielX, zielZ, this.worldProgress);
       if (boden && this.vehicle.allowedClasses.includes(boden.walkClass)) {
         this.x = zielX;
         this.z = zielZ;
@@ -244,6 +273,20 @@ export class WorldSession {
       }
     }
 
+    // Ein angehaltenes Script hat Vorrang: erst die Wartetakte abzählen, dann
+    // fortsetzen. Wartepunkte sind DATEN (ADR-006), keine Wanduhr.
+    if (this.script && this.vm) {
+      if (this.script.waitFrames > 0) {
+        this.script.waitFrames--;
+      }
+      if (this.script.waitFrames === 0) {
+        const r = this.vm.run(this.script, this.scriptBudget);
+        scriptFaults.push(...r.faults);
+        this.verarbeiteKommandos(r.commands, requests);
+        if (!r.suspended) this.script = null;
+      }
+    }
+
     // Mesh-Trigger: beim Zellenwechsel läuft Funktion 0 der Zelle (🟡 —
     // welche Funktionsnummer das Original beim Betreten ruft, ist unbelegt;
     // die Zuordnung Zelle→Funktion ist Formatfakt, der Anlass Hypothese).
@@ -252,12 +295,15 @@ export class WorldSession {
     if (!this.currentMesh || cell.mx !== this.currentMesh.mx || cell.my !== this.currentMesh.my) {
       meshChanged = this.currentMesh !== null;
       this.currentMesh = cell;
-      if (meshChanged && this.vm) {
+      if (meshChanged && this.vm && !this.script) {
         const fn = this.vm.findMeshFunction(cell.mx, cell.my, 0);
         if (fn) {
-          const result = this.vm.runFunction(fn, this.scriptBudget);
+          const state = this.vm.startFunction(fn);
+          const result = this.vm.run(state, this.scriptBudget);
           ranFunctions.push(fn.id);
           scriptFaults.push(...result.faults);
+          this.verarbeiteKommandos(result.commands, requests);
+          if (result.suspended) this.script = state;
         }
       }
     }
@@ -291,6 +337,29 @@ export class WorldSession {
     };
   }
 
+  /**
+   * Kommandowirkung. Nur EIN Opcode wirkt in der Sitzung selbst: 0x349 setzt
+   * den Weltfortschritt, weil dessen Wirkung (Alternativblöcke) über die
+   * gemessene Blockzuordnung nachvollziehbar ist. Alles andere geht als Datum
+   * an den Wirt — die UNKNOWN-Politik gilt für die BEDEUTUNG weiter.
+   */
+  private verarbeiteKommandos(commands: WorldCommand[], requests: WorldHostRequest[]): void {
+    for (const c of commands) {
+      if (c.opcode === WOP_SET_WORLD_PROGRESS) {
+        this.worldProgress = Math.max(0, Math.min(WORLD_PROGRESS_MAX, c.args[0] ?? 0));
+      }
+      requests.push({ kind: 'script-command', opcode: c.opcode, args: c.args });
+    }
+  }
+
+  /**
+   * Blockindex einer Rasterzelle unter dem aktuellen Weltfortschritt —
+   * Bindeglied zwischen Script (0x349) und Streaming (Alternativblöcke).
+   */
+  blockIndexForCell(cell: number): number {
+    return resolveBlockIndex(cell, this.grid, this.worldProgress);
+  }
+
   snapshot(): WorldSessionSnapshot {
     return {
       schemaVersion: 1,
@@ -305,6 +374,15 @@ export class WorldSession {
       stepCounter: this.stepCounter,
       rngState: this.rngState,
       memory: this.vm ? this.vm.snapshotMemory() : null,
+      worldProgress: this.worldProgress,
+      script: this.script
+        ? {
+            frames: this.script.frames.map((f) => ({ ...f })),
+            stack: [...this.script.stack],
+            waitFrames: this.script.waitFrames,
+            pendingWait: this.script.pendingWait,
+          }
+        : null,
     };
   }
 
@@ -321,6 +399,15 @@ export class WorldSession {
     this.prevSwitch = snapshot.prevSwitch;
     this.stepCounter = snapshot.stepCounter;
     this.rngState = snapshot.rngState;
+    this.worldProgress = snapshot.worldProgress ?? 0;
+    this.script = snapshot.script
+      ? {
+          frames: snapshot.script.frames.map((f) => ({ ...f })),
+          stack: [...snapshot.script.stack],
+          waitFrames: snapshot.script.waitFrames,
+          pendingWait: snapshot.script.pendingWait,
+        }
+      : null;
     if (snapshot.memory && this.vm) this.vm.restoreMemory(snapshot.memory);
     this.currentMesh = this.meshCell();
     return { ok: true };
