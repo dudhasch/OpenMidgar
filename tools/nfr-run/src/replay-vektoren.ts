@@ -223,10 +223,25 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * Vorherige Werte (Stand nach S33): `diagonal d1f2f69588a75aa4`,
  * `gleiten 4538950e18f2622c`, `skript 068e7fb42783b857`.
  */
+/**
+ * **Fortschreibung 2026-08-10 (F22/BGON).** Erneut alle drei Werte, erneut
+ * EINE benennbare Ursache: Der Runtime-Zustand führt mit `bgStates` ein
+ * zusätzliches Feld (Hintergrund-Zustandsbits der BGON/BGOFF/BGCLR-Opcodes,
+ * Makou-belegt). Der Digest läuft über den gesamten Zustandsbaum, also
+ * wandern auch `diagonal` und `gleiten` mit, deren Skripte keinen
+ * Hintergrund schalten. Die Gegenprobe trägt wie immer: Wäre nur `skript`
+ * gewandert, hätte die Hintergrundschaltung die Bewegungsrechnung berührt —
+ * DAS wäre der Fehler gewesen. Ein bewusster `engineCompat`-Schritt
+ * (Opcode-Tabelle erweitert: 0xE0/0xE1/0xE4 implementiert statt übersprungen).
+ *
+ * Vorherige Werte (Stand nach der Dialogtext-Pipeline):
+ * `diagonal 7dec0ebab96b619a`, `gleiten 331df99d295c41c2`,
+ * `skript 03dad5854e045fdf`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: '7dec0ebab96b619a',
-  gleiten: '331df99d295c41c2',
-  skript: '03dad5854e045fdf',
+  diagonal: 'a979df074f55443b',
+  gleiten: 'dff830fea2efbfc3',
+  skript: '4df6cdd6d9f1e15c',
 };
 
 export interface VektorVergleich {

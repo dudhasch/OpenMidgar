@@ -167,6 +167,21 @@ jeweils mit Quelldatei:
   0xE2 {MEMORY} trägt 4. Unsere Pauschale „1 Folgebyte" ist für 0xDD korrekt,
   für {MEMORY} zu kurz 🟡.
 
+## Fix-Runde nach der Makou/ff7tk-Recherche (2026-08-10, Commit-Folge auf 9bfa849)
+
+Alle offenen Sichtfindings mit bekanntem Fixpfad umgesetzt; 615 Tests grün.
+
+| # | Fix | Status |
+|---|---|---|
+| F30 | Transparenzregel: Palettenrohwert 0x0000 ist immer transparent (decodeBgr555 kodiert genau das als Alpha 0; Schwarz MIT STP-Bit bleibt deckend). Schwarze Blockränder um Effektkacheln beseitigt | ✅ Sichtnachweis `md8_1`: echte Flammen statt Blöcke |
+| F31 | `textureId2` (u8@36) geparst; Auswahlregel `blending>0 && Layer>0 → srcX2/srcY2/textureId2` in Atlas, Schlüssel und Kompositor. Makous Struct bestätigt ALLE unsere Record-Offsets (um +4 verschobener Nullpunkt) | ✅ verwürfelte Kachelblöcke (F16) beseitigt; Abnahmetest ersetzt die alte „src2 sobald gesetzt"-Heuristik |
+| F32 | Mischstapel nach Layer und Z sortiert (Schlüssel um Layer erweitert, Reihenfolge deckend → Layer aufsteigend → z absteigend) | ✅ `sbwy4_6`-Wasser liegt nicht mehr über den Texturen |
+| F23′ | Mischformeln vervollständigt: typeTrans 2 = subtraktiv (Umkehr-Differenz), 3 = 25 % additiv (Alpha 0,25) — vorher wie 0 bzw. 1 behandelt | ✅ |
+| F42 | Sektion-3-Licht angewandt: `decodeModelLightBlock` („Farbe zuerst" — deckt sich mit Makous Layout) → Lambert-Bake in die Vertexfarben beim Actor-Bau; texturierte Flächen modulieren jetzt Textur × Vertexfarbe | ✅ Sichtvergleich Wächter: Farbsättigung wie im Original; 🟡 Lambert-Anwendung bleibt Hypothese |
+| F41 | Clouds fehlendes Auge: Decal-Texturen brauchen **RepeatWrapping** — das gespiegelte zweite Auge nutzt UVs außerhalb [0,1], Clamp-to-Edge (three-Vorgabe) verschmierte es zur leeren Fläche | ✅ Sichtnachweis: beide Augen, Brauen, Mund (`f41_gesicht3.jpg`) |
+| F27 | Gehen/Rennen aktiviert (Slots 1/2 nach tatsächlicher Ortsveränderung; Schwelle 9 Einheiten/Takt für Rennen). Das frühere Kippen war eine Folge von F20 — `spielerProbe` misst identische Wurzellage für alle drei Slots. Clip-Wechsel behalten den alten Clip bis zur Bindung (kein Bindpose-Flackern) | ✅ |
+| F22′ | **BGON (0xE0) / BGOFF (0xE1) / BGCLR (0xE4) im Interpreter**: `bgStates` (param → Bitmaske) im Runtime-Zustand; Demo nutzt Script-Bits, Reihum nur noch als Fallback für unberührte Parameter. Gemessen: `uutai1` {1:9, 2:63, 4:2}, `mds7pb_1` {5:1, 6:1}, `junonr2` {18:128} — die Scripts schalten real | ✅ Replay-Digests fortgeschrieben (bewusster engineCompat-Schritt, dokumentiert in replay-vektoren.ts); BGROL/BGROL2 bleiben übersprungen 🟡 |
+
 ## Testprotokoll (fortlaufend)
 
 - ✅ Boot über Dev-HTTP-Quelle: 8 Archive indexiert, maplist (787 Namen), KERNEL.BIN, scene.bin, WM0.MAP, wm0.ev, Spielstand geladen.

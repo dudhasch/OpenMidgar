@@ -69,18 +69,42 @@ export function buildFieldBackground(
    * Objekts sind — beides lässt sich nicht je Tile innerhalb eines Meshes
    * setzen.
    */
-  const stapel = new Map<string, { spec: BackgroundTileSpec[]; atlasIndex: number; blend: TileBlendMode; param: number; state: number }>();
+  const stapel = new Map<
+    string,
+    {
+      spec: BackgroundTileSpec[];
+      atlasIndex: number;
+      blend: TileBlendMode;
+      param: number;
+      state: number;
+      layer: number;
+      zMax: number;
+    }
+  >();
   const zustaende = new Map<number, Set<number>>();
 
   for (const item of items) {
     const t = item.tile;
     const blend: TileBlendMode = t.blending === 0 ? 'opaque' : mischart(t.typeTrans);
-    const schluessel = `${item.entry.atlas}|${blend}|${t.param}|${t.state}`;
+    // F32: Layer gehört in den Stapelschlüssel — ohne ihn landete eine
+    // Layer-1-Mischkachel ÜBER allem, was später gezeichnet wurde (sbwy4_6:
+    // Wasser über den eigentlichen Texturen). Makou teilt nach Layer, Z,
+    // param, state UND transType.
+    const schluessel = `${item.entry.atlas}|${blend}|${t.param}|${t.state}|${item.layer}`;
     let eintrag = stapel.get(schluessel);
     if (!eintrag) {
-      eintrag = { spec: [], atlasIndex: item.entry.atlas, blend, param: t.param, state: t.state };
+      eintrag = {
+        spec: [],
+        atlasIndex: item.entry.atlas,
+        blend,
+        param: t.param,
+        state: t.state,
+        layer: item.layer,
+        zMax: t.z,
+      };
       stapel.set(schluessel, eintrag);
     }
+    if (t.z > eintrag.zMax) eintrag.zMax = t.z;
     eintrag.spec.push({
       x: t.dstX + offsetX,
       y: t.dstY + offsetY,
@@ -93,10 +117,15 @@ export function buildFieldBackground(
     if (t.param !== 0) (zustaende.get(t.param) ?? zustaende.set(t.param, new Set()).get(t.param)!).add(t.state);
   }
 
-  // Deckend zuerst, gemischt danach: gemischte Stapel schreiben keine Tiefe
-  // und müssen deshalb über dem fertigen Untergrund liegen.
+  // Deckend zuerst (Tiefe regelt dort die Ordnung), gemischte danach in
+  // Bildordnung: Layer aufsteigend, innerhalb des Layers hinten (großes z)
+  // zuerst — gemischte Stapel schreiben keine Tiefe, ihre Reihenfolge IST
+  // die Ordnung (F32).
   const sortiert = [...stapel.values()].sort(
-    (a, b) => Number(a.blend !== 'opaque') - Number(b.blend !== 'opaque'),
+    (a, b) =>
+      Number(a.blend !== 'opaque') - Number(b.blend !== 'opaque') ||
+      a.layer - b.layer ||
+      b.zMax - a.zMax,
   );
 
   const meshes: Mesh[] = [];

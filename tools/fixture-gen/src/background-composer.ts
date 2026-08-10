@@ -48,6 +48,13 @@ export interface BgTileSpec {
   /** 12-Bit-Tiefenschlüssel; Layer 0 verwendet im Original konstant 4095. */
   z?: number | undefined;
   textureId?: number | undefined;
+  /** Zweite Texturseite — gilt für Misch-Tiles auf Layern > 0 (F31). */
+  textureId2?: number | undefined;
+  /** Animationsgruppe/Zustand (F22) und Mischung (F23). */
+  param?: number | undefined;
+  state?: number | undefined;
+  blending?: number | undefined;
+  typeTrans?: number | undefined;
   bpp?: number | undefined;
 }
 
@@ -144,7 +151,12 @@ export function composeBackgroundSection(spec: BackgroundSectionSpec = {}): Uint
       bytes[o + 24] = (tile.paletteId ?? 0) & 0xff;
       bytes[o + 25] = (tile.flags ?? 0) & 0xff;
       view.setUint16(o + 26, tile.z ?? (l === 0 ? 4095 : 0), true);
+      bytes[o + 28] = (tile.param ?? 0) & 0xff;
+      bytes[o + 29] = (tile.state ?? 0) & 0xff;
+      bytes[o + 30] = (tile.blending ?? 0) & 0xff;
+      bytes[o + 32] = (tile.typeTrans ?? 0) & 0xff;
       bytes[o + 34] = (tile.textureId ?? 0) & 0xff;
+      bytes[o + 36] = (tile.textureId2 ?? 0) & 0xff;
       bytes[o + 38] = (tile.bpp ?? 1) & 0xff;
       view.setUint32(o + 44, Math.round((uvSrcX / 256) * 1e7), true);
       view.setUint32(o + 48, Math.round((uvSrcY / 256) * 1e7), true);

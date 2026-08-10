@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { FieldModelAnimation, FieldModelEntry } from '@webmidgar/formats-field';
+import { decodeModelLightBlock, type FieldModelAnimation, type FieldModelEntry } from '@webmidgar/formats-field';
 import {
   parseA,
   parseHrc,
@@ -238,19 +238,24 @@ class FieldActorHandleImpl implements FieldActorHandle {
     const token = ++this.requestToken;
     this.ticksPerFrame = Math.max(1, Math.round(speed));
     this.loop = loop;
-    this.frameIndex = 0;
-    this.tickAccumulator = 0;
-    this.clip = null;
 
     const anim = this.animations[index];
     if (!anim) {
       // Index außerhalb der Manifest-Liste → Bindpose, keine Exception.
+      this.clip = null;
+      this.frameIndex = 0;
+      this.tickAccumulator = 0;
       this.settled = Promise.resolve();
       return;
     }
+    // F27/F36: Der ALTE Clip läuft weiter, bis der neue gebunden ist — sonst
+    // fiele die Figur bei jedem Umschalten (Stehen↔Gehen) für die
+    // Bindezeit in die Bindpose, und die ist keine Standhaltung.
     this.settled = this.loadClip(anim.file).then((bound) => {
       if (token !== this.requestToken || this.released) return;
       this.clip = bound && bound.frames.length > 0 ? bound : null;
+      this.frameIndex = 0;
+      this.tickAccumulator = 0;
     });
   }
 
@@ -408,8 +413,14 @@ export function createActorLibrary(
       if (!sources || disposed) return null;
 
       // Eigene Three-Instanz je Handle; Quellobjekte (MeshSource/Texturen)
-      // kommen geteilt aus dem Cache.
-      const actor = buildActor(sources.skeleton, (boneIndex) => sources.bundles[boneIndex] ?? []);
+      // kommen geteilt aus dem Cache. F42: Sektion-3-Licht des Eintrags wird
+      // beim Bau in die Vertexfarben gebacken (Lambert-Hypothese 🟡).
+      const lichtBlock = decodeModelLightBlock(entry.blockRaw);
+      const actor = buildActor(
+        sources.skeleton,
+        (boneIndex) => sources.bundles[boneIndex] ?? [],
+        lichtBlock ?? undefined,
+      );
       actor.root.scale.setScalar(scaleFactor(scaleMode, entry.scale, scaleGlobal));
 
       const handle = new FieldActorHandleImpl(

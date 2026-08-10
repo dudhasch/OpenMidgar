@@ -152,18 +152,20 @@ let fieldName = '';
 let fieldWarnings: string[] = [];
 let transitioning = false;
 /**
- * Ruhe- und Laufanimation eines Feldmodells.
+ * Ruhe-, Geh- und Rennanimation eines Feldmodells.
  *
- * 🟡 **Konventionshypothese, nicht gemessen.** Community-üblich ist Index 0 =
- * Stehen, 1 = Gehen. Die Größen im Bestand stützen das (aafe.a 312 B ≈ ein
- * Frame, aaff.a 8316 B ≈ Bewegungszyklus), belegt ist es nicht.
+ * 🟢 **Belegt** (Makou Reactor, FieldModelLoaderPS.cpp): Für Hauptcharakter-
+ * Modelle sind die ersten drei Animations-Slots Stehen/Gehen/Rennen —
+ * Cloud AAAA.HRC → ACFE/AAFF/AAGA, im Code kommentiert „Standing, walking,
+ * running".
  *
- * Wichtig ist vor allem, dass überhaupt EINE Animation gesetzt wird: ohne sie
+ * Wichtig bleibt, dass überhaupt EINE Animation gesetzt wird: ohne sie
  * lief jede Figur in der Bindpose, und die ist keine Standhaltung, sondern die
  * unposierte Bone-Kette — die Figuren lagen flach am Boden (F21).
  */
 const ANIM_STEHEN = 0;
 const ANIM_GEHEN = 1;
+const ANIM_RENNEN = 2;
 /** F21-Diagnose: übersprungene Modell-Teilressourcen, gezählt je Name. */
 const modellFehlstellen = new Map<
   string,
@@ -839,7 +841,17 @@ const HINTERGRUND_TAKTE_JE_PHASE = 8;
 function setzeHintergrundZustand(): void {
   if (!hintergrundAnim) return;
   const phase = Math.floor(hintergrundAnim.takt / HINTERGRUND_TAKTE_JE_PHASE);
+  // F22, echter Mechanismus: Wenn das Field-Script einen Parameter über
+  // BGON/BGOFF angefasst hat, gilt seine Bitmaske (state ist ein Bit).
+  // Unberührte Parameter laufen weiter im Demo-Reihum — besser eine
+  // plausible Animation als ein eingefrorener Zustand.
+  const script = fieldSession?.runtime?.state.bgStates ?? {};
   for (const gruppe of hintergrundAnim.gruppen) {
+    const maske = script[gruppe.param];
+    if (maske !== undefined) {
+      for (const mesh of gruppe.meshes) mesh.visible = gruppe.state === 0 || (maske & gruppe.state) !== 0;
+      continue;
+    }
     const bits = hintergrundAnim.zustaende.get(gruppe.param) ?? [];
     const aktiv = bits.length > 0 ? bits[phase % bits.length] : gruppe.state;
     const sichtbar = gruppe.state === aktiv;
@@ -860,21 +872,22 @@ function updateFieldActors(): void {
     playerFigur.root.position.set(p[0], p[1], p[2]);
     setActorFacing(playerFigur, player.facing);
     if (playerHandle) {
-      // F21: Auch der Spieler lief bisher ohne jede Animation, also in der
-      // Bindpose. Gesetzt wird vorerst NUR die Ruheanimation.
-      //
-      // 🔴 Die Gehanimation (`ANIM_GEHEN`) bleibt bewusst ungenutzt: sie legt
-      // die Figur flach (F27). Ihre Frames tragen eine Wurzelrotation, die sich
-      // mit der Wurzelrahmen-Korrektur und der von uns gesetzten Blickrichtung
-      // beißt. Erst messen, dann anschalten — eine sichtbar kippende Figur ist
-      // schlechter als eine, die beim Gehen steht.
-      if (spielerAnim !== ANIM_STEHEN) {
-        spielerAnim = ANIM_STEHEN;
-        playerHandle.setAnimation(ANIM_STEHEN, 1, true);
-        spielerBereit = false;
-        void playerHandle.whenAnimationSettled().then(() => { spielerBereit = true; });
+      // F27: Stehen/Gehen/Rennen (Slots 0/1/2, Makou-belegt) nach der
+      // TATSÄCHLICHEN Ortsveränderung — nicht nach dem Eingabezustand, damit
+      // eine blockierte Bewegung (Wand) nicht auf der Stelle läuft. Das
+      // frühere Kippen der Gehanimation war eine Folge von F20 und ist mit
+      // dem Quaternion-Facing behoben (spielerProbe: Wurzellage bei allen
+      // drei Slots identisch).
+      const dx = letzteSpielerPos ? player.walk.x - letzteSpielerPos[0] : 0;
+      const dy = letzteSpielerPos ? player.walk.y - letzteSpielerPos[1] : 0;
+      const schritt = Math.hypot(dx, dy);
+      const wunsch = schritt < 0.01 ? ANIM_STEHEN : schritt > 9 ? ANIM_RENNEN : ANIM_GEHEN;
+      if (spielerAnim !== wunsch) {
+        spielerAnim = wunsch;
+        playerHandle.setAnimation(wunsch, 1, true);
+        if (!spielerBereit) void playerHandle.whenAnimationSettled().then(() => { spielerBereit = true; });
       }
-      playerFigur.root.visible = spielerBereit; // F36, s. NPC-Zweig
+      playerFigur.root.visible = spielerBereit; // F36: nur bis zur ERSTEN Bindung verborgen
       letzteSpielerPos = [player.walk.x, player.walk.y];
       playerHandle.advanceTick();
     }
@@ -1289,6 +1302,28 @@ function codeForAction(action: SemanticAction): string | null {
       if (eintraege.length > 1) bunt[Number(off)] = { werte: eintraege.length, top: eintraege.slice(0, 4) };
     }
     return { field: fieldName, tiles: gesamt, layer: layers.map((l) => ({ i: l.index, tiles: l.tiles.length })), bunt };
+  },
+  /** F22: Hintergrund-Zustandsbits der Script-Opcodes (BGON/BGOFF). */
+  bgZustaende: (): object => ({ ...(fieldSession?.runtime?.state.bgStates ?? {}) }),
+  /** F27-Messung: Spieleranimation setzen und Wurzellage nach dem Binden melden. */
+  spielerProbe: async (animId: number): Promise<object> => {
+    if (!playerHandle) return { fehler: 'kein Spielermodell' };
+    spielerAnim = animId;
+    playerHandle.setAnimation(animId, 1, true);
+    await playerHandle.whenAnimationSettled();
+    for (let i = 0; i < 3; i++) playerHandle.advanceTick();
+    const a = playerHandle.actor;
+    a.root.updateMatrixWorld(true);
+    const hoch = new Vector3(0, 0, 1).transformDirection(a.model.matrixWorld);
+    return {
+      animId,
+      modelRotGrad: a.model.rotation.toArray().slice(0, 3).map((v) => Math.round((v as number) * 57.296)),
+      modelPos: a.model.position.toArray().map((v) => Math.round(v * 100) / 100),
+      hochWelt: hoch.toArray().map((v) => Math.round(v * 1000) / 1000),
+      boneSum: Math.round(
+        a.boneGroups.reduce((s, b) => s + Math.abs(b.rotation.x) + Math.abs(b.rotation.y) + Math.abs(b.rotation.z), 0) * 57.296,
+      ),
+    };
   },
   /** F29-Messung: Rohbytes eines Dialogstrings (hex), um Funktionscodes zu belegen. */
   dialogRoh: (index: number, laenge = 48): string | null => {

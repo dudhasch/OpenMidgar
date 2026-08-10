@@ -137,6 +137,7 @@ export class FieldRuntime {
       eventQueue: [],
       hostRequests: [],
       randomEncountersDisabled: false,
+      bgStates: {},
       menuAccessRaw: 0,
       unknownSkips: {},
       droppedRequests: 0,

@@ -108,32 +108,54 @@ describe('resolveTileRgba: palettierte Kachel', () => {
     expect(texelAt(15, 15)).toEqual(TRANSPARENT);
   });
 
-  it('nutzt src2 statt src, sobald gesetzt', () => {
+  it('F31: Misch-Tiles auf Layern > 0 lesen src2 von textureId2, alle anderen src von textureId', () => {
     const palBytes = composePaletteSection({ pages: [[TRANSPARENT, RED, GREEN]] });
     const palette = parsePaletteSection(palBytes, 'fix', [])!;
 
-    const texData = texturePage(1);
-    fillPalettizedBlock(texData, 0, 0, 16, 1); // Region A (src) komplett rot
-    fillPalettizedBlock(texData, 64, 80, 16, 2); // Region B (src2) komplett grün
+    const texA = texturePage(1);
+    fillPalettizedBlock(texA, 0, 0, 16, 1); // Seite 0, src-Region: rot
+    const texB = texturePage(1);
+    fillPalettizedBlock(texB, 64, 80, 16, 2); // Seite 1, src2-Region: grün
 
     const bgBytes = composeBackgroundSection({
       layers: {
         0: {
           width: 1,
           height: 1,
+          // Layer 0 mit gesetztem src2: die alte Heuristik „src2, sobald
+          // gesetzt" hätte hier die falsche Region gelesen.
           tiles: [{ dstX: 0, dstY: 0, srcX: 0, srcY: 0, srcX2: 64, srcY2: 80, paletteId: 0, textureId: 0, bpp: 1 }],
         },
+        1: {
+          width: 1,
+          height: 1,
+          // Misch-Tile: src2 auf textureId2 (Makou-Regel, F31).
+          tiles: [
+            {
+              dstX: 16, dstY: 0, srcX: 0, srcY: 0, srcX2: 64, srcY2: 80,
+              paletteId: 0, textureId: 0, textureId2: 1, blending: 1, typeTrans: 1, bpp: 1,
+            },
+          ],
+        },
       },
-      texturePages: [{ slot: 0, depth: 1, data: texData }],
+      texturePages: [
+        { slot: 0, depth: 1, data: texA },
+        { slot: 1, depth: 1, data: texB },
+      ],
     });
     const bg = parseBackgroundSection(bgBytes, 'fix', [])!;
-    const tile = bg.layers[0]!.tiles[0]!;
-    const page = bg.texturePages[0]!;
-    const out = resolveTileRgba(tile, page, palette.pages, 16)!;
+    const basis = bg.layers[0]!.tiles[0]!;
+    const misch = bg.layers.find((l) => l.index === 1)!.tiles[0]!;
+    expect(misch.textureId2).toBe(1);
 
-    // Aufgelöste Pixel stammen aus Region B (grün), nicht aus Region A (rot).
-    expect([...out.slice(0, 4)]).toEqual(GREEN);
-    expect([...out.slice(4, 8)]).toEqual(GREEN);
+    // Layer 0 (nicht mischend): erste Felder → Seite 0, Region A, rot.
+    const outBasis = resolveTileRgba(basis, bg.texturePages[0]!, palette.pages, 16, 'opaque', 0)!;
+    expect([...outBasis.slice(0, 4)]).toEqual(RED);
+
+    // Layer 1 mischend: zweites Paar auf Seite textureId2 → grün.
+    const seite = bg.texturePages.find((p) => p.slot === 1)!;
+    const outMisch = resolveTileRgba(misch, seite, palette.pages, 16, 'index0', 1)!;
+    expect([...outMisch.slice(0, 4)]).toEqual(GREEN);
   });
 });
 
@@ -290,10 +312,10 @@ describe('buildTileAtlas: Deduplizierung und UV-Rechtecke', () => {
     const tileDup = bg.layers[0]!.tiles[1]!;
     const tileB = bg.layers[0]!.tiles[2]!;
     const transparency = layerTransparency(0);
-    const keyA = tileVariantKey(tileA, 16, transparency);
-    const keyB = tileVariantKey(tileB, 16, transparency);
+    const keyA = tileVariantKey(tileA, 16, transparency, 0);
+    const keyB = tileVariantKey(tileB, 16, transparency, 0);
     // Duplikat (anderes dst, sonst identische Variante) teilt sich den Eintrag von A.
-    expect(atlas.entries.get(tileVariantKey(tileDup, 16, transparency))).toEqual(atlas.entries.get(keyA));
+    expect(atlas.entries.get(tileVariantKey(tileDup, 16, transparency, 0))).toEqual(atlas.entries.get(keyA));
 
     const entryA = atlas.entries.get(keyA)!;
     const entryB = atlas.entries.get(keyB)!;
@@ -466,10 +488,14 @@ describe('buildFieldBackground: Tiefenfenster (F03)', () => {
       }
     }
     // Ordnung bleibt erhalten: die ferne Basis liegt am hinteren, das nahe
-    // Overlay am vorderen Rand des Fensters.
-    const pos = render.meshes[0]!.geometry.getAttribute('position') as BufferAttribute;
-    expect(pos.getZ(0)).toBeCloseTo(1, 9); // Layer 0, z=4095
-    expect(pos.getZ(4)).toBeCloseTo(-1, 9); // Layer 1, z=1
+    // Overlay am vorderen Rand des Fensters. (Seit F32 liegen die Layer in
+    // getrennten Stapeln — deshalb über alle Meshes eingesammelt.)
+    const zWerte = render.meshes.flatMap((m) => {
+      const pos = m.geometry.getAttribute('position') as BufferAttribute;
+      return Array.from({ length: pos.count }, (_, v) => pos.getZ(v));
+    });
+    expect(Math.max(...zWerte)).toBeCloseTo(1, 9); // Layer 0, z=4095
+    expect(Math.min(...zWerte)).toBeCloseTo(-1, 9); // Layer 1, z=1
   });
 });
 

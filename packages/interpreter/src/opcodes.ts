@@ -139,6 +139,14 @@ export const OP = {
   BATTLE: 0x70,
   /** Zufallskämpfe an/aus. 1 Operandenbyte; 102 Vorkommen im Bestand. */
   BTLON: 0x71,
+  /**
+   * Hintergrund-Zustandsschaltung (F22-Mechanismus). 🟢 Belegt (Makou
+   * Reactor, Script::backgroundParams / Opcode.cpp): BGON setzt Bit
+   * `1 << state` des Parameters, BGOFF löscht es, BGCLR löscht alle.
+   */
+  BGON: 0xe0,
+  BGOFF: 0xe1,
+  BGCLR: 0xe4,
 } as const;
 
 export type OpCategory =
@@ -237,6 +245,10 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.MAPJUMP]: 9,
   [OP.BATTLE]: 3,
   [OP.BTLON]: 1,
+  // Längen identisch zur bisherigen Skip-Tabelle (dort realdaten-geeicht).
+  [OP.BGON]: 3,
+  [OP.BGOFF]: 3,
+  [OP.BGCLR]: 2,
 };
 
 /**
@@ -284,7 +296,8 @@ export const SKIP_OPERAND_LEN: Readonly<Record<number, number>> = {
   0xc5: 2, 0xc6: 2, 0xc7: 1, 0xc8: 1, 0xc9: 1, 0xca: 3, 0xcb: 2, 0xcc: 0,
   0xcd: 2, 0xce: 0, 0xcf: 0, 0xd0: 13, 0xd1: 1, 0xd2: 1, 0xd3: 1, 0xd4: 0,
   0xd5: 1, 0xd6: 1, 0xd7: 2, 0xd8: 2, 0xd9: 2, 0xda: 0, 0xdb: 2, 0xdc: 3,
-  0xdd: 0, 0xde: 0, 0xdf: 0, 0xe0: 3, 0xe1: 3, 0xe2: 1, 0xe3: 2, 0xe4: 2,
+  // 0xe0/0xe1/0xe4 sind seit F22/BGON implementiert (IMPL_OPERAND_LEN).
+  0xdd: 0, 0xde: 0, 0xdf: 0, 0xe2: 1, 0xe3: 2,
   0xe5: 4, 0xe6: 4, 0xe7: 4, 0xe8: 4, 0xe9: 9, 0xea: 14, 0xeb: 1, 0xec: 3,
   0xed: 3, 0xee: 0, 0xef: 0, 0xf0: 1, 0xf1: 4, 0xf2: 6, 0xf3: 3, 0xf4: 3,
   0xf5: 1, 0xf6: 1, 0xf7: 8, 0xf8: 1, 0xf9: 0, 0xfa: 2, 0xfb: 0, 0xfc: 1,

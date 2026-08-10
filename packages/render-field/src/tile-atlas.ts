@@ -1,4 +1,4 @@
-import type { BackgroundTile, FieldBackground, FieldPalette } from '@webmidgar/formats-field';
+import { effectiveTileRef, type BackgroundTile, type FieldBackground, type FieldPalette } from '@webmidgar/formats-field';
 import {
   baseLayerIndex,
   layerTileSize,
@@ -40,10 +40,17 @@ export interface TileAtlasSet {
   issues: TileResolveIssue[];
 }
 
-export function tileVariantKey(tile: BackgroundTile, size: number, transparency: TileTransparency): string {
-  const sx = tile.srcX2 !== 0 || tile.srcY2 !== 0 ? tile.srcX2 : tile.srcX;
-  const sy = tile.srcX2 !== 0 || tile.srcY2 !== 0 ? tile.srcY2 : tile.srcY;
-  return `${tile.textureId}:${sx}:${sy}:${tile.paletteId}:${size}:${transparency}`;
+export function tileVariantKey(
+  tile: BackgroundTile,
+  size: number,
+  transparency: TileTransparency,
+  layerIndex: number,
+): string {
+  // F31: Quelle UND Texturseite nach der Makou-Regel (blending>0 && Layer>0
+  // → zweites Koordinatenpaar auf textureId2) — Schlüssel und Auflösung
+  // müssen dieselbe Regel verwenden.
+  const ref = effectiveTileRef(tile, layerIndex);
+  return `${ref.textureId}:${ref.x}:${ref.y}:${tile.paletteId}:${size}:${transparency}`;
 }
 
 export function buildTileAtlas(
@@ -89,16 +96,17 @@ export function buildTileAtlas(
     const size = layerTileSize(layer);
     const transparency = layerTransparency(layer.index, baseIndex);
     for (const [tileIndex, tile] of layer.tiles.entries()) {
-      const key = tileVariantKey(tile, size, transparency);
+      const key = tileVariantKey(tile, size, transparency, layer.index);
       if (entries.has(key)) continue;
-      const page = pages.get(tile.textureId);
-      const texels = resolveTileRgba(tile, page, palettePages, size, transparency);
+      const ref = effectiveTileRef(tile, layer.index);
+      const page = pages.get(ref.textureId);
+      const texels = resolveTileRgba(tile, page, palettePages, size, transparency, layer.index);
       if (!texels) {
         issues.push({
           code: page ? 'W-BG-PALMISS' : 'W-BG-TEXMISS',
           tileIndex,
           layer: layer.index,
-          detail: page ? `Palettenseite ${tile.paletteId} fehlt` : `Texturseite ${tile.textureId} fehlt`,
+          detail: page ? `Palettenseite ${tile.paletteId} fehlt` : `Texturseite ${ref.textureId} fehlt`,
         });
         continue;
       }
@@ -142,7 +150,7 @@ export function buildDrawList(bg: FieldBackground, atlas: TileAtlasSet): TileDra
     const size = layerTileSize(layer);
     const transparency = layerTransparency(layer.index, baseIndex);
     for (const tile of sortTilesForDraw(layer.tiles)) {
-      const entry = atlas.entries.get(tileVariantKey(tile, size, transparency));
+      const entry = atlas.entries.get(tileVariantKey(tile, size, transparency, layer.index));
       if (!entry) continue;
       items.push({ layer: layer.index, tile, size, entry });
     }

@@ -385,6 +385,27 @@ export function stepInstruction(
       ctx.ip = next;
       return { kind: 'continue' };
     }
+    case OP.BGON:
+    case OP.BGOFF: {
+      // 🟢 Makou (Script::backgroundParams): Operanden = Bankpaar, param,
+      // state; BGON setzt Bit `1 << state`, BGOFF löscht es. Der Host liest
+      // `bgStates` je Takt und schaltet die Tile-Zustände (F22).
+      const banks = u8(0);
+      const param = srcValue(banks >> 4, u8(1), false);
+      const state = srcValue(banks & 0xf, u8(2), false);
+      const bit = 1 << (state & 31);
+      const alt = rt.bgStates[param] ?? 0;
+      rt.bgStates[param] = op === OP.BGON ? alt | bit : alt & ~bit;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.BGCLR: {
+      const banks = u8(0);
+      const param = srcValue(banks >> 4, u8(1), false);
+      rt.bgStates[param] = 0;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
     default:
       break;
   }

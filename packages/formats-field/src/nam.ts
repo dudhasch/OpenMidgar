@@ -191,6 +191,13 @@ export interface BackgroundTile {
   typeTrans: number;
   /** u8@34 — Texturseiten-Slot; 99,85 % verweisen auf eine vorhandene Seite. ✅ */
   textureId: number;
+  /**
+   * u8@36 — zweite Texturseite (F31). 🟢 Belegt (Makou `TilePC.textureID2`,
+   * dort @32 bei um 4 Bytes späterem Record-Nullpunkt): Misch-Tiles
+   * (`blending > 0`, Layer > 0) lesen ihre Quelle aus `srcX2/srcY2` auf
+   * DIESER Seite — s. `effectiveTileRef`.
+   */
+  textureId2: number;
   /** u8@38 — Texeltiefe der Quellseite (0/1 = palettiert, 2 = Direktfarbe). */
   bpp: number;
   /** u32@44 / u32@48 — vorberechnetes UV in 1e7-Festkomma (= src/256·1e7). */

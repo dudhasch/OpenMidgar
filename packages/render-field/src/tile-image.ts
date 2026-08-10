@@ -1,5 +1,5 @@
 import {
-  effectiveTileSource,
+  effectiveTileRef,
   type BackgroundLayer,
   type BackgroundTexturePage,
   type BackgroundTile,
@@ -76,9 +76,10 @@ export function resolveTileRgba(
   palettePages: readonly Uint8Array[],
   size: number,
   transparency: TileTransparency = 'index0',
+  layerIndex = 0,
 ): Uint8Array | null {
   if (!page) return null;
-  const src = effectiveTileSource(tile);
+  const src = effectiveTileRef(tile, layerIndex);
   const out = new Uint8Array(size * size * 4);
   const paletted = page.depth === 1;
   const pal = paletted ? palettePages[tile.paletteId] : undefined;
@@ -97,14 +98,19 @@ export function resolveTileRgba(
         out[o] = pal![p]!;
         out[o + 1] = pal![p + 1]!;
         out[o + 2] = pal![p + 2]!;
+        // F30: Palettenrohwert 0x0000 ist IMMER transparent (Makou `isZero`;
+        // decodeBgr555 kodiert das als Alpha 0 — Schwarz MIT STP-Bit bleibt
+        // deckend). Ohne diese Regel rahmte das Schwarz der Effektkacheln
+        // jede Animation als Block ein. `index0`/`opaque` bleiben als
+        // zusätzliche Layerregeln bestehen.
         out[o + 3] =
           transparency === 'opaque'
             ? 255
-            : transparency === 'index0'
-              ? idx === 0
+            : pal![p + 3] === 0
+              ? 0
+              : transparency === 'index0' && idx === 0
                 ? 0
-                : 255
-              : pal![p + 3]!;
+                : 255;
       } else {
         const value = page.data[texel * 2]! | (page.data[texel * 2 + 1]! << 8);
         const [r, g, b, a] = decodeBgr555(value);
@@ -217,13 +223,14 @@ export function composeBackgroundImage(
     const size = layerTileSize(layer);
     const tiles = selectTiles(layer, opts.stateSelect ?? 'lowest');
     for (const [tileIndex, tile] of sortTilesForDraw(tiles).entries()) {
-      const page = pages.get(tile.textureId);
+      const page = pages.get(effectiveTileRef(tile, layer.index).textureId);
       const texels = resolveTileRgba(
         tile,
         page,
         palettePages,
         size,
         opts.transparency ?? layerTransparency(layer.index, baseIndex),
+        layer.index,
       );
       if (!texels) {
         opts.issues?.push({

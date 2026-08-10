@@ -124,16 +124,71 @@ function buildTexture(tex: TextureSource): THREE.DataTexture {
   const texture = new THREE.DataTexture(texToRgba(tex), tex.width, tex.height, THREE.RGBAFormat);
   texture.magFilter = THREE.NearestFilter; // authentischer Look, keine Palettensäume
   texture.minFilter = THREE.NearestFilter;
+  // F41: Gespiegelte Aufkleber (das zweite Auge nutzt UVs außerhalb von
+  // [0,1]) brauchen Wiederholung — mit Clamp-to-Edge (three-Vorgabe)
+  // verschmierte der Randtexel das Decal zu einer leeren Fläche.
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
   texture.needsUpdate = true;
   return texture;
 }
 
-function buildMeshObject(bundle: ActorMeshBundle): THREE.Mesh {
+/**
+ * Feldlicht je Modell (F42) — Sektion-3-Block: drei gerichtete Lichter
+ * (RGB + i16-Richtungsvektor, 4096er-Festkomma) plus Umgebungsfarbe.
+ */
+export interface ActorLighting {
+  lights: { color: [number, number, number]; direction: [number, number, number] }[];
+  ambient: [number, number, number];
+}
+
+/**
+ * Beleuchtung in die Vertexfarben einbacken (F42).
+ *
+ * 🟡 **Lambert-Hypothese**: `farbe · clamp(ambient + Σ max(0, n·l̂ᵢ)·cᵢ)` im
+ * Modellraum. Makou Reactor rendert die drei Richtungslichter selbst nicht —
+ * es editiert sie nur; die Anwendung ist also Sichtsache. Ohne jede
+ * Beleuchtung wirkten unsere Modelle gegenüber dem Original flach und blass
+ * (Nutzerbefund „viel satter", Runde 3).
+ */
+function bakeLighting(mesh: MeshSource, licht: ActorLighting): Uint8Array {
+  const out = new Uint8Array(mesh.colors); // Kopie — die Quelle ist geteilt
+  const dirs = licht.lights.map((l) => {
+    const [x, y, z] = l.direction;
+    const len = Math.hypot(x, y, z) || 1;
+    return { x: x / len, y: y / len, z: z / len, c: l.color };
+  });
+  const vertexCount = mesh.positions.length / 3;
+  for (let v = 0; v < vertexCount; v++) {
+    const nx = mesh.normals[v * 3]!;
+    const ny = mesh.normals[v * 3 + 1]!;
+    const nz = mesh.normals[v * 3 + 2]!;
+    let r = licht.ambient[0] / 255;
+    let g = licht.ambient[1] / 255;
+    let b = licht.ambient[2] / 255;
+    for (const d of dirs) {
+      const beitrag = Math.max(0, nx * d.x + ny * d.y + nz * d.z);
+      r += (beitrag * d.c[0]) / 255;
+      g += (beitrag * d.c[1]) / 255;
+      b += (beitrag * d.c[2]) / 255;
+    }
+    const o = v * 4;
+    out[o] = Math.min(255, out[o]! * Math.min(1.25, r));
+    out[o + 1] = Math.min(255, out[o + 1]! * Math.min(1.25, g));
+    out[o + 2] = Math.min(255, out[o + 2]! * Math.min(1.25, b));
+  }
+  return out;
+}
+
+function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(bundle.mesh.positions, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(bundle.mesh.normals, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(bundle.mesh.uvs, 2));
-  geometry.setAttribute('color', new THREE.BufferAttribute(bundle.mesh.colors, 4, true));
+  geometry.setAttribute(
+    'color',
+    new THREE.BufferAttribute(licht ? bakeLighting(bundle.mesh, licht) : bundle.mesh.colors, 4, true),
+  );
   geometry.setIndex(new THREE.BufferAttribute(bundle.mesh.indices, 1));
 
   const materials: THREE.Material[] = [];
@@ -145,6 +200,9 @@ function buildMeshObject(bundle: ActorMeshBundle): THREE.Mesh {
         tex
           ? new THREE.MeshBasicMaterial({
               map: buildTexture(tex),
+              // F42: Textur × Vertexfarbe — erst mit der Modulation wirken
+              // die Modelle so gesättigt wie im Original.
+              vertexColors: true,
               alphaTest: ALPHA_TEST,
               polygonOffset: true,
               polygonOffsetFactor: DECAL_OFFSET_FACTOR,
@@ -165,7 +223,11 @@ function buildMeshObject(bundle: ActorMeshBundle): THREE.Mesh {
  * Actor aus Skeleton + aufgelösten Ressourcen bauen. `resolve` liefert je
  * Bone die Mesh-/Texturbündel (leer = reines Gelenk).
  */
-export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => ActorMeshBundle[]): Actor {
+export function buildActor(
+  skeleton: Skeleton,
+  resolve: (boneIndex: number) => ActorMeshBundle[],
+  licht?: ActorLighting,
+): Actor {
   const root = new THREE.Group();
   root.name = `actor:${skeleton.name}`;
   root.quaternion.setFromRotationMatrix(sceneBasisMatrix());
@@ -188,7 +250,7 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
       group.position.set(0, 0, -skeleton.bones[bone.parentIndex]!.length);
       boneGroups[bone.parentIndex]!.add(group);
     }
-    for (const bundle of resolve(i)) group.add(buildMeshObject(bundle));
+    for (const bundle of resolve(i)) group.add(buildMeshObject(bundle, licht));
     boneGroups.push(group);
   });
   return { root, model, boneGroups };

@@ -234,6 +234,14 @@ export interface FieldRuntimeState {
    */
   randomEncountersDisabled: boolean;
   /**
+   * Hintergrund-Zustandsbits je Animationsparameter (BGON/BGOFF/BGCLR,
+   * F22-Mechanismus). Schlüssel = param, Wert = Bitmaske der aktiven
+   * Zustände (`1 << state`). Ein Tile mit state ≠ 0 ist sichtbar, wenn sein
+   * Bit gesetzt ist; state 0 ist immer sichtbar (Makou-Regel). Teil des
+   * Snapshots, weil sichtbarer Zustand.
+   */
+  bgStates: Record<number, number>;
+  /**
    * Zustand von `MENU2` (0x4A) — der Zugriffssperre auf das Menü. 🟡 Der
    * Operand nimmt im Bestand **sechs** verschiedene Werte an (8212 Vorkommen),
    * ist also keine Ja/Nein-Angabe. Er wird deshalb roh mitgeführt, damit der

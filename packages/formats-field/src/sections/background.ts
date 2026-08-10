@@ -47,6 +47,28 @@ export function effectiveTileSource(tile: BackgroundTile): { x: number; y: numbe
     : { x: tile.srcX, y: tile.srcY };
 }
 
+/**
+ * Quellkoordinate UND Texturseite eines Tiles (F31).
+ *
+ * 🟢 Regel belegt (Makou Reactor, `BackgroundTilesIO::tilePC2Tile`): Bei
+ * `blending > 0` **und** Layer > 0 gelten `srcX2/srcY2` mit **`textureId2`**
+ * — Misch-Tiles liegen auf eigenen Texturseiten. Alle anderen Tiles (und
+ * Layer 0 immer) nutzen die ersten Felder.
+ *
+ * Die alte Heuristik „src2, sobald gesetzt" traf die Koordinate in 99,1 %
+ * (S9), las sie aber gegen die FALSCHE Texturseite — das war die Ursache der
+ * verwürfelten Kachelblöcke (F16).
+ */
+export function effectiveTileRef(
+  tile: BackgroundTile,
+  layerIndex: number,
+): { x: number; y: number; textureId: number } {
+  if (tile.blending > 0 && layerIndex > 0) {
+    return { x: tile.srcX2, y: tile.srcY2, textureId: tile.textureId2 };
+  }
+  return { x: tile.srcX, y: tile.srcY, textureId: tile.textureId };
+}
+
 const MARKERS = { palette: 'PALETTE', back: 'BACK', texture: 'TEXTURE', end: 'END' } as const;
 
 function findAscii(bytes: Uint8Array, text: string, from: number): number {
@@ -79,6 +101,7 @@ function parseTiles(data: Uint8Array, view: DataView, start: number, count: numb
       blending: data[o + 30]!,
       typeTrans: data[o + 32]!,
       textureId: data[o + 34]!,
+      textureId2: data[o + 36]!,
       bpp: data[o + 38]!,
       uvX: view.getUint32(o + 44, true),
       uvY: view.getUint32(o + 48, true),
