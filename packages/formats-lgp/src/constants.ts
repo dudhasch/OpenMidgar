@@ -14,6 +14,14 @@ export const HEADER_LEN = CREATOR_LEN + 4;
 export const NAME_LEN = 20;
 export const TOC_ENTRY_LEN = NAME_LEN + 4 + 1 + 2; // 27
 
+/**
+ * Die beiden einzigen Werte, die der „Check-Code" im gemessenen Bestand
+ * annimmt (O5, 45.563 TOC-Einträge über 56 Archive). Gemessene Invariante,
+ * kein Formatfakt — Herleitung und Grenzen in [check-byte.ts](check-byte.ts).
+ */
+export const CHECK_BYTE_PLAIN = 0x0e;
+export const CHECK_BYTE_HRC = 0x0b;
+
 /** Lookup-Tabelle: 30×30 Buckets à (u16 tocStart1based + u16 count). */
 export const LOOKUP_DIM = 30;
 export const LOOKUP_ENTRY_LEN = 4;

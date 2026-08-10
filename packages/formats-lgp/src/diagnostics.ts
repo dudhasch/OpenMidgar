@@ -10,7 +10,8 @@ export type LgpDiagnosticCode =
   | 'W-LGP-CONFLICTTBL' // Konflikttabelle unlesbar — Konfliktauflösung degradiert
   | 'W-LGP-DUP-TOC' // Name+Offset doppelt im TOC — redundanter Eintrag verworfen
   | 'W-LGP-SHADOWED' // Name doppelt ohne Conflict-Index — früherer Eintrag verschattet
-  | 'W-LGP-NAME'; // Nicht-kanonische Zeichen im Namen — bereinigt
+  | 'W-LGP-NAME' // Nicht-kanonische Zeichen im Namen — bereinigt
+  | 'W-LGP-CHECKBYTE'; // Check-Code weicht von der gemessenen Invariante ab — opt-in
 
 export type DiagnosticSeverity = 'fatal' | 'error' | 'warning';
 

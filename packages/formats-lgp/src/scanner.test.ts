@@ -13,14 +13,26 @@ import {
   duplicateTocName,
   duplicateTocRecord,
   omitConflictFieldFixture,
+  setTocCheckByte,
   setTocConflictIndex,
   unterminatedFixture,
   weirdNameFixture,
 } from '@webmidgar/fixture-gen';
-import { MemoryByteSource, resolvableEntries, scanLgp } from './index.js';
+import {
+  CHECK_BYTE_HRC,
+  CHECK_BYTE_PLAIN,
+  expectedCheckByte,
+  MemoryByteSource,
+  resolvableEntries,
+  scanLgp,
+} from './index.js';
 
 const scan = (bytes: Uint8Array, mode: 'fast' | 'deep' = 'deep') =>
   scanLgp(new MemoryByteSource(bytes), 'test', { mode });
+
+/** Zweiter Einstieg mit eingeschalteter Check-Code-Prüfung (O5, opt-in). */
+const scanMitCheck = (bytes: Uint8Array) =>
+  scanLgp(new MemoryByteSource(bytes), 'test', { mode: 'deep', validateCheckByte: true });
 
 describe('LGP-Scanner: Golden Roundtrip', () => {
   it('reproduziert alle Einträge des Writers bitkorrekt (Namen, Offsets, Längen)', async () => {
@@ -179,6 +191,64 @@ describe('LGP-Scanner: Duplikatauflösung', () => {
     const winner = resolvableEntries(archive).find((e) => e.name === archive.entries[0]!.name)!;
     expect(winner.tocIndex).toBe(1);
     expect(winner.offset).toBe(fixture.entryOffsets[1]);
+  });
+});
+
+/**
+ * O5 — der Check-Code im TOC. Beide Community-Hypothesen (Prüfwert,
+ * Ordnungshinweis) sind über den vollen Archivbestand gemessen und
+ * durchgefallen; getragen hat allein die Eintragsart (0x0B genau auf `.hrc`).
+ * Die Prüfung ist deshalb **opt-in und warnend** — sie darf keinen Import
+ * scheitern lassen. Herleitung: [check-byte.ts](check-byte.ts).
+ */
+describe('LGP-Scanner: Check-Code (O5, opt-in)', () => {
+  it('Writer und Scanner stimmen unabhängig überein — kein Befund im Roundtrip', async () => {
+    const result = await scanMitCheck(basicFixture().bytes);
+    expect(result.diagnostics).toHaveLength(0);
+    for (const e of result.archive!.entries) {
+      expect(e.checkByte).toBe(expectedCheckByte(e.name));
+    }
+    // Das Fixture deckt beide belegten Werte ab, sonst prüft der Test nur einen Zweig.
+    const werte = new Set(result.archive!.entries.map((e) => e.checkByte));
+    expect([...werte].sort((a, b) => a - b)).toEqual([CHECK_BYTE_HRC, CHECK_BYTE_PLAIN]);
+  });
+
+  it('ist standardmäßig AUS: dieselbe Abweichung bleibt ohne Option stumm', async () => {
+    // tocIndex 0 ist `aaaa.hrc` (Bucket-Sortierung des Writers).
+    const defekt = setTocCheckByte(basicFixture(), 0, CHECK_BYTE_PLAIN);
+    const ohne = await scan(defekt);
+    expect(ohne.diagnostics.map((d) => d.code)).not.toContain('W-LGP-CHECKBYTE');
+    const mit = await scanMitCheck(defekt);
+    expect(mit.diagnostics.map((d) => d.code)).toContain('W-LGP-CHECKBYTE');
+  });
+
+  it('W-LGP-CHECKBYTE: bekannter Wert, falsche Eintragsart → Warnung, Eintrag nutzbar', async () => {
+    const result = await scanMitCheck(setTocCheckByte(basicFixture(), 0, CHECK_BYTE_PLAIN));
+    const befund = result.diagnostics.filter((d) => d.code === 'W-LGP-CHECKBYTE');
+    expect(befund).toHaveLength(1);
+    expect(befund[0]!.severity).toBe('warning');
+    expect(befund[0]!.tocIndex).toBe(0);
+    expect(befund[0]!.detail).toContain('Eintragsart');
+    // Warnend heißt: nichts wird quarantänisiert, alle Einträge bleiben auflösbar.
+    expect(result.ok).toBe(true);
+    expect(resolvableEntries(result.archive!)).toHaveLength(basicFixture().order.length);
+  });
+
+  it('W-LGP-CHECKBYTE: im Bestand unbelegter Wert wird gesondert benannt', async () => {
+    const result = await scanMitCheck(setTocCheckByte(basicFixture(), 1, 0x42));
+    const befund = result.diagnostics.filter((d) => d.code === 'W-LGP-CHECKBYTE');
+    expect(befund).toHaveLength(1);
+    expect(befund[0]!.detail).toContain('0x42');
+    expect(befund[0]!.detail).toContain('nicht belegt');
+    expect(result.archive!.entries[1]!.quarantined).toBeUndefined();
+  });
+
+  it('`.hrc` erwartet 0x0B, alles andere 0x0E — die Regel selbst, ohne Archiv', () => {
+    expect(expectedCheckByte('aaaa.hrc')).toBe(CHECK_BYTE_HRC);
+    expect(expectedCheckByte('aaaa.rsd')).toBe(CHECK_BYTE_PLAIN);
+    expect(expectedCheckByte('abcd')).toBe(CHECK_BYTE_PLAIN);
+    // Keine Teiltreffer: die Endung muss am Ende stehen.
+    expect(expectedCheckByte('hrc.tex')).toBe(CHECK_BYTE_PLAIN);
   });
 });
 

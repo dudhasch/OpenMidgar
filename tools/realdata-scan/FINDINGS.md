@@ -550,3 +550,77 @@ Beschreibungen wurden von den Daten korrigiert, s. u.).
 | Kommando-Opcodes (0x204, 0x300er …): **UNKNOWN-Politik** (Fault + überspringen). VM-Lauf über alle 143 wm0-Funktionen: 143/143 enden regulär, 4867 Instruktionen, unknown-Quote 23,6 % (top: 0x305, 0x306, 0x32d, 0x307, 0x303) | ✅ Abdeckung gemessen; Semantik 🔴 |
 | **Erreichbarkeitsprobe** (Dreiecksgraph WM0, 142 586 Dreiecke): Wasserkandidat = **Klasse 3** (dominante Klasse der modalen Flachhöhe 0 — die S28-Vermutung „Wiese" war falsch); Matrix „ohne Wasser": 53 614 erreichbar, verdrehte Matrix (nur Wasser, Landstart): **0**, ohne Matrix: 142 586 ⇒ die Matrix ändert die Erreichbarkeit messbar, die Probe ist nicht blind. Erster Anlauf der Wassererkennung („flach auf MINIMALhöhe") traf eine Senke (~300 Dreiecke) — die MODALE Flachhöhe trägt | ✅ Messanlage; Klassensemantik bleibt 🟡, Matrix bleibt austauschbare 🔵-Tabelle |
 | Anlass der Mesh-Funktionsausführung (welche Funktionsnummer beim Betreten läuft), Alternativblock-Schaltung (WM0 63–68), Original-Einstiegspunkte World↔Field, Begegnungstabellen der Weltkarte | 🔴 offen |
+
+## O5 — LGP-Check-Code: beide Hypothesen gemessen, beide durchgefallen (2026-08-10)
+
+Die Recherche war erschöpft (vier Implementierungen lesen das Byte und
+ignorieren es), also blieb die Messung. Probe:
+[lgp-checkbyte-probe.rdtest.ts](src/lgp-checkbyte-probe.rdtest.ts), voller
+Archivbestand, Deep-Scan mit Payload.
+
+**Suchmenge, ausgesprochen:** 56 LGP-Dateien einer Installation, 0 mit fatalem
+Headerfehler, **45.563 TOC-Einträge**, 0 übersprungen. Davon sind nur **34
+Archive inhaltlich verschieden** — der Rest sind byteidentische Kopien aus dem
+Sicherungsbaum. Die Minderheitsklasse unten stammt aus **6** verschiedenen
+Archiven; die Zahl 766 ist keine Zahl unabhängiger Beobachtungen.
+
+### Die Verteilung entscheidet die Frage vor jeder Korrelation
+
+| Befund | Status |
+|---|---|
+| Das Byte nimmt im **gesamten Bestand genau zwei Werte** an: **0x0E ×44.797 (98,32 %)**, **0x0B ×766 (1,68 %)**. Entropie **0,1231 Bit** | ✅ gemessen |
+| Je Archiv konstant in **39 von 56** Archiven — in den übrigen 17 kommen beide Werte vor | ✅ gemessen |
+| **Damit ist die Prüfwert-Hypothese bereits tot.** Ein Prüfwert über Name oder Inhalt müsste sein Bild ausschöpfen; 0,12 Bit über 45.563 Einträge kann keine Prüfsumme sein. Alles Weitere ist nur noch Bestätigung | ✅ Urteil |
+
+### Prüfwert-Hypothese: 18 Funktionen, alle mit Nachbarkontrolle
+
+Nullmodell ist hier nicht die Null (das Byte ist nie 0), sondern die
+**Mehrheitsklasse**: „immer 0x0E" trifft **98,32 %**. Jede Quote wird deshalb
+zusätzlich **nur über die 766 Minderheitseinträge** gerechnet, und jede
+Funktion zusätzlich über den **Nachbareintrag** (Kontrolle). Aussagekräftig ist
+allein der *Vorsprung* vor der eigenen Kontrolle — eine Funktion mit Bild 15
+trifft schon zufällig ~6,7 %, eigen wie kontrolliert.
+
+| Funktion (Auszug) | Bild | Treffer | Kontrolle Nachbar | nur Minderheit | Kontrolle Minderheit | Vorsprung |
+|---|---|---|---|---|---|---|
+| name: Bytesumme & 0xFF | 256 | 0,60 % | 0,60 % | 2,22 % | 0,39 % | +1,83 |
+| name: CRC-8 (0x07) | 256 | 0,50 % | 0,48 % | 1,57 % | 0,39 % | +1,17 |
+| name: CRC-8 (0x31) | 256 | 0,40 % | 0,41 % | 0,00 % | 0,65 % | −0,65 |
+| name: Bytesumme mod 15 | 15 | 7,05 % | 6,97 % | 8,88 % | 5,87 % | **+3,00** |
+| inhalt: Bytesumme & 0xFF | 256 | 0,33 % | 0,34 % | 0,13 % | 0,78 % | −0,65 |
+| inhalt: CRC-8 (0x07) | 256 | 0,38 % | 0,38 % | 0,52 % | 0,65 % | −0,13 |
+| inhalt: Länge & 0xFF | 254 | 0,02 % | 0,05 % | 0,39 % | 0,00 % | +0,39 |
+| toc: Offset & 0xFF | 256 | 0,37 % | 0,37 % | 0,39 % | 0,26 % | +0,13 |
+
+| Befund | Status |
+|---|---|
+| **Keine der 18 Funktionen schlägt das Nullmodell.** Beste Trefferquote überhaupt: 7,05 % gegen 98,32 % | 🔴 Hypothese fällt durch |
+| **Kein Vorsprung vor der eigenen Nachbarkontrolle.** Größter gemessener Vorsprung auf der Minderheitsklasse: **3,00 Prozentpunkte** (Bytesumme mod 15) — das ist Rauschen einer Funktion mit Bild 15. Zum Vergleich leistet die Endungsregel unten **+97** | ✅ Kontrolle trägt das Urteil |
+| Vier CRC-8-Polynome (0x07, 0x31, 0xD5, 0x9B/init 0xFF), Summe, XOR, Längen und Offsets über Name **und** Payload — geprüft, nichts | 🔴 erschöpft |
+
+### Ordnungshypothese: keine Funktion der Position
+
+| Befund | Status |
+|---|---|
+| **Nicht monoton:** 743 Abstiege über den TOC-Index. Ein Sortierschlüssel dürfte nie absteigen | 🔴 fällt durch |
+| **Keine Blockstruktur:** 1.486 Wechsel zwischen Nachbarn beobachtet gegen **1.477,9 erwartet** bei zufälliger Reihenfolge gleicher Zusammensetzung — Verhältnis **1,005**. Die Werte liegen exakt so verstreut, wie es der Zufall vorhersagt | 🔴 fällt durch |
+| **Keine Positionsfunktion:** beste Reinheit über `tocIndex mod k` (k = 2…32) liegt bei **98,3188 %** — und das ist auf die letzte Stelle **derselbe Wert wie der Mehrheitsanteil**. Informationsgewinn null | 🔴 fällt durch |
+| Auch die dritte Auslegung aus den Quellen („markiert Konflikt- oder Duplikateinträge") ist widerlegt: **2.450** Einträge mit Conflict-Index und **1.798** verschattete Einträge tragen **ausnahmslos 0x0E**; keiner der 766 Minderheitseinträge steht in einer Konfliktgruppe. Die Mengen sind disjunkt | 🔴 fällt durch |
+
+### Was stattdessen trägt: die Eintragsart
+
+| Befund | Status |
+|---|---|
+| **0x0B steht im gesamten Bestand genau auf den `.hrc`-Einträgen: 766/766, kein Gegenbeispiel in beide Richtungen.** Alle übrigen **87 Endungen** ausnahmslos 0x0E; **0 von 88 Endungen** trägt gemischte Werte | ✅ gemessen |
+| **Nachbarkontrolle derselben Regel:** auf der Minderheitsklasse fällt sie von **100 % auf 3,00 %** (gesamt 100 % → 96,74 %, weil die Kontrolle die Mehrheitsklasse gratis mitnimmt). Erst diese Gegenprobe macht die 100 % belastbar | ✅ Kontrolle |
+| **Name und Inhalt sind hier nicht trennbar.** Jede `.hrc`-Nutzlast beginnt mit `:HEADER_`; die Inhaltssignatur liefert dieselbe Partition mit derselben Quote (100 % / Kontrolle 96,74 %). Ob der Packer nach Endung oder nach Inhalt entscheidet, kann diese Messung nicht sagen | 🟡 offen und so markiert |
+| **Warum der Packer das tut, ist NICHT belegt.** „Skelettdatei", „Textdatei" oder schlicht ein zweiter Packerlauf sind gleich gut mit den Daten vereinbar. Es wird keine Semantik ausgegeben | 🔵 Auslegung, nicht Befund |
+| Reichweite der Regel: die Minderheitsklasse stammt aus **6** inhaltlich verschiedenen Archiven (char, magic, world, chocobo, high-us/-fr). Eine Installation, kein Release-Vergleich | 🟡 Grenze der Suchmenge |
+
+### Konsequenz im Parser
+
+| Befund | Status |
+|---|---|
+| **O5 ist geschlossen — als Messergebnis, nicht als Deutung.** Beide Ausgangshypothesen sind widerlegt, die dritte aus den Quellen ebenfalls. Die Frage ist erledigt statt offen | ✅ abgeschlossen |
+| Neue Fehlerklasse **`W-LGP-CHECKBYTE`**, rein warnend, **opt-in** über `ScanOptions.validateCheckByte` (Standard: aus). Sie unterscheidet „Wert im Bestand unbelegt" von „bekannter Wert, falsche Eintragsart" und quarantänisiert nichts — die Regel ist über einen Bestand gemessen, nicht aus dem Format hergeleitet, und darf keinen Import scheitern lassen | ✅ Fehlererkennung nachgeliefert |
+| Die Regel steht als eigenes Modul mit ausgeschriebener Herleitung (`packages/formats-lgp/src/check-byte.ts`); der Fixture-Writer führt sie als **Zweitimplementierung**, damit der Roundtrip zwei unabhängige Formatverständnisse vergleicht statt sich selbst | ✅ Projektstandard gewahrt |

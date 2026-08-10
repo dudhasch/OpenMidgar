@@ -27,6 +27,8 @@ export interface LgpFixtureEntry {
   conflictIndex?: number;
   /** Quellordner-Diskriminator für die Konflikttabelle. */
   conflictDir?: string;
+  /** Überschreibt den Check-Code (sonst: Regel unten). Für Defekt-Fixtures. */
+  checkByte?: number;
 }
 
 export interface LgpFixtureSpec {
@@ -50,6 +52,17 @@ export interface LgpFixtureLayout {
 
 function putAscii(target: Uint8Array, offset: number, text: string): void {
   for (let i = 0; i < text.length; i++) target[offset + i] = text.charCodeAt(i);
+}
+
+/**
+ * Check-Code des TOC-Records — **Zweitimplementierung** der in O5 gemessenen
+ * Invariante (0x0B genau auf `.hrc`, sonst 0x0E; 45.563 Einträge, 56 Archive,
+ * kein Gegenbeispiel). Bewusst hier ausgeschrieben statt aus dem Paket
+ * importiert: Der Writer darf mit dem Scanner keinen Code teilen, sonst prüft
+ * der Roundtrip nur noch sich selbst.
+ */
+function fixtureCheckByte(name: string): number {
+  return name.toLowerCase().endsWith('.hrc') ? 0x0b : 0x0e;
 }
 
 export function buildLgp(spec: LgpFixtureSpec): LgpFixtureLayout {
@@ -121,7 +134,7 @@ export function buildLgp(spec: LgpFixtureSpec): LgpFixtureLayout {
     const base = tocStart + i * TOC_ENTRY_LEN;
     putAscii(bytes, base, e.name.slice(0, NAME_LEN));
     view.setUint32(base + NAME_LEN, entryOffsets[i]!, true);
-    view.setUint8(base + NAME_LEN + 4, 14); // Check-Code: Semantik offen (🔴), fester Fixture-Wert
+    view.setUint8(base + NAME_LEN + 4, e.checkByte ?? fixtureCheckByte(e.name));
     view.setUint16(base + NAME_LEN + 5, e.conflictIndex ?? 0, true);
   });
 
@@ -218,6 +231,13 @@ export function corruptLookup(layout: LgpFixtureLayout): Uint8Array {
 export function setTocConflictIndex(layout: LgpFixtureLayout, tocIndex: number, value: number): Uint8Array {
   const bytes = layout.bytes.slice();
   new DataView(bytes.buffer).setUint16(layout.tocStart + tocIndex * TOC_ENTRY_LEN + NAME_LEN + 5, value, true);
+  return bytes;
+}
+
+/** Setzt den Check-Code eines TOC-Records → W-LGP-CHECKBYTE (opt-in). */
+export function setTocCheckByte(layout: LgpFixtureLayout, tocIndex: number, value: number): Uint8Array {
+  const bytes = layout.bytes.slice();
+  new DataView(bytes.buffer).setUint8(layout.tocStart + tocIndex * TOC_ENTRY_LEN + NAME_LEN + 4, value);
   return bytes;
 }
 

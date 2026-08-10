@@ -1,4 +1,5 @@
 import type { ByteSource } from './byte-source.js';
+import { checkByteDeviation, formatCheckByte } from './check-byte.js';
 import {
   CONFLICT_DIR_LEN,
   CREATOR_LEN,
@@ -25,6 +26,16 @@ export interface ScanOptions {
   signal?: AbortSignal | undefined;
   /** Vorberechneter Quell-Fingerprint (sonst leerer String). */
   fingerprint?: string;
+  /**
+   * Opt-in: den „Check-Code" gegen die in O5 gemessene Invariante prüfen
+   * (W-LGP-CHECKBYTE, rein warnend, quarantänisiert nichts).
+   *
+   * Standardmäßig **aus**. Die Invariante ist über einen Bestand gemessen,
+   * nicht aus dem Format hergeleitet — sie darf Importe nicht scheitern
+   * lassen. Sinnvoll für Mod-Werkzeuge und Archivprüfungen, wo eine
+   * zusätzliche Fehlererkennung mehr wert ist als Toleranz.
+   */
+  validateCheckByte?: boolean;
 }
 
 interface RawToc {
@@ -116,6 +127,21 @@ export async function scanLgp(
       checkByte: t.checkByte,
       conflictIndex: t.conflictIndex,
     };
+    if (opts.validateCheckByte === true) {
+      const abw = checkByteDeviation(norm.canonical, t.checkByte);
+      if (abw) {
+        diagnostics.push(
+          diag(
+            'W-LGP-CHECKBYTE',
+            arc,
+            abw.art === 'unbekannt'
+              ? `Check-Code ${formatCheckByte(t.checkByte)} im Bestand nicht belegt (erwartet ${formatCheckByte(abw.erwartet)})`
+              : `Check-Code ${formatCheckByte(t.checkByte)} passt nicht zur Eintragsart (erwartet ${formatCheckByte(abw.erwartet)})`,
+            { entry: norm.canonical, tocIndex: i },
+          ),
+        );
+      }
+    }
     if (t.offset < tocEnd + LOOKUP_TABLE_LEN || t.offset + DATA_PREFIX_LEN > source.size) {
       entry.quarantined = true;
       entry.quarantineCode = 'E-LGP-TOC';

@@ -1,4 +1,5 @@
 export * from './constants.js';
+export * from './check-byte.js';
 export * from './diagnostics.js';
 export * from './names.js';
 export * from './byte-source.js';

@@ -26,7 +26,7 @@ Messung lügt".
 |---|---|---|
 | **O1 `audio.fmt`-Vorspann** | 🟡 | 🟢 **gelöst** — 24 B aus sechs u32, Accounting lückenlos über 198 Einträge, Kontrollen bei 0/198 |
 | **O2 Musikindex** | 🟡 | 🟡 verengt: indizierte 100er-Liste deckt alle 94 lokalen Titel, aber die scharfe Vorhersage fällt durch (36/935). **Blockiert auf O9** |
-| **O5 LGP-Check-Code** | 🔴 | 🔴 unverändert, aber **Recherche abgeschlossen**: vier Implementierungen lesen und ignorieren das Byte. Nur noch Messfrage |
+| **O5 LGP-Check-Code** | 🔴 | 🟢 **geschlossen** (45.563 Einträge: nur 2 Werte, 0,1231 Bit; Prüfwert und Ordnung beide widerlegt; 0x0B ⟺ `.hrc` 766/766, Nachbarkontrolle 3,00 %) |
 | **R4-B2 Rotationsreihenfolge** | 🟡 | 🟢 als Datum belegt (im Dateikopf, 3209/3209 YXZ) — die Hypothese „wechselnde Reihenfolge erklärt B2" ist **widerlegt**, neue Spur: Versatzvorzeichen ⊗ Achsenbasis |
 | **Beweismaßstab für EXE-Größen** | offen | 🔵 [ROADMAP-S37-EXE-ANALYSE.md](ROADMAP-S37-EXE-ANALYSE.md) — Datentabellen lesen ist Import, nicht Dekompilierung |
 
@@ -249,24 +249,45 @@ nicht beantwortet und dabei jedes Mal überzeugend ausgesehen — **für Fragen
 nach einer Richtung im Raum ist die Sichtprüfung kein Notbehelf, sondern das
 schärfere Instrument.**
 
-## O5 — LGP-„Check-Code" im TOC (Ziel: S20, Härtung)
+## O5 — LGP-„Check-Code" ✅ gemessen und geschlossen (2026-08-10)
 
-**Stand.** 1 Byte je TOC-Eintrag, Community-Quellen widersprechen sich
-(Prüfwert vs. Ordnungshinweis). Wird eingelesen, mitgeführt und **nicht**
-validierend verwendet — das ist die richtige Vorsichtshaltung, aber sie kostet
-eine Fehlererkennung.
+**Beide Ausgangshypothesen sind widerlegt, die dritte aus den Quellen
+ebenfalls.** Gemessen über **45.563 TOC-Einträge** aus 56 Archiven
+(34 inhaltlich verschieden). Vollständig in
+[FINDINGS.md](../tools/realdata-scan/FINDINGS.md), Abschnitt „O5".
 
-**Methode.** Über den vollen Bestand (alle LGPs der Installation, ~13.000
-Einträge) beide Hypothesen gegeneinander messen:
+**Die Verteilung hat die Frage vor jeder Korrelation entschieden:** Das Byte
+nimmt im gesamten Bestand **genau zwei Werte** an — 0x0E (98,32 %) und 0x0B
+(1,68 %), Entropie **0,1231 Bit**. Ein Prüfwert müsste sein Bild ausschöpfen;
+0,12 Bit über 45.563 Einträge kann keine Prüfsumme sein. Alles Weitere war
+Bestätigung.
 
-- *Prüfwert:* Korreliert das Byte mit einer billigen Funktion über Name oder
-  Inhalt (Summe, XOR, CRC-8)? Kontrolle: dieselbe Funktion über den
-  **Nachbareintrag**.
-- *Ordnungshinweis:* Ist das Byte eine Funktion der Position (Sortierschlüssel,
-  Bucket-Index)? Dann muss es monoton oder blockweise konstant sein.
+| Hypothese | Ergebnis |
+|---|---|
+| *Prüfwert* (18 Funktionen: Summe, XOR, vier CRC-8-Polynome, Längen, Offsets — über Name **und** Payload) | 🔴 Beste Quote 7,05 % gegen ein Nullmodell „immer 0x0E" von 98,32 %. Größter Vorsprung vor der **eigenen Nachbarkontrolle**: 3,00 Prozentpunkte — Rauschen einer Funktion mit Bild 15 |
+| *Ordnungshinweis* (Position, Sortierschlüssel, Bucket) | 🔴 743 Abstiege (nicht monoton); 1.486 beobachtete Wechsel gegen 1.477,9 zufallserwartete = **Verhältnis 1,005** (keine Blöcke); beste Reinheit über `tocIndex mod k` = 98,3188 %, auf die letzte Stelle **identisch mit dem Mehrheitsanteil** |
+| *Konflikt-/Duplikatmarkierung* (dritte Quellenauslegung) | 🔴 2.450 Konflikt- und 1.798 verschattete Einträge tragen **ausnahmslos** 0x0E; disjunkt zur Minderheitsklasse |
 
-Die beiden Hypothesen machen **gegensätzliche** Vorhersagen — das ist der
-Idealfall, weil eine davon zwingend durchfallen muss.
+**Was stattdessen trägt: eine Partition nach Eintragsart.** 0x0B steht genau
+auf den `.hrc`-Einträgen — **766/766**, kein Gegenbeispiel in beide Richtungen,
+**0 von 88 Endungen** mit gemischten Werten. Die Nachbarkontrolle derselben
+Regel fällt auf der Minderheitsklasse von 100 % auf **3,00 %**; erst diese
+Gegenprobe macht die 100 % belastbar.
+
+**Was daraus NICHT folgt.** Warum der Packer das tut, ist unbelegt (🔵). Und
+Name gegen Inhalt ist hier **nicht trennbar**: Jede `.hrc`-Nutzlast beginnt mit
+`:HEADER_`, beide Partitionen sind im Bestand identisch (🟡).
+
+**Konsequenz:** Neue Fehlerklasse `W-LGP-CHECKBYTE`, rein warnend, **opt-in**
+über `ScanOptions.validateCheckByte` (Standard aus), quarantänisiert nichts —
+die Regel ist über *einen* Bestand gemessen, nicht aus dem Format hergeleitet,
+und darf keinen Import scheitern lassen. Damit ist die Fehlererkennung
+nachgeliefert, die die bisherige Vorsichtshaltung gekostet hat.
+
+**Offene Randnotiz (🟡, nicht blockierend):** Die Minderheitsklasse stammt aus
+nur **6** verschiedenen Archiven **einer** Installation. Ob andere Releases
+denselben Wertevorrat haben, klärt erst eine zweite, unabhängige Installation
+— dieselbe Grenze wie bei O9.
 
 ## O6 — R1: Prioritätsverdrängung bei Script-Requests (Ziel: S20, P0)
 
@@ -330,7 +351,7 @@ ist sie ein Migrationsproblem.
 | O9 Längentabelle | S20 | 0,22 % Overrun im Interpreter |
 | ~~O4 R4-Sichtprüfung~~ | ✅ durchgeführt | — (6 entschieden, 3 belastbar-unbelegt, B7 widerlegt → O10) |
 | O10 Höhenversatz Figur↔Walkmesh + Wurzeltranslation | offen | Bodenkontakt der Figuren im Field (konstanter Fehler, fällt spät auf) |
-| O5 LGP-Check-Code | S20 | nichts (Fehlererkennung entfällt) |
+| ~~O5 LGP-Check-Code~~ | ✅ gemessen, geschlossen | — (Partition nach Eintragsart, opt-in-Warnung nachgeliefert) |
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
 | O7 0xFF-Wrap | S20 | nichts (Randfall) |
 | O8 Mod-Variablenbänke | S22, vor MS5 | Mod-Kombinierbarkeit |
