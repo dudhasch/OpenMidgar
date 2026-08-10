@@ -18,6 +18,7 @@ export default defineConfig({
       '@webmidgar/formats-kernel': r('../../packages/formats-kernel/src/index.ts'),
       '@webmidgar/formats-save': r('../../packages/formats-save/src/index.ts'),
       '@webmidgar/dialog': r('../../packages/dialog/src/index.ts'),
+      '@webmidgar/menu': r('../../packages/menu/src/index.ts'),
       '@webmidgar/app-shell': r('../../packages/app-shell/src/index.ts'),
       '@webmidgar/modding': r('../../packages/modding/src/index.ts'),
       '@webmidgar/audio': r('../../packages/audio/src/index.ts'),
@@ -41,7 +42,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'license', 'world'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license', 'world'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),

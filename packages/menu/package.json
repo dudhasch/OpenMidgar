@@ -1,0 +1,15 @@
+{
+  "name": "@webmidgar/menu",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@webmidgar/formats-kernel": "*",
+    "@webmidgar/formats-save": "*",
+    "@webmidgar/fixture-gen": "*",
+    "@webmidgar/field-runtime": "*",
+    "@webmidgar/formats-field": "*"
+  }
+}

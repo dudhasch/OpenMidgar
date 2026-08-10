@@ -251,6 +251,22 @@ export class ScriptAssembler {
     return this.raw(0x52, id);
   }
 
+  // --- Menü (S21) ------------------------------------------------------------
+
+  /**
+   * MENU: öffnet das Menü und hält den Kontext an. Bankbyte 0 = beide
+   * Operanden sind Literale — die Form, die im Bestand in 98,6 % der
+   * Vorkommen steht.
+   */
+  menu(selector: number, param = 0): this {
+    return this.raw(0x49, 0x00, selector & 0xff, param & 0xff);
+  }
+
+  /** MENU2: Zugriffssperre, Rohwert (Bedeutung 🟡). */
+  menu2(value: number): this {
+    return this.raw(0x4a, value & 0xff);
+  }
+
   // --- Variablen -------------------------------------------------------------
 
   private byteOp(op: number, bank: number, addr: number, src: SrcOperand): this {

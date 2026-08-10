@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--config", "apps/demo/vite.config.ts"],
       "port": 5199
+    },
+    {
+      "name": "demo-worktree",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "apps/demo/vite.config.ts", "--port", "5201", "--strictPort"],
+      "port": 5201
     }
   ]
 }

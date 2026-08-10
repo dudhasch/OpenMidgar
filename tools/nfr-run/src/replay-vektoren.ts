@@ -182,10 +182,26 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * `diagonal 8f3579c8c25b109d`, `gleiten 3e159880012168ad`,
  * `skript f7a597e17a462ee8`.
  */
+/**
+ * **Fortschreibung 2026-08-10 (S21).** Wieder haben sich alle drei Werte
+ * geändert, und wieder aus einer einzigen, benennbaren Ursache: Der
+ * Runtime-Zustand führt mit `menuAccessRaw` ein zusätzliches Feld (Zustand des
+ * `MENU2`-Opcodes). Der Digest läuft über den gesamten Zustandsbaum, also
+ * wandert er auch für `diagonal` und `gleiten`, die kein Menü aufrufen.
+ *
+ * **Die Gegenprobe ist wieder dieselbe und sie ist der eigentliche Wert dieses
+ * Tests:** Hätten sich nur `skript`, aber nicht die beiden reinen
+ * Bewegungsvektoren geändert, wäre die Ursache NICHT das Zustandsschema
+ * gewesen — dann hätte die Menü-Semantik die Bewegungsrechnung berührt, und
+ * das wäre ein echter Fehler.
+ *
+ * Vorherige Werte (Stand nach O9): `diagonal d3db5a117a435444`,
+ * `gleiten c004f67d35b3e19c`, `skript 81dc6abb5d5e9311`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: 'd3db5a117a435444',
-  gleiten: 'c004f67d35b3e19c',
-  skript: '81dc6abb5d5e9311',
+  diagonal: 'ae692c2df57cee63',
+  gleiten: 'c09f412edb884cdb',
+  skript: '2cbf1510b831a8f8',
 };
 
 export interface VektorVergleich {

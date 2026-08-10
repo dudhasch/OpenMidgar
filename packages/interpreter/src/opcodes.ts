@@ -32,6 +32,24 @@ export const OP = {
   ASK: 0x48,
   WINDOW: 0x50,
   WCLSE: 0x52,
+  /**
+   * Menü öffnen (S21). Operanden: Bankbyte, Auswahl, Parameter.
+   *
+   * ✅ **Operandenform realdaten-vermessen** (296 Vorkommen über 702 Fields):
+   * Das erste Byte trägt in **98,6 %** denselben Wert — die Signatur eines
+   * Bankbytes mit Literaloperanden, wie sie auch `BATTLE` zeigt. Das zweite
+   * nimmt 22 Werte an und ist mit 40,5 % auf einen konzentriert (Auswahl), das
+   * dritte 67 Werte (freier Parameter). Zum Vergleich: Bei den übrigen
+   * Opcodes mit drei Operandenbytes streut die erste Spalte regelmäßig über
+   * 30–220 Werte.
+   *
+   * 🟡 **Welcher Auswahlwert welche Ansicht meint, ist NICHT gemessen** — das
+   * ist aus den Field-Skripten allein auch nicht ableitbar. Der Interpreter
+   * reicht den Rohwert durch.
+   */
+  MENU: 0x49,
+  /** Menü-Zugriffssperre. 🟡 Ein Operandenbyte, sechs Werte im Bestand. */
+  MENU2: 0x4a,
   // Variablen (saturierende Varianten mit "!")
   PLUS_S: 0x76,
   PLUS2_S: 0x77,
@@ -127,6 +145,7 @@ export type OpCategory =
   | 'control'
   | 'variable'
   | 'dialog'
+  | 'menu'
   | 'unknown-skipped'
   | 'unknown-fault';
 
@@ -166,6 +185,10 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   // betrifft das nur die Benennung, nicht das Verhalten. 🟡 zu prüfen, sobald
   // die Fensterverwaltung Semantik bekommt (S21).
   [OP.WCLSE]: 3,
+  // Menü (S21) — beide Längen stammen aus derselben S12-Ableitung wie die
+  // übrigen und ändern den Instruktionsstrom deshalb nicht.
+  [OP.MENU]: 3,
+  [OP.MENU2]: 1,
   [OP.PLUS_S]: 3,
   [OP.PLUS2_S]: 4,
   [OP.MINUS_S]: 3,

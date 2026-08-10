@@ -13,6 +13,7 @@ import {
   prepareScript,
   restoreRuntime,
   snapshotRuntime,
+  type HostRequest,
   type PreparedScript,
   type RuntimeSnapshot,
 } from '@webmidgar/interpreter';
@@ -94,6 +95,25 @@ export interface TickResult {
   resolvedDialogs: number[];
   /** Bewegungsaufträge, die in diesem Takt erfüllt (oder abgebrochen) wurden. */
   arrivals: number[];
+  /**
+   * In diesem Takt neu eingereihte Wirkungen nach außen (S21). Bewusst nur die
+   * **neuen**: `takeHostRequests()` würde die Liste leeren und damit einem
+   * Aufrufer, der sie später abholt, die Wirkungen wegnehmen.
+   */
+  hostRequests: HostRequest[];
+  /** Kontexte, die auf das Schließen des Menüs warten (stabil sortiert). */
+  pendingMenus: PendingMenu[];
+}
+
+/**
+ * Offener Menüaufruf eines Skriptkontextes (S21). `selector` und `param` sind
+ * die Rohoperanden — ihre Bedeutung ist nicht gemessen, und der Wirt bildet sie
+ * selbst ab.
+ */
+export interface PendingMenu {
+  entityIndex: number;
+  slot: number;
+  requestId: number;
 }
 
 export interface FieldSessionOptions {
@@ -112,6 +132,17 @@ export interface FieldSessionOptions {
    *  - `manual`: gar nicht — der Host ruft `resolveDialog` selbst
    */
   dialogMode?: 'confirm' | 'auto' | 'manual' | undefined;
+  /**
+   * Wie Menüaufrufe des Skripts beantwortet werden:
+   *  - `auto` (Standard): sofort wieder geschlossen
+   *  - `manual`: der Wirt schließt selbst (`closeMenu`)
+   *
+   * Der Standard ist `auto`, und zwar aus einem harten Grund: `MENU` kommt in
+   * den Realdaten 296-mal vor und hält den Kontext an. Ohne selbsttätige
+   * Antwort bliebe in jedem Sweep-Lauf ein Teil der Skripte stehen — der Lauf
+   * wäre nicht falsch, aber er würde etwas anderes messen als vorher.
+   */
+  menuMode?: 'auto' | 'manual' | undefined;
 }
 
 export interface FieldSessionSnapshot {
@@ -214,6 +245,7 @@ export class FieldSession {
   readonly runtime: FieldRuntime | null;
   readonly speed: number;
   readonly dialogMode: 'confirm' | 'auto' | 'manual';
+  readonly menuMode: 'auto' | 'manual';
 
   player: PlayerState | null = null;
   tickCounter = 0;
@@ -229,6 +261,7 @@ export class FieldSession {
     this.fieldId = bundle.fieldId;
     this.speed = options.speed ?? DEFAULT_SPEED;
     this.dialogMode = options.dialogMode ?? 'confirm';
+    this.menuMode = options.menuMode ?? 'auto';
     this.solver = bundle.walkmesh ? new WalkmeshSolver(bundle.walkmesh) : null;
 
     const scriptSection = bundle.rawSections[1];
@@ -333,7 +366,17 @@ export class FieldSession {
     // setzt nur den Auftrag; ausgeführt wird er hier mit dem Solver, damit die
     // Invariante „immer im Mesh" auch für Skript-Entitäten gilt.
     const arrivals = this.stepScriptedMovement();
+    const hostRequestsBefore = this.runtime?.state.hostRequests.length ?? 0;
     this.runtime?.tick();
+    const hostRequests = this.runtime?.state.hostRequests.slice(hostRequestsBefore) ?? [];
+
+    // Menüaufrufe: Der Kontext hängt an `waitState`, nicht an einer Liste —
+    // die offenen Aufrufe sind deshalb aus dem Zustand ABLEITBAR und brauchen
+    // keine eigene Buchführung, die im Snapshot mitgeführt werden müsste.
+    const pendingMenus = this.pendingMenus();
+    if (this.menuMode === 'auto') {
+      for (const m of pendingMenus) this.closeMenu(m.requestId);
+    }
 
     const confirmPressed = input.confirm && !this.prevConfirm;
     this.prevConfirm = input.confirm;
@@ -363,7 +406,26 @@ export class FieldSession {
       pendingDialogs,
       resolvedDialogs,
       arrivals,
+      hostRequests,
+      pendingMenus,
     };
+  }
+
+  /** Kontexte, die auf das Schließen des Menüs warten. */
+  pendingMenus(): PendingMenu[] {
+    const out: PendingMenu[] = [];
+    for (const [entityIndex, entity] of (this.runtime?.state.entities ?? []).entries()) {
+      for (const ctx of [entity.context, ...entity.suspended]) {
+        if (!ctx || ctx.waitState.kind !== 'menu') continue;
+        out.push({ entityIndex, slot: ctx.slot, requestId: ctx.waitState.requestId });
+      }
+    }
+    return out.sort((a, b) => a.entityIndex - b.entityIndex || a.slot - b.slot);
+  }
+
+  /** Meldet dem Skript, dass das Menü geschlossen wurde. */
+  closeMenu(requestId: number): void {
+    this.runtime?.postEvent({ kind: 'menu-closed', requestId });
   }
 
   /**

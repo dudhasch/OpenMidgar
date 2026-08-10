@@ -30,6 +30,12 @@ const MESSAGE_TYPE = 'webmidgar-steam-license';
 
 const RELAY_STATUSES = new Set(['verified', 'not-owned', 'unverifiable', 'error']);
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--;
+  return end === value.length ? value : value.slice(0, end);
+}
+
 function defaultRandomHex(nBytes: number): string {
   const bytes = new Uint8Array(nBytes);
   globalThis.crypto.getRandomValues(bytes);
@@ -91,7 +97,7 @@ export class SteamLicenseClient {
       timeoutMs: deps.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       sleep: deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))),
       now: deps.now ?? Date.now,
-      relayBaseUrl: deps.relayBaseUrl.replace(/\/+$/, ''),
+      relayBaseUrl: stripTrailingSlashes(deps.relayBaseUrl),
       origin: deps.origin,
     };
     this.relayOrigin = new URL(this.deps.relayBaseUrl).origin;
