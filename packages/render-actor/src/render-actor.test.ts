@@ -4,7 +4,14 @@ import { composeA, composeHrc, composeP, composeTex } from '@webmidgar/fixture-g
 import { parseA, parseHrc, parseP, parseTex, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
 import { bindClip } from './binding.js';
 import { bindPoseFrame, computePose } from './pose.js';
-import { applyFrame, boneModelMatrix, buildActor, buildFallbackActor } from './actor.js';
+import {
+  applyFrame,
+  boneModelMatrix,
+  buildActor,
+  buildFallbackActor,
+  MODEL_FRONT_OFFSET_DEG,
+  setActorFacing,
+} from './actor.js';
 
 /**
  * S7-Akzeptanz: Fixture-Skelett + Fixture-Animation ergeben mathematisch
@@ -246,6 +253,59 @@ describe('Animationsbindung & Meshes', () => {
 
     const fallback = buildFallbackActor();
     expect(fallback.model.children.length).toBe(1);
+  });
+
+  /**
+   * F20-Abnahme: Die Blickrichtung darf die Scene-Basis nicht zerstören.
+   * Der Fehler, den dieser Test fängt, war `root.rotation.y = …` — eine
+   * Euler-Zuweisung ersetzt das Basis-Quaternion vollständig, die Figur landet
+   * im rohen FF7-Modellraum und liegt flach.
+   */
+  it('Blickrichtung erhält die Hochachse (Figur bleibt aufrecht)', () => {
+    const sk = skeleton();
+    const oben = new THREE.Vector3(0, 0, 1); // FF7-Hochachse im Modellraum
+
+    for (const grad of [0, 90, 180, 270, 45]) {
+      const actor = buildActor(sk, () => []);
+      setActorFacing(actor, grad);
+      actor.root.updateMatrixWorld(true);
+
+      // Die Modell-Hochachse muss IMMER auf Scene-oben zeigen, unabhängig vom
+      // Gierwinkel — eine Drehung um die Hochachse kippt sie nicht.
+      const hoch = oben.clone().applyQuaternion(actor.root.quaternion);
+      expect(hoch.x).toBeCloseTo(0, 6);
+      expect(hoch.y).toBeCloseTo(1, 6);
+      expect(hoch.z).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('Blickrichtung dreht in der Bodenebene um Scene-y (inkl. Vorderseiten-Versatz)', () => {
+    const sk = skeleton();
+    const vorne = new THREE.Vector3(0, 1, 0); // FF7-Grundriss: +y
+    const actor = buildActor(sk, () => []);
+    const referenz = buildActor(sk, () => []);
+
+    for (const grad of [0, 30, 90, 200]) {
+      setActorFacing(actor, grad);
+      // Referenzabbildung: Drehung um Scene-y um −(facing + Versatz),
+      // angewandt auf die Basis. Der Versatz ist sichtkalibriert (Runde 3:
+      // ohne ihn blickte „runter" nach rechts, „hoch" nach links).
+      referenz.root.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeRotationY((-(grad + MODEL_FRONT_OFFSET_DEG) * Math.PI) / 180),
+      );
+      const a = vorne.clone().applyQuaternion(actor.root.quaternion);
+      const b = vorne
+        .clone()
+        .applyMatrix4(new THREE.Matrix4().makeBasis(
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(0, 0, -1),
+          new THREE.Vector3(0, 1, 0),
+        ))
+        .applyQuaternion(referenz.root.quaternion);
+      expect(a.x).toBeCloseTo(b.x, 6);
+      expect(a.y).toBeCloseTo(b.y, 6);
+      expect(a.z).toBeCloseTo(b.z, 6);
+    }
   });
 
   it('texturierte Flächen bekommen Farbschlüssel und Aufkleber-Versatz', () => {

@@ -37,6 +37,45 @@ export function sceneBasisMatrix(): THREE.Matrix4 {
   );
 }
 
+/** Hochachse im FF7-Modellraum (dritte Komponente, s. convert/ff7-to-scene). */
+const FF7_UP = new THREE.Vector3(0, 0, 1);
+/** Wiederverwendet — `setActorFacing` läuft je Figur und Takt, darf nicht allozieren. */
+const yawScratch = new THREE.Quaternion();
+
+/**
+ * Blickrichtung einer Figur setzen, OHNE die Scene-Basis zu verlieren.
+ *
+ * `root.quaternion` trägt die zentrale FF7→Scene-Basis (s. buildActor,
+ * ADR-009). Wer stattdessen `root.rotation.y` schreibt, ersetzt das Quaternion
+ * vollständig und löscht die Basis — die Figur steht dann im rohen
+ * FF7-Modellraum, also flach auf dem Boden, und der Gierwinkel dreht den
+ * liegenden Körper in der Bodenebene (F20, 2026-08-10: betraf jede
+ * Field-Aufnahme der Demo).
+ *
+ * Deshalb wird der Gierwinkel um die FF7-Hochachse **auf** die Basis
+ * multipliziert: `root.quaternion = Basis ∘ R_z(−facing)`. Das Vorzeichen ist
+ * dasselbe wie zuvor in der Demo — die Basis bildet FF7-z auf Scene-y ab, eine
+ * Drehung um FF7-z ist also dieselbe Drehung wie zuvor um Scene-y.
+ */
+/**
+ * 🟡 Modell-Vorderseiten-Versatz: Die Feldmodelle schauen im Modellraum nicht
+ * entlang der Achse, die die erste Fassung annahm — Sichtbefund (Runde 3):
+ * „runter" blickte nach rechts, „hoch" nach links, konsistent 90° verdreht.
+ * Der Wert wird per Sichtsweep gegen Original-Screenshots kalibriert.
+ */
+export let MODEL_FRONT_OFFSET_DEG = -90;
+
+/** Nur für die Sichtkalibrierung der Demo — kein Spielzustand. */
+export function setModelFrontOffset(deg: number): void {
+  MODEL_FRONT_OFFSET_DEG = deg;
+}
+
+export function setActorFacing(actor: Actor, degrees: number): void {
+  actor.root.quaternion
+    .setFromRotationMatrix(sceneBasisMatrix())
+    .multiply(yawScratch.setFromAxisAngle(FF7_UP, (-(degrees + MODEL_FRONT_OFFSET_DEG) * Math.PI) / 180));
+}
+
 const PLACEHOLDER_COLOR = 0xff00ff; // Magenta-Platzhalter (Debug-Konvention)
 
 /**

@@ -32,7 +32,7 @@ import { bindPoseFrame } from './pose.js';
  * Fehlende/misslungene Animationen führen zur Bindpose, nie zur Exception.
  */
 
-export type FieldActorScaleMode = 'model-over-512' | 'model-over-global' | 'none';
+export type FieldActorScaleMode = 'model-over-128' | 'model-over-512' | 'model-over-global' | 'none';
 
 export interface ActorLibraryOptions {
   /**
@@ -49,6 +49,15 @@ export interface ActorLibraryOptions {
    * später im Browser; bis dahin ist der Modus hier übersteuerbar.
    */
   scaleMode?: FieldActorScaleMode;
+  /**
+   * Diagnosehaken für übersprungene Teilressourcen (F21). Die Fehlerpolitik
+   * bleibt unverändert — fehlende Teile werden weiterhin still übersprungen —,
+   * aber sie werden nicht mehr **unsichtbar**: ohne diesen Haken war im Bild
+   * nicht zu unterscheiden, ob eine magentafarbene Figur eine Ersatzkapsel
+   * (Modell gar nicht geladen) oder ein Modell mit Platzhaltermaterial
+   * (Textur fehlt) ist.
+   */
+  onMissing?: (info: { model: string; kind: 'hrc' | 'rsd' | 'p' | 'tex' | 'texSlot'; name: string }) => void;
 }
 
 export interface FieldActorHandle {
@@ -90,6 +99,28 @@ export interface ActorLibrary {
 
 /** Community-Konvention: Skala 512 = Normalgröße (🟡 s. ActorLibraryOptions.scaleMode). */
 const SCALE_REFERENCE = 512;
+
+/**
+ * 🟢 **Sichtkalibrierter Bezugswert (F28, 2026-08-10).**
+ *
+ * Eingemessen gegen einen Original-Screenshot desselben Fields (`md1stin`,
+ * Steam-Durchlauf, gleiche Spieldateien, gleiche Kamera): Der Bahnsteig-
+ * Wächter ist im Original rund 108 px hoch. Ein Faktorsweep 1 / 2 / 3 / 3,5 /
+ * 4 / 4,5 / 5 / 5,5 über dieselbe Szene trifft bei **4** Kopf und Füße
+ * deckungsgleich (3,5 ⇒ 88 px zu klein, 4,5 ⇒ 127 px zu groß).
+ *
+ * `modelScale` ist im gesamten geprüften Bestand 512, `scaleGlobal` ebenfalls —
+ * mit dem alten Bezugswert 512 ergab sich also Faktor 1, und JEDE Figur war um
+ * denselben Faktor 4 zu klein. Der Bezugswert ist damit 512/4 = **128**.
+ *
+ * 🟡 Die Grenze gehört dazu: Belegt ist der Faktor an EINEM Field. Dass er
+ * global gilt, ist plausibel (der Fehler war überall derselbe, und die
+ * Gegenprobe in `farm`, `ncoin1`, `startmap`, `sinin1_1` sieht stimmig aus),
+ * aber pixelgenau nachgemessen ist bisher nur `md1stin`. Ein Modell mit
+ * abweichender Skala (`rkt_i` führt 384) skaliert damit auf 3 — die relativen
+ * Größen bleiben also erhalten.
+ */
+const SCALE_REFERENCE_KALIBRIERT = 128;
 const DEFAULT_CACHE_LIMIT = 64;
 
 /** Geteilte, parse-fertige Quellen eines Modells (ein Cache-Eintrag je .hrc). */
@@ -132,6 +163,9 @@ function scaleFactor(mode: FieldActorScaleMode, modelScale: number | null, scale
   switch (mode) {
     case 'none':
       return 1;
+    case 'model-over-128':
+      // 🟢 Sichtkalibriert gegen das Original, s. SCALE_REFERENCE_KALIBRIERT.
+      return (modelScale ?? SCALE_REFERENCE) / SCALE_REFERENCE_KALIBRIERT;
     case 'model-over-global': {
       const divisor = scaleGlobal > 0 ? scaleGlobal : SCALE_REFERENCE;
       return (modelScale ?? divisor) / divisor;
@@ -259,7 +293,7 @@ export function createActorLibrary(
   options?: ActorLibraryOptions,
 ): ActorLibrary {
   const cacheLimit = options?.cacheLimit ?? DEFAULT_CACHE_LIMIT;
-  const scaleMode = options?.scaleMode ?? 'model-over-512';
+  const scaleMode = options?.scaleMode ?? 'model-over-128';
 
   /** hrc-Name → geteilte Modellquellen (null = Modell unladbar). */
   const modelCache = new BoundedCache<Promise<ModelSources | null>>(cacheLimit);
@@ -278,10 +312,19 @@ export function createActorLibrary(
   };
 
   async function resolveModel(hrcName: string): Promise<ModelSources | null> {
+    const fehlt = (kind: 'hrc' | 'rsd' | 'p' | 'tex' | 'texSlot', name: string): void =>
+      options?.onMissing?.({ model: hrcName, kind, name });
+
     const hrcBytes = await readSafe(hrcName);
-    if (!hrcBytes) return null;
+    if (!hrcBytes) {
+      fehlt('hrc', hrcName);
+      return null;
+    }
     const skeleton = parseHrc(hrcBytes, hrcName).value;
-    if (!skeleton) return null;
+    if (!skeleton) {
+      fehlt('hrc', hrcName);
+      return null;
+    }
 
     const bundles: ActorMeshBundle[][] = [];
     for (const bone of skeleton.bones) {
@@ -289,21 +332,44 @@ export function createActorLibrary(
       for (const ref of bone.resourceRefs) {
         const rsdName = `${ref}.rsd`;
         const rsdBytes = await readSafe(rsdName);
-        if (!rsdBytes) continue;
+        if (!rsdBytes) {
+          fehlt('rsd', rsdName);
+          continue;
+        }
         const binding = parseRsd(rsdBytes, rsdName).value;
-        if (!binding) continue;
+        if (!binding) {
+          fehlt('rsd', rsdName);
+          continue;
+        }
 
         const pName = `${binding.meshRef}.p`;
         const pBytes = await readSafe(pName);
-        if (!pBytes) continue;
+        if (!pBytes) {
+          fehlt('p', pName);
+          continue;
+        }
         const mesh = parseP(pBytes, pName).value;
-        if (!mesh) continue;
+        if (!mesh) {
+          fehlt('p', pName);
+          continue;
+        }
 
         const textures: (TextureSource | null)[] = [];
         for (const texRef of binding.textureRefs) {
           const texName = `${texRef}.tex`;
           const texBytes = await readSafe(texName);
-          textures.push(texBytes ? parseTex(texBytes, texName).value : null);
+          const texture = texBytes ? parseTex(texBytes, texName).value : null;
+          if (!texture) fehlt('tex', texName);
+          textures.push(texture);
+        }
+        // Der zweite Weg zum Magenta-Platzhalter: Das Submesh ist als
+        // texturiert markiert, sein Slot liegt aber außerhalb der von der RSD
+        // benannten Texturen. Dann greift in actor.ts `textures[index] ===
+        // undefined` — ohne dass je eine Datei gefehlt hätte.
+        for (const sub of mesh.submeshes) {
+          if (sub.textured && !textures[sub.textureIndex]) {
+            fehlt('texSlot', `${pName}#${sub.textureIndex}/${textures.length}`);
+          }
         }
         boneBundles.push({ mesh, textures });
       }

@@ -27,6 +27,7 @@ import type { HostRequest } from '@webmidgar/interpreter';
 import {
   buildFallbackActor,
   createActorLibrary,
+  setActorFacing,
   type Actor,
   type ActorLibrary,
   type FieldActorHandle,
@@ -73,7 +74,7 @@ import {
   placeParty,
 } from '@webmidgar/render-battle';
 import { enemyModelPrefix, formationAddress } from '@webmidgar/formats-battle';
-import { BoxGeometry } from 'three';
+import { Box3, BoxGeometry, Vector3 } from 'three';
 import { MenuSession, NEUTRAL_MENU_INPUT, type MenuData, type MenuInput, type MenuViewModel } from '@webmidgar/menu';
 import { readSavemap } from '@webmidgar/formats-save';
 import { composeSavemapSlot, type FixtureSavemap } from '@webmidgar/fixture-gen';
@@ -150,6 +151,24 @@ let fieldBundle: FieldBundle | null = null;
 let fieldName = '';
 let fieldWarnings: string[] = [];
 let transitioning = false;
+/**
+ * Ruhe- und Laufanimation eines Feldmodells.
+ *
+ * 🟡 **Konventionshypothese, nicht gemessen.** Community-üblich ist Index 0 =
+ * Stehen, 1 = Gehen. Die Größen im Bestand stützen das (aafe.a 312 B ≈ ein
+ * Frame, aaff.a 8316 B ≈ Bewegungszyklus), belegt ist es nicht.
+ *
+ * Wichtig ist vor allem, dass überhaupt EINE Animation gesetzt wird: ohne sie
+ * lief jede Figur in der Bindpose, und die ist keine Standhaltung, sondern die
+ * unposierte Bone-Kette — die Figuren lagen flach am Boden (F21).
+ */
+const ANIM_STEHEN = 0;
+const ANIM_GEHEN = 1;
+/** F21-Diagnose: übersprungene Modell-Teilressourcen, gezählt je Name. */
+const modellFehlstellen = new Map<
+  string,
+  { model: string; kind: 'hrc' | 'rsd' | 'p' | 'tex' | 'texSlot'; name: string; anzahl: number }
+>();
 const playerActor: Actor = buildFallbackActor();
 playerActor.root.visible = false;
 actorGroup.add(playerActor.root);
@@ -159,6 +178,20 @@ let actorLib: ActorLibrary | null = null;
 let modelGeneration = 0; // entwertet verspätete Ladeergebnisse nach Field-Wechsel
 const actorHandles = new Map<number, FieldActorHandle>();
 let playerHandle: FieldActorHandle | null = null;
+/** F28-Kalibrierung: Zusatzfaktor auf den Figurenmaßstab (1 = wie geladen). */
+let figurSkala = 1;
+/** Animierte Hintergrundgruppen des aktuellen Fields (F22). */
+let hintergrundAnim: {
+  gruppen: { param: number; state: number; meshes: Mesh[] }[];
+  zustaende: Map<number, number[]>;
+  takt: number;
+} | null = null;
+/** Zuletzt gesetzte Spieleranimation und Vorposition (Gehen/Stehen, F21). */
+let spielerAnim: number | null = null;
+let letzteSpielerPos: [number, number] | null = null;
+/** F36: Figuren erst zeigen, wenn ihre Animation gebunden ist (sonst Bindpose = liegend). */
+const animBereit = new Set<number>();
+let spielerBereit = false;
 const actorAnimState = new Map<number, string>(); // zuletzt gesetzte Animation je Actor ("id|speed|loop")
 
 // World
@@ -619,9 +652,14 @@ async function enterField(name: string, start?: { x: number; y: number }): Promi
   fieldWarnings = [];
 
   bgGroup.clear();
+  hintergrundAnim = null;
   if (bundle.background) {
     const built = buildFieldBackground(bundle.background, bundle.palette, { near: NEAR, far: FAR });
     for (const mesh of built.meshes) bgGroup.add(mesh);
+    if (built.animationen.length > 0) {
+      hintergrundAnim = { gruppen: built.animationen, zustaende: built.zustaende, takt: 0 };
+      setzeHintergrundZustand();
+    }
   } else {
     fieldWarnings.push('Hintergrund fehlt/quarantänisiert — Szene bleibt schwarz.');
   }
@@ -665,6 +703,10 @@ function releaseFieldModels(): void {
     playerHandle.release();
     playerHandle = null;
   }
+  spielerAnim = null;
+  spielerBereit = false;
+  letzteSpielerPos = null;
+  animBereit.clear();
   actorAnimState.clear();
 }
 
@@ -714,6 +756,7 @@ function requestNpcModel(i: number, modelIndex: number): void {
         return;
       }
       handle.actor.root.visible = false;
+      if (figurSkala !== 1) handle.actor.root.scale.setScalar(figurSkala);
       actorHandles.set(i, handle);
       actorGroup.add(handle.actor.root);
     })
@@ -780,17 +823,61 @@ function fieldTick(input: FieldInput): TickResult | null {
   return result;
 }
 
+/**
+ * Hintergrund-Animation (F22).
+ *
+ * Je Animationsparameter ist GENAU EIN Zustand sichtbar. Welcher, entscheidet
+ * im Original das Field-Script über die Parameter-Opcodes.
+ *
+ * 🟡 **Demo-Ersatz, solange die Opcodes nicht verdrahtet sind:** die Zustände
+ * eines Parameters werden reihum durchgeschaltet. Das ist nicht die Semantik
+ * des Originals — aber es zeigt eine Animation statt aller Phasen übereinander,
+ * und genau daran hing der Befund „verschwommene Blöcke".
+ */
+const HINTERGRUND_TAKTE_JE_PHASE = 8;
+
+function setzeHintergrundZustand(): void {
+  if (!hintergrundAnim) return;
+  const phase = Math.floor(hintergrundAnim.takt / HINTERGRUND_TAKTE_JE_PHASE);
+  for (const gruppe of hintergrundAnim.gruppen) {
+    const bits = hintergrundAnim.zustaende.get(gruppe.param) ?? [];
+    const aktiv = bits.length > 0 ? bits[phase % bits.length] : gruppe.state;
+    const sichtbar = gruppe.state === aktiv;
+    for (const mesh of gruppe.meshes) mesh.visible = sichtbar;
+  }
+}
+
 function updateFieldActors(): void {
   const player = fieldSession?.player;
-  const playerRoot = playerHandle?.actor.root ?? playerActor.root;
+  // Actor statt root führen: die Blickrichtung geht über setActorFacing, das
+  // die Scene-Basis erhält (F20 — `root.rotation.y` löschte sie).
+  const playerFigur = playerHandle?.actor ?? playerActor;
   playerActor.root.visible = false;
   if (playerHandle) playerHandle.actor.root.visible = false;
   if (player) {
-    playerRoot.visible = true;
+    playerFigur.root.visible = true;
     const p = ff7ToScene([player.walk.x, player.walk.y, player.walk.height]);
-    playerRoot.position.set(p[0], p[1], p[2]);
-    playerRoot.rotation.y = (-player.facing * Math.PI) / 180;
-    playerHandle?.advanceTick();
+    playerFigur.root.position.set(p[0], p[1], p[2]);
+    setActorFacing(playerFigur, player.facing);
+    if (playerHandle) {
+      // F21: Auch der Spieler lief bisher ohne jede Animation, also in der
+      // Bindpose. Gesetzt wird vorerst NUR die Ruheanimation.
+      //
+      // 🔴 Die Gehanimation (`ANIM_GEHEN`) bleibt bewusst ungenutzt: sie legt
+      // die Figur flach (F27). Ihre Frames tragen eine Wurzelrotation, die sich
+      // mit der Wurzelrahmen-Korrektur und der von uns gesetzten Blickrichtung
+      // beißt. Erst messen, dann anschalten — eine sichtbar kippende Figur ist
+      // schlechter als eine, die beim Gehen steht.
+      if (spielerAnim !== ANIM_STEHEN) {
+        spielerAnim = ANIM_STEHEN;
+        playerHandle.setAnimation(ANIM_STEHEN, 1, true);
+        spielerBereit = false;
+        void playerHandle.whenAnimationSettled().then(() => { spielerBereit = true; });
+      }
+      playerFigur.root.visible = spielerBereit; // F36, s. NPC-Zweig
+      letzteSpielerPos = [player.walk.x, player.walk.y];
+      playerHandle.advanceTick();
+    }
   }
   // NPCs: echtes Modell wenn geladen, sonst Ersatzkapsel. Party-Slot 0 ist der
   // Spieler und wird nicht doppelt gezeichnet.
@@ -801,14 +888,25 @@ function updateFieldActors(): void {
     if (!rt.position || !rt.visible || rt.partyMember === 0) return;
     if (rt.modelIndex !== null) requestNpcModel(i, rt.modelIndex);
     const handle = actorHandles.get(i);
-    let root;
+    let figur: Actor;
     if (handle) {
-      root = handle.actor.root;
+      figur = handle.actor;
       const anim = rt.animation;
-      const key = anim ? `${anim.id}|${anim.speed}|${anim.loop}` : 'bind';
+      // F21: Ohne Script-Animation lief die Figur in der BINDPOSE — und die
+      // ist keine Standpose: die Modelle lagen flach am Boden. Im Original ist
+      // die Ruhehaltung Animation 0 des Manifest-Eintrags, nicht die Bindpose.
+      const key = anim ? `${anim.id}|${anim.speed}|${anim.loop}` : 'standard0';
       if (actorAnimState.get(i) !== key) {
         actorAnimState.set(i, key);
         if (anim) handle.setAnimation(anim.id, anim.speed, anim.loop);
+        else handle.setAnimation(ANIM_STEHEN, 1, true);
+        // F36: Bis der Clip gebunden ist, posiert advanceTick die BINDPOSE —
+        // und die ist keine Standhaltung, sondern die gestreckte Bone-Kette:
+        // die Figur liegt flach am Boden. Das dauert nur wenige Takte, ist
+        // aber bei JEDEM Field-Wechsel sichtbar. Deshalb bleibt die Figur
+        // unsichtbar, bis ihre Animation steht.
+        animBereit.delete(i);
+        void handle.whenAnimationSettled().then(() => animBereit.add(i));
       }
       handle.advanceTick();
     } else {
@@ -818,12 +916,12 @@ function updateFieldActors(): void {
         npcActors.set(i, capsule);
         actorGroup.add(capsule.root);
       }
-      root = capsule.root;
+      figur = capsule;
     }
-    root.visible = true;
+    figur.root.visible = !handle || animBereit.has(i);
     const p = ff7ToScene(rt.position);
-    root.position.set(p[0], p[1], p[2]);
-    if (rt.direction !== null) root.rotation.y = (-rt.direction * Math.PI) / 180;
+    figur.root.position.set(p[0], p[1], p[2]);
+    if (rt.direction !== null) setActorFacing(figur, rt.direction);
   });
 }
 
@@ -968,6 +1066,10 @@ let tickCounter = 0;
 
 function tick(): void {
   tickCounter++;
+  if (hintergrundAnim) {
+    hintergrundAnim.takt++;
+    setzeHintergrundZustand();
+  }
   sampler.setContext(activeContext());
   const frame = sampler.sampleTick();
   if (battle) {
@@ -1068,7 +1170,16 @@ function updateReadout(): void {
 async function boot(): Promise<void> {
   data = await bootGameData(setStatus);
   if (!data) return;
-  actorLib = createActorLibrary((name) => data!.readCharEntry(name));
+  actorLib = createActorLibrary((name) => data!.readCharEntry(name), {
+    // F21: fehlende Teilressourcen zählen, statt sie nur magenta zu zeichnen.
+    onMissing: (info) => {
+      const key = `${info.kind}:${info.name}`;
+      modellFehlstellen.set(key, {
+        ...info,
+        anzahl: (modellFehlstellen.get(key)?.anzahl ?? 0) + 1,
+      });
+    },
+  });
   partySpecs = data.savemap ? partyFromSavemap(data.savemap) : defaultParty();
   battleStarter = data.scenes
     ? createEncounterBattleStarter({ scenes: data.scenes, party: partySpecs, seed: 0x51ed })
@@ -1154,16 +1265,162 @@ function codeForAction(action: SemanticAction): string | null {
       animation: a.animation,
       hatModell: actorHandles.has(i),
     })),
+  /**
+   * F22/F23-Messung: Verteilung der noch ungedeuteten Bytes des 52-B-
+   * Tile-Records. Erwartet werden dort Animationsparameter, Animationszustand
+   * und Mischmodus — belegt ist das nicht, also wird gezählt statt geraten.
+   */
+  tileBytes: (): object => {
+    const layers = fieldBundle?.background?.layers ?? [];
+    const verteilung: Record<number, Record<number, number>> = {};
+    let gesamt = 0;
+    for (const l of layers) {
+      for (const t of l.tiles) {
+        gesamt++;
+        for (let off = 0; off < t.raw.length; off++) {
+          (verteilung[off] ??= {})[t.raw[off]!] = ((verteilung[off] ?? {})[t.raw[off]!] ?? 0) + 1;
+        }
+      }
+    }
+    // Nur Offsets zeigen, die überhaupt variieren (konstante sind uninteressant).
+    const bunt: Record<number, { werte: number; top: [string, number][] }> = {};
+    for (const [off, w] of Object.entries(verteilung)) {
+      const eintraege = Object.entries(w).sort((a, b) => b[1] - a[1]);
+      if (eintraege.length > 1) bunt[Number(off)] = { werte: eintraege.length, top: eintraege.slice(0, 4) };
+    }
+    return { field: fieldName, tiles: gesamt, layer: layers.map((l) => ({ i: l.index, tiles: l.tiles.length })), bunt };
+  },
+  /** F29-Messung: Rohbytes eines Dialogstrings (hex), um Funktionscodes zu belegen. */
+  dialogRoh: (index: number, laenge = 48): string | null => {
+    const script = fieldBundle?.script;
+    const section = fieldBundle?.rawSections[1];
+    if (!script || !section) return null;
+    const off = script.stringOffsets[index];
+    if (off === null || off === undefined) return null;
+    const start = script.stringTableOffset + off;
+    return [...section.slice(start, start + laenge)].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  },
+  /** Diagnose: Eintrag aus char.lgp lesen (Gegenstück zu readBattle). */
+  readChar: async (name: string): Promise<number | null> => {
+    const bytes = await data?.readCharEntry(name);
+    return bytes ? bytes.length : null;
+  },
   models: (): object => ({
     manifest: fieldBundle?.models
       ? {
           scaleGlobal: fieldBundle.models.scaleGlobal,
-          models: fieldBundle.models.models.map((m) => ({ name: m.name, file: m.modelFile, scale: m.scale, anims: m.animations.length })),
+          models: fieldBundle.models.models.map((m) => ({
+            name: m.name,
+            file: m.modelFile,
+            scale: m.scale,
+            anims: m.animations.length,
+            animFiles: m.animations.map((a) => a.file),
+          })),
         }
       : null,
     playerLoaded: playerHandle !== null,
     npcLoaded: [...actorHandles.keys()],
   }),
+  /**
+   * F28-Messung: Wie groß landet eine Figur auf dem Schirm?
+   *
+   * Die Modellskala ist bestandsweit 512/512 = 1, die scheinbare Größe hängt
+   * also allein an der Projektion. Diese Sonde liefert die Kennzahlen, mit
+   * denen sich „Figur zu klein" von „Kamera falsch" trennen lässt.
+   */
+  kameraSonde: (): object => {
+    if (!fieldCamera || !fieldSession?.player) return { fehler: 'keine Kamera/Figur' };
+    const p = fieldSession.player;
+    const welt = ff7ToScene([p.walk.x, p.walk.y, p.walk.height]);
+    const pos = new Vector3(welt[0], welt[1], welt[2]);
+    const abstand = fieldCamera.position.distanceTo(pos);
+    const fovY = (fieldCamera.fov * Math.PI) / 180;
+    // Höhe eines 100-Einheiten-Objekts in Design-Pixeln (240 hoch) an dieser Stelle
+    const sichtHoehe = 2 * Math.tan(fovY / 2) * abstand;
+    const bbox = new Box3().setFromObject(playerHandle?.actor.root ?? playerActor.root);
+    const figurHoehe = bbox.max.y - bbox.min.y;
+    return {
+      field: fieldName,
+      fovGrad: Math.round(fieldCamera.fov * 100) / 100,
+      abstand: Math.round(abstand),
+      sichtHoeheBeiFigur: Math.round(sichtHoehe),
+      figurHoeheWelt: Math.round(figurHoehe * 100) / 100,
+      figurPixel480: Math.round((figurHoehe / sichtHoehe) * 480),
+      anteilBildhoehe: Math.round((figurHoehe / sichtHoehe) * 1000) / 1000,
+    };
+  },
+  /**
+   * F28-Kalibrierung: Figurenmaßstab zur Laufzeit ändern, um ihn gegen
+   * Original-Screenshots einzumessen. Kein Dauerzustand — der ermittelte Wert
+   * gehört danach als belegte Konstante in die Modellkette.
+   */
+  setFigurSkala: (faktor: number): void => {
+    figurSkala = faktor;
+    for (const h of actorHandles.values()) h.actor.root.scale.setScalar(faktor);
+    if (playerHandle) playerHandle.actor.root.scale.setScalar(faktor);
+  },
+  /** F21-Sonde: Materialien der gezeichneten Field-Figuren (Textur ja/nein, Farbe). */
+  materialSonde: (): object =>
+    [...actorHandles.entries()].map(([i, h]) => {
+      const meshes: { mat: string; hatMap: boolean; farbe: string; vertexColors: boolean }[] = [];
+      h.actor.root.traverse((o) => {
+        const m = o as { isMesh?: boolean; material?: unknown };
+        if (!m.isMesh) return;
+        for (const mat of (Array.isArray(m.material) ? m.material : [m.material]) as {
+          type: string;
+          map?: unknown;
+          color?: { getHexString(): string };
+          vertexColors?: boolean;
+        }[]) {
+          meshes.push({
+            mat: mat.type,
+            hatMap: !!mat.map,
+            farbe: mat.color ? mat.color.getHexString() : '—',
+            vertexColors: !!mat.vertexColors,
+          });
+        }
+      });
+      const magenta = meshes.filter((m) => m.farbe === 'ff00ff').length;
+      // Wohin zeigt die FF7-Hochachse nach root UND model? (0,1,0) = aufrecht.
+      const hochRoot = new Vector3(0, 0, 1).applyQuaternion(h.actor.root.quaternion);
+      h.actor.root.updateMatrixWorld(true);
+      const hochWelt = new Vector3(0, 0, 1).transformDirection(h.actor.model.matrixWorld);
+      return {
+        actor: i,
+        meshes: meshes.length,
+        magenta,
+        mitTextur: meshes.filter((m) => m.hatMap).length,
+        hochRoot: hochRoot.toArray().map((v) => Math.round(v * 1000) / 1000),
+        hochWelt: hochWelt.toArray().map((v) => Math.round(v * 1000) / 1000),
+        modelRot: h.actor.model.rotation.toArray().slice(0, 3).map((v) => Math.round((v as number) * 57.3)),
+        // Bindpose = alle Bone-Rotationen 0. Eine echte Animation ist ≠ 0.
+        boneRotSumme: Math.round(
+          h.actor.boneGroups.reduce(
+            (s, b) => s + Math.abs(b.rotation.x) + Math.abs(b.rotation.y) + Math.abs(b.rotation.z),
+            0,
+          ) * 57.3,
+        ),
+        bones: h.actor.boneGroups.length,
+      };
+    }),
+  /**
+   * F21: Warum ist eine Figur magenta? Zwei Quellen, im Bild ununterscheidbar —
+   * `ersatzkapseln` sind Actors ohne geladenes Modell, `fehlstellen` sind
+   * übersprungene Teilressourcen geladener Modelle (fehlende `.tex` ⇒
+   * Platzhaltermaterial).
+   */
+  platzhalter: (): object => {
+    const sichtbar = (fieldSession?.runtime?.state.actors ?? [])
+      .map((a, i) => ({ i, modelIndex: a.modelIndex, sichtbar: a.visible && !!a.position, partyMember: a.partyMember }))
+      .filter((a) => a.sichtbar && a.partyMember !== 0);
+    return {
+      field: fieldName,
+      sichtbareActors: sichtbar.length,
+      mitModell: sichtbar.filter((a) => actorHandles.has(a.i)).length,
+      ersatzkapseln: sichtbar.filter((a) => !actorHandles.has(a.i)).map((a) => ({ i: a.i, modelIndex: a.modelIndex })),
+      fehlstellen: [...modellFehlstellen.values()],
+    };
+  },
   gateways: (): object[] =>
     (fieldBundle?.triggers?.gateways ?? [])
       .map((g, i) => ({ i, used: g.used, exitLine: g.exitLine, dest: g.destMaplistIndex, destName: data?.fieldNameByMaplist(g.destMaplistIndex) ?? null }))

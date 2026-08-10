@@ -77,9 +77,14 @@ export function composeSavemapSlot(spec: FixtureSavemap): Uint8Array {
     slot[base + 29] = (c.armor ?? 0xff) & 0xff;
     slot[base + 30] = (c.accessory ?? 0xff) & 0xff;
     view.setUint16(base + 44, c.hp & 0xffff, true);
+    // F12: @46/@50 sind die BASISWERTE, die echten Maxima (inkl. Ausrüstung)
+    // liegen bei @56/@58 (ff7tk Type_FF7CHAR.h). Die Fixture schreibt beide
+    // gleich — ein Fixture-Charakter trägt keine Ausrüstungsboni.
     view.setUint16(base + 46, c.hpMax & 0xffff, true);
     view.setUint16(base + 48, c.mp & 0xffff, true);
     view.setUint16(base + 50, c.mpMax & 0xffff, true);
+    view.setUint16(base + 56, c.hpMax & 0xffff, true);
+    view.setUint16(base + 58, c.mpMax & 0xffff, true);
     for (let m = 0; m < 16; m++) {
       const at = base + 64 + m * 4;
       const entry = c.materia?.[m];

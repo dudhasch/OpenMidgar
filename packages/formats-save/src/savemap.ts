@@ -54,9 +54,17 @@ export const CHAR = {
   armor: 29,
   accessory: 30,
   hp: 44,
-  hpMax: 46,
+  /**
+   * 🟢 F12 gelöst (ff7tk `Type_FF7CHAR.h`): @46/@50 liegen die BASISWERTE
+   * (ohne Ausrüstung), die echten Maxima inkl. Ausrüstungs-/Materiaboni bei
+   * @56/@58 — dazwischen 4 Füllbytes. Die alte Lesung nahm die Basiswerte
+   * als Maximum, daher Anzeigen wie „MP 122/116" (aktuell > Maximum).
+   */
+  hpBasis: 46,
   mp: 48,
-  mpMax: 50,
+  mpBasis: 50,
+  hpMax: 56,
+  mpMax: 58,
   /** 16 Materiaplätze à 4 Byte (Kennung + 3 Byte Erfahrung). 🟡 Aufteilung. */
   materia: 64,
   materiaSlots: 16,

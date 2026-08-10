@@ -1,12 +1,18 @@
 import {
+  AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  CustomBlending,
   DataTexture,
   GLSL3,
   LinearSRGBColorSpace,
   Mesh,
   NearestFilter,
+  NoBlending,
+  NormalBlending,
+  OneFactor,
   RawShaderMaterial,
+  ReverseSubtractEquation,
   RGBAFormat,
   UnsignedByteType,
 } from 'three';
@@ -47,12 +53,28 @@ export interface BackgroundAtlasSource {
   data: Uint8Array;
 }
 
+/**
+ * Mischart eines Tile-Stapels (F23).
+ *
+ * `opaque` ist der bisherige Pfad: Fragment deckend, Tiefe wird geschrieben.
+ * Für gemischte Tiles ist beides falsch — additiv gemischter Rauch, Feuer und
+ * Wasser wurden dadurch als **deckende dunkle Blöcke** gezeichnet, weil ihre
+ * dunklen Texel voll durchschlugen und obendrein die Tiefe belegten.
+ */
+/**
+ * 🟢 Formeln belegt (Makou Reactor, `BackgroundFile::blendColor`):
+ * typeTrans 0 = (dst+src)/2 · 1 = dst+src · 2 = dst−src · 3 = dst+src/4.
+ */
+export type TileBlendMode = 'opaque' | 'add' | 'average' | 'sub' | 'add25';
+
 export interface BackgroundMeshOptions {
   /** Müssen mit der Renderkamera übereinstimmen (Kalibrierungsvertrag). */
   near: number;
   far: number;
   /** Ohne Atlas rendert der Mesh die Flachfarben des S4-Pfads. */
   atlas?: BackgroundAtlasSource | undefined;
+  /** Mischart des gesamten Stapels; Default `opaque` (Verhalten wie bisher). */
+  blend?: TileBlendMode | undefined;
 }
 
 /**
@@ -94,6 +116,7 @@ export function buildBackgroundMesh(
   const uvs = new Float32Array(tiles.length * 4 * 2);
   const indices = new Uint32Array(tiles.length * 6);
 
+  const blend: TileBlendMode = opts.blend ?? 'opaque';
   const toNdcX = (px: number): number => (px / DESIGN_WIDTH) * 2 - 1;
   const toNdcY = (py: number): number => 1 - (py / DESIGN_HEIGHT) * 2;
 
@@ -196,7 +219,7 @@ export function buildBackgroundMesh(
         // Vollständig transparente Texel verwerfen, damit der Tiefenpuffer
         // hinter Löchern nicht beschrieben wird.
         if (texel.a < 0.5) discard;
-        outColor = vec4(texel.rgb * vColor, 1.0);
+        outColor = vec4(texel.rgb * vColor, ${blend === 'average' ? '0.5' : blend === 'add25' ? '0.25' : '1.0'});
       }
     `
       : `
@@ -205,11 +228,27 @@ export function buildBackgroundMesh(
       in vec2 vUv;
       out vec4 outColor;
       void main() {
-        outColor = vec4(vColor, 1.0);
+        outColor = vec4(vColor, ${blend === 'average' ? '0.5' : blend === 'add25' ? '0.25' : '1.0'});
       }
     `,
     depthTest: true,
-    depthWrite: true,
+    // Gemischte Tiles dürfen die Tiefe NICHT schreiben: sie sind Effekt-
+    // flächen, keine Verdeckung — sonst schneiden sie Figuren und einander weg.
+    depthWrite: blend === 'opaque',
+    transparent: blend !== 'opaque',
+    // add/add25: dst + alpha·src (alpha steuert den 25%-Anteil).
+    // sub: dst − src über die Umkehr-Differenz (Faktoren 1/1).
+    blending:
+      blend === 'add' || blend === 'add25'
+        ? AdditiveBlending
+        : blend === 'sub'
+          ? CustomBlending
+          : blend === 'average'
+            ? NormalBlending
+            : NoBlending,
+    ...(blend === 'sub'
+      ? { blendEquation: ReverseSubtractEquation, blendSrc: OneFactor, blendDst: OneFactor }
+      : {}),
   });
 
   const mesh = new Mesh(geometry, material);

@@ -141,22 +141,37 @@ describe('createActorLibrary — Auflösekette', () => {
   });
 });
 
-describe('createActorLibrary — Skalierung (🟡 Hypothese model-over-512)', () => {
-  it('512 → 1.0 und 1024 → 2.0 auf root.scale', async () => {
+describe('createActorLibrary — Skalierung (🟢 sichtkalibriert, F28)', () => {
+  it('Vorgabe model-over-128: 512 → 4.0 und 1024 → 8.0 auf root.scale', async () => {
+    // Der Bezugswert 128 ist gegen einen Original-Screenshot eingemessen
+    // (md1stin, Faktorsweep): mit dem alten Wert 512 war JEDE Figur um genau
+    // diesen Faktor 4 zu klein. Die relativen Größen bleiben erhalten.
     const { library } = makeLibrary();
     const normal = await library.load(modelEntry(512), 512);
     const gross = await library.load(modelEntry(1024), 512);
-    expect(normal!.actor.root.scale.x).toBeCloseTo(1, 6);
-    expect(gross!.actor.root.scale.x).toBeCloseTo(2, 6);
-    expect(gross!.actor.root.scale.y).toBeCloseTo(2, 6);
+    expect(normal!.actor.root.scale.x).toBeCloseTo(4, 6);
+    expect(gross!.actor.root.scale.x).toBeCloseTo(8, 6);
+    expect(gross!.actor.root.scale.y).toBeCloseTo(8, 6);
     library.dispose();
   });
 
-  it('scale null → neutrale 1.0; scaleMode none/model-over-global übersteuern', async () => {
+  it('kleinere Modellskala bleibt anteilig kleiner (rkt_i führt 384)', async () => {
+    const { library } = makeLibrary();
+    const klein = await library.load(modelEntry(384), 512);
+    expect(klein!.actor.root.scale.x).toBeCloseTo(3, 6);
+    library.dispose();
+  });
+
+  it('scale null → Bezugsgröße; scaleMode none/model-over-global/-512 übersteuern', async () => {
     const { library } = makeLibrary();
     const ohne = await library.load(modelEntry(null), 512);
-    expect(ohne!.actor.root.scale.x).toBeCloseTo(1, 6);
+    expect(ohne!.actor.root.scale.x).toBeCloseTo(4, 6);
     library.dispose();
+
+    const { library: alt } = makeLibrary({ scaleMode: 'model-over-512' });
+    const altSkala = await alt.load(modelEntry(512), 512);
+    expect(altSkala!.actor.root.scale.x).toBeCloseTo(1, 6);
+    alt.dispose();
 
     const { library: keine } = makeLibrary({ scaleMode: 'none' });
     const roh = await keine.load(modelEntry(1024), 512);

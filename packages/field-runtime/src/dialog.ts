@@ -1,5 +1,5 @@
 import type { FieldBundle } from '@webmidgar/formats-field';
-import { buildAsciiTable, DEFAULT_ASCII_OFFSET, decodeFfText } from '@webmidgar/formats-kernel';
+import { buildFieldTextTable, decodeFfText } from '@webmidgar/formats-kernel';
 
 /**
  * Field-Dialogtexte (Dialogtext-Pipeline): dekodiert die Stringtabelle der
@@ -11,14 +11,15 @@ import { buildAsciiTable, DEFAULT_ASCII_OFFSET, decodeFfText } from '@webmidgar/
  * kaputten String bleibt spielbar, und der Host zeigt für diesen Dialog
  * schlicht nichts an.
  *
- * Zeichentabelle: der realdaten-abgeleitete ASCII-Versatz 0x20 aus
- * `@webmidgar/formats-kernel` (S13) — dieselbe Tabelle wie für `kernel.bin`.
+ * Zeichentabelle: die Feldtext-Tabelle aus `@webmidgar/formats-kernel` —
+ * ASCII-Versatz 0x20 (realdaten-abgeleitet, S13) plus Funktionscodes (F29:
+ * Anführungszeichen, Zeilenumbruch, Seitenwechsel, Namensplatzhalter).
  */
-export function decodeFieldDialogs(bundle: FieldBundle): (string | null)[] {
+export function decodeFieldDialogs(bundle: FieldBundle, names?: readonly string[]): (string | null)[] {
   const script = bundle.script;
   const section = bundle.rawSections[1];
   if (!script || !section) return [];
-  const table = buildAsciiTable(DEFAULT_ASCII_OFFSET);
+  const table = buildFieldTextTable(names);
   return script.stringOffsets.map((off) => {
     if (off === null) return null;
     const start = script.stringTableOffset + off;

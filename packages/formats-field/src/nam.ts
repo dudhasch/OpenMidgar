@@ -162,6 +162,33 @@ export interface BackgroundTile {
    * (= hinterste Ebene), in den Layern 1–3 je Tile verschieden.
    */
   z: number;
+  /**
+   * u8@28 — Animationsgruppe. 0 = statisches Tile (immer sichtbar), sonst die
+   * Nummer des Parameters, den das Field-Script schaltet.
+   *
+   * 🟢 **Realdatenbeleg** (`md8_1`, 890 Tiles, 2026-08-10): 474 Tiles tragen
+   * `param = 0` und **exakt dieselben 474** tragen `state = 0` — die beiden
+   * Felder sind gekoppelt, wie es die Deutung verlangt. Die übrigen 416 Tiles
+   * (`param = 1`) sind die animierten Flammen der brennenden Reaktorszene.
+   */
+  param: number;
+  /**
+   * u8@29 — Zustands-Bitmaske innerhalb der Animationsgruppe. Beobachtete
+   * Werte sind Einzelbits (8, 16, 32 …): das Tile gehört zu genau einem
+   * Animationsschritt und ist sichtbar, wenn dieses Bit im aktuellen Wert des
+   * Parameters gesetzt ist.
+   *
+   * Werden ALLE Zustände gleichzeitig gezeichnet, überlagern sich sämtliche
+   * Phasen einer Animation zu einem unscharfen Block — das war F22.
+   */
+  state: number;
+  /** u8@30 — Mischung aktiv (0 = deckend). Zählt in `md8_1` 415 Tiles wie `typeTrans`. */
+  blending: number;
+  /**
+   * u8@32 — Mischart. 🟡 Community-Konvention: 0 = Mittelwert, 1 = additiv,
+   * 2 = subtraktiv, 3 = 25 % additiv. In `md8_1` treten nur 0 und 1 auf.
+   */
+  typeTrans: number;
   /** u8@34 — Texturseiten-Slot; 99,85 % verweisen auf eine vorhandene Seite. ✅ */
   textureId: number;
   /** u8@38 — Texeltiefe der Quellseite (0/1 = palettiert, 2 = Direktfarbe). */
