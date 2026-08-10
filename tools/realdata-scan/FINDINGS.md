@@ -501,6 +501,22 @@ ausschließlich `data/wm` (Originalbestand).
 | **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
 | **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
 
+## S32 — Battle-Darstellung: Komposition, Kamera, Sichtnachweis (2026-08-10)
+
+Werkzeuge: `battle-model-sheet.rdtest.ts` (Bildtafel, derselbe Rasterizer wie
+die R4-Tafeln), Kameramessung in der Exploration (Szenen-Kamerablock).
+
+| Befund | Status |
+|---|---|
+| **Battle-Modellkonvention sichtgeprüft** (Tafel: 14 Modelle × 6 bzw. 4 Varianten): Kindversatz **+len** (Field: −len!) und Wurzel-Zusatzdrehung Frame-X 270° (netto Rx(180°) im Modellraum). In der Siegervariante sind Cloud (Frisur, Gesicht, Schwert über der Schulter), Barret und der Laternenträger klar erkennbar und aufrecht; alle Kontrollvarianten liegen/kopfüber. Unabhängige Stütze: KimeraCS versetzt Battle-Bones mit +len — genau die „Kopplungsfalle", die der `.a`-Abschnitt vermerkt hatte, ist damit aufgelöst: Vorzeichen UND Wurzelwinkel mussten GEMEINSAM gedreht werden | 🟢 sichtgeprüft (Standbild-Abnahme aus S30 erledigt) |
+| **Damit auch die Kompositionsregel gestützt:** „k-ter Flag-1-Bone ← k-te Geometriedatei in Suffixordnung" — die Figuren sind zusammenhängend, Texturen sitzen (Tonberry-Laterne, Cloud-Gesicht). Die 125 „+1"-Präfixe: überzählige Datei bleibt unzugeordnet und gemeldet (Waffen-Kandidat, 🟡) | ✅ tragfähig, 🟡 Rest |
+| **Szenen-Kamerablock (48 B je Formation) gedeutet:** 3 Kameras à 12 B (i16 Position x,y,z + i16 Ziel x,y,z) + 6×0xFFFF-Füllung. Messungen: Füllwörter ausnahmslos −1 (100 %), Kamera-y ausnahmslos negativ (über dem Boden; FF7-y zeigt abwärts), Ziel-x überwiegend 0 (Bühnenmitte) | ✅ belegt (🟡 Rollen der 3 Kameras) |
+| `camdat0–2.bin`: beginnen mit PSX-RAM-Zeigern (0x801A…) — Deutung braucht die Ladebasis; **nicht angegangen** | 🔴 offen |
+| Stage-Format (welcher `location`-Wert welche Bühne lädt, Bühnengeometrie): unbelegt — Darstellung nutzt die dokumentierte 🔵-Ersatz-Stage | 🔴 → 🔵 |
+| **Effektabdeckung: 0 % belegt** (magic.lgp-Formate 🔴) — JEDE Aktion bekommt die dokumentierte Ersatzdarstellung; die Quote wird vom ViewModel mitgeführt und berichtet | ✅ ehrlich berichtet |
+| **Wirkungsfreiheit strukturell erzwungen:** Die Darstellungsschicht (`BattleViewModel`) konsumiert ausschließlich Tick-ERGEBNISSE, kein Rückkanal; Digest-Gleichheit mit/ohne Darstellung ist Fixture-Abnahme | ✅ erste Abnahme des Bogens |
+| Offen (S32-Restpunkte): Golden-Screenshots je Kampfphase im GPU-Pfad, NFR-Messung auf dem Referenzgerät, Battle-Animationsformate `ab`/`da` (🔴) — Standbild ja, Bewegtdarstellung nein | 🟡 dokumentiert |
+
 ## S31 — Gegner-KI-Grammatik und Battle-Runtime (2026-08-10)
 
 Werkzeuge: `battle-ai-probe.rdtest.ts`. Verfahren: S12 (Spannen-Abschluss +

@@ -37,6 +37,7 @@
       "@webmidgar/formats-world": ["./packages/formats-world/src/index.ts"],
       "@webmidgar/formats-battle": ["./packages/formats-battle/src/index.ts"],
       "@webmidgar/battle-runtime": ["./packages/battle-runtime/src/index.ts"],
+      "@webmidgar/render-battle": ["./packages/render-battle/src/index.ts"],
       "@webmidgar/render-world": ["./packages/render-world/src/index.ts"],
       "@webmidgar/world-runtime": ["./packages/world-runtime/src/index.ts"],
       "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"],

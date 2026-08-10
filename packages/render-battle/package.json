@@ -1,0 +1,15 @@
+{
+  "name": "@webmidgar/render-battle",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@webmidgar/formats-battle": "*",
+    "@webmidgar/formats-model": "*",
+    "@webmidgar/battle-runtime": "*",
+    "@webmidgar/render-actor": "*",
+    "@webmidgar/convert": "*"
+  }
+}
