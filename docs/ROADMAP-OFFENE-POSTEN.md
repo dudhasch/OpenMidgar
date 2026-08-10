@@ -216,31 +216,54 @@ Koordinatenabstieg, nur mit besseren Startwerten.
 Interpreter heute aus dem Tritt gerät. Jede korrigierte Länge schließt eine
 davon.
 
-## O4 — R4-Sichtprüfungen B1–B8 ✅ durchgeführt, ein Folgeposten bleibt
+## O4 — R4-Sichtprüfungen ✅ vollständig abgeschlossen (2026-08-10)
 
-**Gegengeprüft am 2026-08-10.** Die Sichtprüfungen sind erledigt; die
-Merkzettel-Tabelle in [R4-MODELL-KONVENTIONEN.md](R4-MODELL-KONVENTIONEN.md)
-war veraltet und ist nachgeführt (Abschnitt „O4-Bilanz").
+Zwei Schritte an einem Tag. **Erst gegengeprüft:** Die Merkzettel-Tabelle in
+[R4-MODELL-KONVENTIONEN.md](R4-MODELL-KONVENTIONEN.md) war veraltet — 6
+Annahmen entschieden, 3 unbelegt, B7 widerlegt ohne Ersatz. **Dann geschlossen:**
+Eine zweite Tafel über die vier Restposten, 30 Zellen, vollständig beantwortet
+([o4-urteile.json](../tools/realdata-scan/o4-urteile.json)).
 
-| Klasse | Posten |
-|---|---|
-| ✅ entschieden (6) | B1 (Kindversatz **−len**, Tafel mit 50 Renderketten), B2 (YXZ aus dem Dateikopf, 3209/3209), B5/B6a/B6b (Sichtprüfung), B8, B9 (695/695) |
-| 🟡 belastbar, unbelegt (3) | B3 (nur eingegrenzt), B4 (indirekt gestützt), B10 (Bauformregel) |
-| ❌ widerlegt, ohne Ersatz (1) | **B7** — Wurzelpivot liegt in der **Hüfte**, nicht am Bodenkontaktpunkt |
+| Posten | Ergebnis | Kontrolle |
+|---|---|---|
+| **B7** | Modellursprung auf dem Boden (= heutige Regel) **3/3 richtig** | Wurzelbone auf dem Boden **3/3 „versinkt"** |
+| **B3** | Bytes 0–11 = Rotation **3/3 richtig** | vertauscht **3/3 „falsch"** |
+| **B4** | Dateireihenfolge **3/3 richtig** | Breitensuche **3/3 „falsch"** |
+| **B10** | Regel **2/2 richtig** | umgekehrte Regel **2/2 „falsch"**, ohne Vorzug **2/2 „falsch"** |
 
-**Was O4 nicht liefern konnte, und warum das kein Versäumnis ist:** B7 lässt
-sich per Auge grundsätzlich nicht schließen. Die Wurzeltranslation verschiebt
-Figur und Pivot **gemeinsam** — das Bild sieht bei jedem Versatz gleich aus.
-Das ist die blinde Gütefunktion, diesmal gegenüber dem Auge statt gegenüber
-einer Kennzahl. Ein tragfähiger Test braucht eine **externe Referenz**: den
-Bodenkontakt gegen eine bekannte Walkmesh-Höhe.
+**B7 war ein Definitionsfehler, kein Enginefehler.** „Der Wurzelpivot liegt in
+der Hüfte" stimmt — der **Wurzelbone** sitzt 3,0–6,2 Einheiten über dem Boden,
+dorthin setzt ihn die `rootTranslation`. Aber die Engine platziert nie den
+Wurzelbone, sondern den **Modellursprung**, und der ist der Bodenkontaktpunkt.
+Beides ist gleichzeitig wahr; die alte B7-Formulierung war mehrdeutig. Damit
+ist zugleich die Semantik der `rootTranslation` erklärt: Sie hebt das Skelett
+vom Boden auf Hüfthöhe.
 
-**Restrisiko:** Figuren stehen im Field womöglich systematisch zu hoch oder zu
-tief. Der Fehler ist konstant und fällt deshalb erst an einer Kante auf.
+**Die eigentliche methodische Lehre.** Vormittags stand hier noch, B7 sei per
+Auge *grundsätzlich* nicht zu schließen, weil die Wurzeltranslation Figur und
+Pivot gemeinsam verschiebt. Das galt nur, solange jede Zelle auf ihren eigenen
+Inhalt eingepasst wird. Mit einer **externen Referenz im selben Bild**
+(eingezeichneter Boden) und einem **festen Sichtfenster** über alle Varianten
+war die Frage in Minuten entschieden — und zwar auf **2,5 % der Figurhöhe**
+genau, schärfer als jede der fünf gescheiterten Aggregatkennzahlen.
 
-**Neuer Posten O10** (ersetzt den offenen Rest von O4): Höhenversatz
-Figur↔Walkmesh und Abbildung der Wurzeltranslation gemeinsam bestimmen —
-Messung an der Field-Integration, kein Bild.
+> Eine blinde Gütefunktion ist eine Eigenschaft der **Messanordnung**, nicht
+> der Frage — auch dann, wenn das Messgerät ein Auge ist.
+
+**Nebenbefund, der die vorweggenommene Falle umdreht:** Die als „trivial
+richtig" markierte Zelle (tiefster Mesh-Punkt exakt auf der Ebene) wurde
+**3/3 als „schwebt"** beurteilt. Der tiefste Mesh-Punkt liegt bei korrekter
+Platzierung leicht *unter* der Bodenebene. Wer den Bodenkontakt künftig aus
+der Geometrie rechnet, darf die Unterkante also **nicht** auf die Ebene legen.
+
+**Rest (🟡, nicht blockierend):** waagerechte Komponenten der
+Wurzeltranslation (die Tafel hat keine waagerechte Referenz); B4 gegen
+*Tiefensuche* ist im Bestand nicht unterscheidbar, weil `.hrc` bereits
+tiefenzuerst auflistet; B10 bleibt eine Bauformregel — belegt ist ihre
+Wirkung, nicht ihr Dateibeleg.
+
+Zwei Automatisierungsversuche sind sauber gescheitert und in der R4-Notiz
+dokumentiert, damit sie niemand wiederholt.
 
 Zwei Automatisierungsversuche sind sauber gescheitert und in der R4-Notiz
 dokumentiert, damit sie niemand wiederholt. Die Lehre daraus steht dort als
@@ -349,8 +372,8 @@ ist sie ein Migrationsproblem.
 | ~~O3 Kampf-Opcode~~ | ✅ erledigt | — |
 | O3b Sektion 7 | S23 | Zufallskämpfe |
 | O9 Längentabelle | S20 | 0,22 % Overrun im Interpreter |
-| ~~O4 R4-Sichtprüfung~~ | ✅ durchgeführt | — (6 entschieden, 3 belastbar-unbelegt, B7 widerlegt → O10) |
-| O10 Höhenversatz Figur↔Walkmesh + Wurzeltranslation | offen | Bodenkontakt der Figuren im Field (konstanter Fehler, fällt spät auf) |
+| ~~O4 R4-Sichtprüfung~~ | ✅ abgeschlossen | — (alle B1–B10 entschieden, inkl. Resttafel) |
+| ~~O10 Höhenversatz Figur↔Walkmesh~~ | ✅ gelöst (Resttafel) | — (Modellursprung = Bodenkontakt, 3/3; waagerechte Wurzeltranslation bleibt 🟡) |
 | ~~O5 LGP-Check-Code~~ | ✅ gemessen, geschlossen | — (Partition nach Eintragsart, opt-in-Warnung nachgeliefert) |
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
 | O7 0xFF-Wrap | S20 | nichts (Randfall) |

@@ -155,6 +155,16 @@ export function bindPoseFrame(skeleton: Skeleton): AnimationFrame {
  * Modellraum-Posen aller Bones für einen Frame. `rotations` wird in
  * Dateireihenfolge adressiert; fehlende Einträge gelten als 0 (Pad-Regel).
  *
+ * 🟢 **R4-B4 — die Dateireihenfolge ist sichtgeprüft** (2026-08-10,
+ * O4-Resttafel): drei Skelette, Dateireihenfolge 3/3 richtig, Breitensuche
+ * über die Hierarchie 3/3 falsch.
+ *
+ * 🟡 *Grenze, die dazugehört:* Gegen die **Tiefensuche** ist die
+ * Dateireihenfolge im gesamten Bestand nicht unterscheidbar — `.hrc` listet
+ * bereits tiefenzuerst auf, beide Auslegungen erzeugen dieselbe Zuordnung.
+ * Widerlegt ist damit die Breitensuche, nicht die Tiefensuche. Praktisch
+ * folgenlos, aber es gehört ausgesprochen statt als „belegt" verbucht.
+ *
  * `rootFrameFix` ist hier bewusst **false** als Vorgabe: Diese Funktion ist die reine
  * Referenzmathematik und soll keine Fassungs-Konvention tragen. Die Korrektur
  * setzt der Aufrufer — im Renderpfad genau einmal in `applyFrame`, wo sie

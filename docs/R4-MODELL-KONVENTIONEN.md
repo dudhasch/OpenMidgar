@@ -23,20 +23,22 @@ in den Abschnitten weiter unten. Ausführliche Einordnung: „O4-Bilanz" am Ende
 |---|---|---|---|
 | B1 ✅ | Bone-Längsachse = lokales +Z; Kindversatz **T(0,0,−parentLength)** | `render-actor/pose.ts`, `actor.ts` | **Gelöst 2026-08-10:** Tafel mit 50 Renderketten, Bewertung in sich konsistent (zwei Zerlegungen desselben Transforms); numerisch gegen die Produktionskette nachgewiesen, gegen Überanpassung an drei weiteren Modellen in je drei Ansichten. Das Vorzeichen lief nach `+len`, richtig ist `−len` |
 | B2 ✅ | Eulerreihenfolge **'YXZ'** (R = Ry·Rx·Rz), Winkel in Grad | `pose.ts EULER_ORDER` | **Gelöst als Datum:** steht im `.a`-Dateikopf, **3209/3209**. Die zwischenzeitliche Notiz „B2 widerlegt" betraf die *Hypothese*, eine wechselnde Reihenfolge erkläre das Kippen — die ist widerlegt, YXZ selbst ist bestätigt. Ursache des Kippens war B1 |
-| B3 🟡 | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | **Nur eingegrenzt, nicht entschieden.** Belegt ist ausschließlich, dass die Wurzel das Kippen nicht verursacht (Bytes 0–11 zu 98,7 % genau 0; Bytes 12–23 max. 16,45). Welche Hälfte welche ist, bleibt unbelegt — bei diesen Wertgrößen folgenlos, aber es ist kein Formatfakt |
-| B4 🟡 | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | **Indirekt gestützt, nie direkt geprüft.** Die B1-Tafel und die drei Gegenmodelle zeigen zusammensitzende Segmente in drei Ansichten — eine falsche Bone-Adressierung würde Segmente verstreuen. Das ist ein starkes Indiz, aber keine gezielte Messung an einem Skelett mit ungleichen Kettenlängen |
+| B3 ✅ | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | **Sichtgeprüft 2026-08-10 (O4-Resttafel):** 3 Modelle, heute 3/3 richtig, vertauscht 3/3 falsch — einstimmig, kein offener Fall |
+| B4 ✅ | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | **Sichtgeprüft 2026-08-10 (O4-Resttafel):** 3 Skelette, Dateireihenfolge 3/3 richtig, Breitensuche 3/3 falsch. *Grenze:* Die Tiefensuche fällt im gesamten Bestand mit der Dateireihenfolge zusammen und ist damit nicht unterscheidbar — bestätigt ist „nicht Breitensuche", nicht „Datei statt Tiefensuche" |
 | B5 ✅ | Palettenblock **BGRA** | `tex.ts`, `model-writers.ts` | **Sichtgeprüft 2026-08-10:** 4 Texturen × 4 Auslegungen, BGRA 4/4 richtig, alle Alternativen 12/12 als falsche Farbe |
 | B6a ✅ | Vertexfarben **BGRA** | `p.ts` | **Sichtgeprüft 2026-08-10:** zwei Modelle einstimmig, RGBA zweimal verworfen |
 | B6b ✅ | UV-Koordinaten **roh**, weder U noch V geflippt | `p.ts`, `actor.ts` | **Sichtgeprüft 2026-08-10:** genau 1 von 4 Kombinationen richtig |
-| B7 ❌ | ~~Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz aus rootTranslation~~ | Demo/`actor.ts` | **Widerlegt, ohne Ersatz.** Der Wurzelpivot liegt **in der Hüfte**, nicht am Bodenkontaktpunkt. Der Höhenversatz Figur↔Walkmesh muss anders bestimmt werden. **Einziger echt offener B-Posten** — s. „Offen bleibt" unter der B1-Lösung |
+| B7 ✅ | **Der MODELLURSPRUNG (0,0,0) ist der Bodenkontaktpunkt** — nicht der Wurzelbone | `actor.ts`, `field-runtime` | **Sichtgeprüft 2026-08-10 (O4-Resttafel):** 3 Modelle × 4 Kandidatenregeln. Die heutige Regel (dy = 0) 3/3 richtig; Wurzelbone auf dem Boden 3/3 „versinkt". Die frühere Widerlegung hat **zwei verschiedene Punkte verwechselt** — s. Abschnitt „B7 aufgelöst" |
 | B8 ✅ | Skalierungsfaktor kommt aus dem **Modelldateifeld**, nicht aus der Field-Sektion | `formats-model` | **Präzisiert 2026-08-10** — s. Abschnitt „B8 präzisiert" |
 | B9 ✅ | Farbschlüssel: Palettenalpha 0 = durchsichtig, Kopfschalter bei 0x08 | `tex.ts`, `actor.ts` | **Realdaten 695/695** (`tex-alpha-probe`), Bildwirkung sichtgeprüft |
-| B10 🟡 | Texturierte Teilnetze sind Aufkleber und bekommen Tiefenvorzug | `actor.ts` | Bauformregel, kein Dateidatum — s. Abschnitt „Streifen über den Augen" |
+| B10 ✅ | Texturierte Teilnetze sind Aufkleber und bekommen Tiefenvorzug | `actor.ts` | **Sichtgeprüft 2026-08-10 (O4-Resttafel):** Regel 2/2 richtig, **umgekehrte Kontrollregel 2/2 falsch**, ohne Vorzug 2/2 falsch. Die Regel hat damit eine gemessene Wirkung und die richtige Richtung. Bleibt eine **Bauformregel**, kein Dateidatum — aber eine belegt wirksame |
 
-**Zusätzlich offen, ohne B-Nummer:** Die Abbildung der **Wurzeltranslation**
-ist unbelegt. Sie verschiebt Figur und Pivot gemeinsam und ist damit für jede
-Sichtprüfung **und** jedes formbasierte Maß unsichtbar — sie braucht den
-Bodenkontakt als Referenz und hängt damit an B7.
+**Zusätzlich, ohne B-Nummer — Wurzeltranslation:** Die **senkrechte**
+Komponente ist mit B7 mitbelegt (läge die Abbildung falsch, stünde die Hüfte
+3–7 Einheiten daneben, und die Tafel zeigt, dass schon 0,6 Einheiten als
+falsch erkannt werden). Die **waagerechten** Komponenten bleiben unbelegt: Die
+Tafel hat keine waagerechte Referenz, eine Seitwärtsverschiebung wäre in ihr
+unsichtbar. 🟡
 
 ## Sichtprüfung durchgeführt (2026-08-09) — und was sie ausgelöst hat
 
@@ -587,27 +589,30 @@ Widerspruch ist hier aufgelöst; die Merkzettel-Tabelle oben ist nachgeführt.
 
 | Klasse | Posten |
 |---|---|
-| ✅ **entschieden (6)** | B1 (Kindversatz −len), B2 (YXZ, 3209/3209 aus dem Dateikopf), B5, B6a, B6b (Sichtprüfung), B8 (Modelldateifeld), B9 (695/695) |
-| 🟡 **belastbar, aber unbelegt (3)** | B3 (nur eingegrenzt: Wurzel verursacht das Kippen nicht — welche Hälfte welche ist, steht nicht fest), B4 (indirekt durch die B1-Tafel gestützt, nie gezielt gemessen), B10 (Bauformregel) |
-| ❌ **widerlegt, ohne Ersatz (1)** | **B7** — der Wurzelpivot liegt in der Hüfte, nicht am Bodenkontaktpunkt |
+| ✅ **entschieden (10)** | B1 (Kindversatz −len), B2 (YXZ, 3209/3209 aus dem Dateikopf), B3, B4, B5, B6a, B6b, B7, B8, B9, B10 — die letzten vier davon durch die **O4-Resttafel** vom selben Tag |
+| 🟡 **Rest** | waagerechte Komponenten der Wurzeltranslation; B4 gegen *Tiefensuche* (nicht unterscheidbar); B10 bleibt Bauformregel |
 
-**Die acht Sichtprüfungen B1–B8, um die es O4 ging, sind also durchgeführt.**
-Was O4 nicht geliefert hat, ist ein *Ersatz* für die dabei widerlegte Annahme
-B7 — und den kann keine Sichtprüfung liefern.
+**Ursprünglicher Stand dieser Bilanz** (vormittags): 6 entschieden, 3 unbelegt,
+B7 widerlegt ohne Ersatz. Die vier Restposten wurden noch am selben Tag durch
+eine zweite Tafel geschlossen — s. „Die O4-Resttafel" weiter unten.
 
-### Warum B7 nicht per Auge zu schließen ist
+### Warum B7 zunächst als „per Auge unschließbar" galt — und was daran falsch war
 
-Die Wurzeltranslation verschiebt **Figur und Pivot gemeinsam**. Für eine
-Sichtprüfung ist sie damit unsichtbar: Das Bild sieht bei jedem Versatz gleich
-aus. Dasselbe gilt für jedes formbasierte Aggregatmaß. Das ist exakt die
-**blinde Gütefunktion** aus der Bilanz der fünf Messanläufe — nur diesmal
-gegenüber dem Auge statt gegenüber einer Kennzahl.
+Die Überlegung lautete: Die Wurzeltranslation verschiebt **Figur und Pivot
+gemeinsam**, das Bild sieht bei jedem Versatz gleich aus — blinde
+Gütefunktion, diesmal gegenüber dem Auge. Das stimmt, **solange die Zelle auf
+ihren eigenen Inhalt eingepasst wird.**
 
-Ein tragfähiger Test braucht deshalb eine **externe Referenz**: den
-Bodenkontakt. Konkret die Frage, ob die Füße eines Feldmodells in einem Field
-mit bekannter Walkmesh-Höhe auf der Ebene stehen, oder ob ein konstanter
-Versatz bleibt — und ob dieser Versatz je Modell konstant oder eine Funktion
-des Skeletts ist. Das ist eine Messung an der Field-Integration, kein Bild.
+Der Ausweg war kein anderes Messverfahren, sondern eine **externe Referenz im
+selben Bild**: eine eingezeichnete Bodenebene plus ein **festes Sichtfenster**
+über alle Varianten eines Modells. Damit verschiebt sich die Figur sichtbar
+gegen den Boden, statt von der Einpassung stillschweigend nachzentriert zu
+werden.
+
+**Die Lehre ist allgemeiner als B7:** „Diese Frage ist per Sichtprüfung nicht
+entscheidbar" hieß hier in Wahrheit „diese Sichtprüfung hat keine Referenz".
+Eine blinde Gütefunktion ist eine Eigenschaft der **Messanordnung**, nicht der
+Frage — auch dann, wenn das Messgerät ein Auge ist.
 
 ### Restrisiko, solange B7 offen ist
 
@@ -616,3 +621,82 @@ ist **konstant** (kein Zucken, kein Driften) und fällt deshalb bei einer
 Einzelansicht kaum auf — er wird erst an einer Kante sichtbar, an der die
 Figur den Boden verlässt oder in ihn eintaucht. Zielsession: zusammen mit der
 Wurzeltranslation.
+
+*(Nachtrag 2026-08-10: durch die O4-Resttafel erledigt — s. u.)*
+
+---
+
+## Die O4-Resttafel — alle vier Restposten entschieden (2026-08-10)
+
+30 Zellen (`o4-sheet.rdtest.ts`), Urteile des Betreibers am eigenen Bestand,
+vollständig beantwortet. Rohdaten:
+[o4-urteile.json](../tools/realdata-scan/o4-urteile.json).
+
+| Posten | Ergebnis | Kontrolle |
+|---|---|---|
+| **B7** | Heutige Regel (dy = 0) **3/3 richtig** | Wurzelbone auf dem Boden **3/3 „versinkt"** |
+| **B3** | Heutige Lesung **3/3 richtig** | vertauscht **3/3 „falsch"** |
+| **B4** | Dateireihenfolge **3/3 richtig** | Breitensuche **3/3 „falsch"** |
+| **B10** | Regel **2/2 richtig** | umgekehrte Regel **2/2 „falsch"**, ohne Vorzug **2/2 „falsch"** |
+
+### B7 aufgelöst — die Widerlegung hatte zwei Punkte verwechselt
+
+Die frühere Notiz „der Wurzelpivot liegt in der Hüfte, nicht am
+Bodenkontaktpunkt" ist **richtig und trotzdem kein Fehler der Engine**. Es sind
+zwei verschiedene Punkte:
+
+- Der **Wurzelbone** sitzt tatsächlich in Hüfthöhe — gemessen 3,0 / 6,2 / 4,0
+  Szeneneinheiten über dem Boden. Dorthin setzt ihn die `rootTranslation` der
+  Animation.
+- Der **Modellursprung** (0,0,0 im Modellraum) ist der Bodenkontaktpunkt. Und
+  **genau den** setzt die Engine auf die Walkmesh-Höhe.
+
+Beides ist gleichzeitig wahr. Die widerlegte Annahme war nie die, nach der die
+Engine gebaut ist — B7 war in seiner Formulierung mehrdeutig („Wurzelpivot"),
+und die Widerlegung hat die eine Lesart getroffen, während der Code die andere
+benutzt. **Die Semantik der `rootTranslation` ist damit erklärt: Sie hebt das
+Skelett vom Boden auf Hüfthöhe.**
+
+### Warum die Urteile belastbar sind — die Konsistenzprobe
+
+Dasselbe Argument, das bei B1 entschieden hat: **Die Bewertung ist in sich
+konsistent, und das ist der Beleg.**
+
+- Bei Modell 3 tragen zwei *verschiedene* Zellen praktisch denselben Versatz
+  (K1 mit dy = 0 und K4 mit dy = −0,0) — und bekommen unabhängig voneinander
+  dasselbe Urteil „richtig". Wären die Urteile Rauschen, müsste das Zufall sein.
+- Die Fehlurteile zeigen in die **richtige Richtung**: Jedes negative dy
+  bekommt „versinkt", jedes positive „schwebt". Kein einziger Ausreißer über
+  30 Zellen.
+- Die Einklammerung ist **eng**: Bei Modell 1 ist dy = 0 richtig, dy = +0,6
+  schwebt und dy = −0,6 versinkt. Das Auge trennt hier auf **2,5 % der
+  Figurhöhe** — deutlich schärfer, als jede der fünf gescheiterten
+  Aggregatkennzahlen je war.
+
+### Die trivial richtige Zelle war *nicht* trivial richtig
+
+Vorweg festgehalten war, dass K3 („tiefster Mesh-Punkt auf dem Boden") per
+Konstruktion aufsetzt und deshalb nichts beweisen kann. Das Urteil lautet
+trotzdem **3/3 „schwebt"** — bei Versätzen von nur +0,1 bis +0,6 Einheiten.
+
+Das ist der interessanteste Nebenbefund der Tafel: Der tiefste **Mesh**-Punkt
+liegt bei dy = 0 bereits leicht **unter** der Bodenebene (−0,6 / −0,1 / −0,4),
+und genau so gehört es sich — eine Figur, deren Sohle exakt die Ebene
+tangiert, liest sich als schwebend. Wer den Bodenkontakt künftig aus der
+Geometrie berechnen will, darf also **nicht** die Unterkante auf die Ebene
+legen.
+
+### Was die Tafel NICHT entschieden hat
+
+- **B4 gegen Tiefensuche.** Die Tiefensuche fällt im gesamten Bestand mit der
+  Dateireihenfolge zusammen — die `.hrc`-Dateien sind bereits tiefenzuerst
+  aufgelistet. Widerlegt ist damit die Breitensuche, nicht die Tiefensuche.
+  Der Unterschied ist praktisch folgenlos (beide Auslegungen erzeugen dieselbe
+  Zuordnung), aber er gehört ausgesprochen statt stillschweigend als „belegt"
+  verbucht.
+- **Die waagerechten Komponenten der Wurzeltranslation.** Die Tafel hat keine
+  waagerechte Referenz; eine Seitwärtsverschiebung wäre in ihr unsichtbar. 🟡
+- **B10 bleibt eine Bauformregel.** Belegt ist jetzt, dass sie *wirkt* und in
+  die *richtige Richtung* zeigt — nicht, dass sie in der Datei steht. Ein
+  texturiertes Teilnetz, das kein Aufkleber ist, bekäme den Vorzug weiterhin
+  zu Unrecht.

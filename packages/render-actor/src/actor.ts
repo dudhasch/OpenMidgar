@@ -66,10 +66,17 @@ const ALPHA_TEST = 0.5;
  * texturiert (13,3 %), und 187 Ressourcen tragen genau drei Texturen — Gesicht
  * plus zwei Augen. Die Grundgeometrie ist vertexgefärbt.
  *
- * Bleibt 🟡, weil die Regel eine Bauform ausnutzt und keine Angabe der Datei
- * ist: Ein texturiertes Submesh, das KEIN Aufkleber ist, bekäme den Vorzug
- * ebenfalls. Bei einem Versatz dieser Größe ist das folgenlos, aber es ist
- * eine Annahme und wird als solche geführt.
+ * **Wirkung und Richtung sind belegt** (2026-08-10, O4-Resttafel): Die Regel
+ * wurde 2/2 als richtig beurteilt, die **umgekehrte Kontrollregel** (Vorzug
+ * für die untexturierten Flächen) 2/2 als falsch, und „gar kein Vorzug"
+ * ebenfalls 2/2 als falsch. Damit ist ausgeschlossen, dass die Regel
+ * wirkungslos ist oder in die falsche Richtung zeigt — genau das hätte die
+ * Kontrollzelle aufgedeckt.
+ *
+ * Bleibt trotzdem 🟡, weil die Regel eine Bauform ausnutzt und keine Angabe
+ * der Datei ist: Ein texturiertes Submesh, das KEIN Aufkleber ist, bekäme den
+ * Vorzug ebenfalls. Bei einem Versatz dieser Größe ist das folgenlos, aber es
+ * ist eine Annahme und wird als solche geführt.
  */
 const DECAL_OFFSET_FACTOR = -1;
 const DECAL_OFFSET_UNITS = -1;

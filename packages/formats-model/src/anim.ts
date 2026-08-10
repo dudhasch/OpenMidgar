@@ -15,11 +15,21 @@ import type { ParseResult } from './hrc.js';
  *
  * Gemessen kommt genau **eine** Reihenfolge vor: YXZ (3209/3209). Damit ist
  * die frühere Vermutung widerlegt, wechselnde Reihenfolgen könnten erklären,
- * warum animierte Frames kippen — sie wechseln nicht. 🟡 R4-B2 bleibt offen,
- * die Ursache liegt woanders.
+ * warum animierte Frames kippen — sie wechseln nicht. Die Ursache lag
+ * woanders und ist gefunden: das Vorzeichen des Kindversatzes (R4-B1).
  *
- * 🟢 Die Zuordnung der 24 Wurzel-Bytes (Rotation VOR Translation) ist durch
- * zwei unabhängige Fremdimplementierungen gestützt und war zuvor 🟡.
+ * 🟢 **R4-B3 — Zuordnung der 24 Wurzel-Bytes: Rotation VOR Translation.**
+ * Sichtgeprüft am 2026-08-10 (O4-Resttafel, `o4-sheet.rdtest.ts`): drei
+ * Modelle, jeweils der Frame mit dem stärksten Wurzelsignal, heutige Lesung
+ * gegen vertauschte Hälften. Urteil **3/3 richtig gegen 3/3 falsch**,
+ * einstimmig.
+ *
+ * *Warum das nachgeholt wurde, obwohl hier schon 🟢 stand:* Die vorherige
+ * Begründung lautete „durch zwei unabhängige Fremdimplementierungen
+ * gestützt". Das ist nach Projektstandard **kein Beleg**, sondern eine
+ * Hypothese — dieselbe Haltung, die bei O9 dreizehn Prozentpunkte gerettet
+ * hat, als die pauschal übernommene Referenztabelle auf 86,77 % gedrückt
+ * hätte. Jetzt steht ein eigener Nachweis dahinter.
  */
 
 const HEADER_LEN = 36;

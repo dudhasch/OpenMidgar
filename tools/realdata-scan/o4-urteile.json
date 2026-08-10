@@ -1,0 +1,42 @@
+{
+  "tafel": "o4-rest",
+  "version": 1,
+  "datum": "2026-08-10",
+  "quelle": "Sichtprüfung des Betreibers an der eigenen Installation, o4-sheet.rdtest.ts",
+  "beantwortet": "30/30",
+  "faelle": [
+    { "id": "B7-1",  "variante": "K1 Modellursprung (HEUTIGE REGEL)", "dy": 0,     "modell": 1, "urteil": "richtig" },
+    { "id": "B7-2",  "variante": "K2 Wurzelbone (Hüfte)",             "dy": -3.0,  "modell": 1, "urteil": "versinkt" },
+    { "id": "B7-3",  "variante": "K3 tiefster Mesh-Punkt",            "dy": 0.6,   "modell": 1, "urteil": "schwebt" },
+    { "id": "B7-4",  "variante": "K4 tiefstes Gelenk",                "dy": -0.6,  "modell": 1, "urteil": "versinkt" },
+    { "id": "B7-5",  "variante": "K1 Modellursprung (HEUTIGE REGEL)", "dy": 0,     "modell": 2, "urteil": "richtig" },
+    { "id": "B7-6",  "variante": "K2 Wurzelbone (Hüfte)",             "dy": -6.2,  "modell": 2, "urteil": "versinkt" },
+    { "id": "B7-7",  "variante": "K3 tiefster Mesh-Punkt",            "dy": 0.1,   "modell": 2, "urteil": "schwebt" },
+    { "id": "B7-8",  "variante": "K4 tiefstes Gelenk",                "dy": -1.7,  "modell": 2, "urteil": "versinkt" },
+    { "id": "B7-9",  "variante": "K1 Modellursprung (HEUTIGE REGEL)", "dy": 0,     "modell": 3, "urteil": "richtig" },
+    { "id": "B7-10", "variante": "K2 Wurzelbone (Hüfte)",             "dy": -4.0,  "modell": 3, "urteil": "versinkt" },
+    { "id": "B7-11", "variante": "K3 tiefster Mesh-Punkt",            "dy": 0.4,   "modell": 3, "urteil": "schwebt" },
+    { "id": "B7-12", "variante": "K4 tiefstes Gelenk",                "dy": -0.0,  "modell": 3, "urteil": "richtig" },
+
+    { "id": "B3-1", "variante": "heute: 0–11 Rotation, 12–23 Translation", "modell": 1, "urteil": "richtig" },
+    { "id": "B3-2", "variante": "vertauscht",                              "modell": 1, "urteil": "falsch" },
+    { "id": "B3-3", "variante": "heute: 0–11 Rotation, 12–23 Translation", "modell": 2, "urteil": "richtig" },
+    { "id": "B3-4", "variante": "vertauscht",                              "modell": 2, "urteil": "falsch" },
+    { "id": "B3-5", "variante": "heute: 0–11 Rotation, 12–23 Translation", "modell": 3, "urteil": "richtig" },
+    { "id": "B3-6", "variante": "vertauscht",                              "modell": 3, "urteil": "falsch" },
+
+    { "id": "B4-1", "variante": "Dateireihenfolge (heute)", "bones": 29, "urteil": "richtig" },
+    { "id": "B4-2", "variante": "Breitensuche",             "bones": 29, "urteil": "falsch" },
+    { "id": "B4-3", "variante": "Dateireihenfolge (heute)", "bones": 28, "urteil": "richtig" },
+    { "id": "B4-4", "variante": "Breitensuche",             "bones": 28, "urteil": "falsch" },
+    { "id": "B4-5", "variante": "Dateireihenfolge (heute)", "bones": 28, "urteil": "richtig" },
+    { "id": "B4-6", "variante": "Breitensuche",             "bones": 28, "urteil": "falsch" },
+
+    { "id": "B10-1", "variante": "heute: texturierte bekommen Vorzug", "modell": 1, "urteil": "richtig" },
+    { "id": "B10-2", "variante": "KONTROLLE: umgekehrte Regel",        "modell": 1, "urteil": "falsch" },
+    { "id": "B10-3", "variante": "gar kein Vorzug",                    "modell": 1, "urteil": "falsch" },
+    { "id": "B10-4", "variante": "heute: texturierte bekommen Vorzug", "modell": 2, "urteil": "richtig" },
+    { "id": "B10-5", "variante": "KONTROLLE: umgekehrte Regel",        "modell": 2, "urteil": "falsch" },
+    { "id": "B10-6", "variante": "gar kein Vorzug",                    "modell": 2, "urteil": "falsch" }
+  ]
+}
