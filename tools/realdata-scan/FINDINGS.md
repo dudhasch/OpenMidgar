@@ -396,3 +396,32 @@ anderen Sprachfassung wäre eine.
 | Ursache: `data/lang-en` enthält nur `battle`, `kernel` und `movies` — **kein** `field`. Der Field-Bytecode ist sprachunabhängig; die Sprachfassung steckt in `kernel.bin`, nicht im Field-Archiv | ✅ erklärt |
 | **Konsequenz für O9:** Das ist keine unabhängige Stichprobe. Die verbleibenden 🟡-Längen brauchen einen Datensatz aus einem anderen **Release**, nicht aus einer anderen Sprache | 🟡 offen |
 | **Konsequenz für S37:** `kernel.bin` IST sprachabhängig — genau die Gegenprobe, die der EXE-Bogen für Namenstabellen braucht | ✅ nützlich |
+
+## R4-B1 gelöst — Kindversatz-Vorzeichen, per Sichtprüfung entschieden (2026-08-10)
+
+| Befund | Status |
+|---|---|
+| **Der Kindversatz lief nach `+parent.length`, richtig ist `−parent.length`.** Von 50 gerenderten Renderketten trugen ausschließlich die vier als brauchbar erkannten dieses Vorzeichen | ✅ gelöst |
+| **Die Bewertung ist in sich konsistent — das ist der Beleg.** Die zwei als richtig erkannten Zellen (#14, #15) sind derselbe Transform in zwei Zerlegungen (Rx(180°)); die zwei als „180° gedreht" erkannten (#10, #11) ebenfalls (Rx(0°)), und sie liegen exakt 180° daneben. Beide Paare wurden unabhängig vergeben | ✅ Selbstkonsistenz |
+| Damit hatte Kujata mit `[0,0,−parentBone.length]` recht. Die frühere Messung „Kujatas Versatzvorzeichen verschlechtert alles" war ein Artefakt der blinden Gütefunktion | ⚠️ Korrektur |
+| Wurzelwinkel −90° und Versatzreihenfolge (entlang der **Eltern**-Achse) waren bereits richtig | ✅ bestätigt |
+| **Nachweis numerisch:** Die Produktionskette reproduziert wurzelrelativ exakt Konfiguration #15 (Assertion in der Probe) | ✅ verdrahtet |
+| **Nachweis gegen Überanpassung:** Drei weitere Modelle in Front-, Seiten- und Draufsicht durch dieselbe Kette — alle aufrecht, Segmente zusammenhängend | ✅ Kontrolle |
+| **B7 ist widerlegt:** Der Wurzelpivot liegt in der **Hüfte**, nicht am Bodenkontaktpunkt. Der Höhenversatz zum Walkmesh braucht eine andere Bestimmung | 🔴 neu offen |
+| **Die Wurzeltranslation bleibt unbelegt** — sie verschiebt Figur und Pivot gemeinsam und ist damit für Sichtprüfung UND formbasierte Maße unsichtbar. Sie braucht den Bodenkontakt als Referenz | 🟡 offen |
+
+### Die Bilanz von fünf Anläufen
+
+| Anlauf | Gütefunktion | Ergebnis |
+|---|---|---|
+| 1 | Y ist längste Achse | blind unter 180° |
+| 2 | dito über 6 Eulerreihenfolgen | Fehler außerhalb des Suchraums |
+| 3 | Anteil über dem Pivot | Wurzel in der Hüfte ⇒ Median ~0,5 |
+| 4 | Breite oben/unten | Signal im Rauschen (0,96…1,03) |
+| 5 | **50 Bilder, ein Auge** | **entschieden** |
+
+Vier Aggregatmaße haben dieselbe Frage viermal nicht beantwortet — und jedes
+sah dabei überzeugend aus. **Für Fragen nach einer Richtung im Raum ist die
+Sichtprüfung kein Notbehelf, sondern das schärfere Instrument.** Der Beitrag
+der Automatik lag darin, den Suchraum vollständig aufzuspannen, nicht ihn zu
+bewerten.

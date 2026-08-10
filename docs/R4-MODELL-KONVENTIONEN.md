@@ -399,3 +399,74 @@ gegen eine Aggregatgröße.
   Signatur einer **Platzierungs**-, keiner Orientierungsfrage — zu prüfen sind
   die RSD→`.p`-Auflösung je Bone und die Frage, in welchem Raum die
   `.p`-Vertices überhaupt stehen.
+
+## R4-B1 GELÖST — der Kindversatz hatte das falsche Vorzeichen (2026-08-10, abends)
+
+Entschieden hat es die **Sichtprüfung an einer Tafel mit 50 gerenderten
+Renderketten** — nicht eine fünfte Kennzahl.
+
+### Der Befund
+
+| Bewertung | Zellen | Kette | Gesamtdrehung (Basis ∘ Pitch) |
+|---|---|---|---|
+| **richtig** | #14 | Versatz VOR Rotation · **−len** · Pitch 180° · Basis keine | Rx(180°) |
+| **richtig** | #15 | Versatz VOR Rotation · **−len** · Pitch 270° · Basis adr009 | Rx(−90°)∘Rx(270°) = **Rx(180°)** |
+| 180° gedreht | #10 | −len · Pitch 0° · Basis keine | Rx(0°) |
+| 180° gedreht | #11 | −len · Pitch 90° · Basis adr009 | **Rx(0°)** |
+
+**Die Bewertung ist in sich konsistent, und das ist der Beleg.** Die beiden
+als richtig erkannten Zellen sind derselbe Transform in zwei Zerlegungen; die
+beiden als „180° gedreht" erkannten ebenfalls — und sie liegen exakt 180° von
+den richtigen entfernt. Beide Paare wurden unabhängig voneinander vergeben.
+
+### Was falsch war
+
+**Der Kindversatz.** Er lief nach `+parent.length`, richtig ist
+`−parent.length`. Alle vier als brauchbar erkannten Zellen tragen dieses
+Vorzeichen, keine der 46 übrigen.
+
+Damit hatte Kujata mit `[0, 0, −parentBone.length]` von Anfang an recht — und
+die frühere Messung „Kujatas Versatzvorzeichen verschlechtert unsere
+Aufrechtigkeit durchgehend" war ein weiterer Artefakt der blinden
+Gütefunktion, kein Befund.
+
+Der Wurzelwinkel `ROOT_FRAME_FIX_DEG = −90` war bereits richtig; die
+Versatzreihenfolge (entlang der **Eltern**-Achse) ebenfalls.
+
+### Nachweis
+
+- **Numerisch:** Die Produktionskette (`computePose(…, rootFrameFix = true)`
+  plus ADR-009-Basis) reproduziert wurzelrelativ exakt Konfiguration #15.
+  Verglichen wird wurzelrelativ, weil die Tafel ohne Wurzeltranslation
+  rechnet — die Aussage lautet „gleiche Form, gleiche Lage zur Wurzel".
+- **Gegen Überanpassung:** Drei **weitere** Modelle, je in Front-, Seiten- und
+  Draufsicht, durch dieselbe Produktionskette gerendert. Alle stehen aufrecht,
+  Segmente sitzen zusammen, das Profil stimmt.
+
+### Die Bilanz der Messversuche
+
+| Anlauf | Gütefunktion | Ergebnis |
+|---|---|---|
+| 1 | Y ist längste Achse | blind unter 180° |
+| 2 | dito über 6 Eulerreihenfolgen | Fehler außerhalb des Suchraums |
+| 3 | Anteil über dem Pivot | Wurzel sitzt in der Hüfte ⇒ Median ~0,5 |
+| 4 | Breite oben/unten | Signal im Rauschen (0,96…1,03) |
+| 5 | **50 Bilder, ein Auge** | **entschieden, in Minuten** |
+
+Vier Aggregatmaße haben dieselbe Frage viermal nicht beantwortet, und jedes
+hat dabei überzeugend ausgesehen. Die Lehre für dieses Projekt ist nicht
+„besser messen": **Für Fragen nach einer Richtung im Raum ist die Sichtprüfung
+kein Notbehelf, sondern das schärfere Instrument.** Der Beitrag der Automatik
+lag darin, den Suchraum vollständig aufzuspannen und darstellbar zu machen —
+nicht darin, ihn zu bewerten.
+
+### Offen bleibt
+
+- **B5/B6** (Palettenreihenfolge, Vertexfarben, UV-Ursprung) — unberührt.
+- **B7** ist widerlegt in seiner bisherigen Form: Der Wurzelpivot liegt **in
+  der Hüfte**, nicht am Bodenkontaktpunkt. Der Höhenversatz zum Walkmesh muss
+  also anders bestimmt werden.
+- Die Abbildung der **Wurzeltranslation** ist weiterhin nicht belegt — sie
+  verschiebt Figur und Pivot gemeinsam und ist damit für jede Sichtprüfung
+  UND jedes formbasierte Maß unsichtbar. Sie braucht den Bodenkontakt als
+  Referenz.

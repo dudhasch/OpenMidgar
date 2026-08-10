@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { IndexService } from '@webmidgar/io';
 import { parseA, parseHrc, parseP, parseRsd, type AnimationClipSource, type MeshSource, type Skeleton } from '@webmidgar/formats-model';
 import { parseFieldEntry, splitAnimationName } from '@webmidgar/formats-field';
+import { ff7ToScene } from '@webmidgar/convert';
+import { computePose, transformPoint } from '@webmidgar/render-actor';
 import { NodeDirectorySource } from './node-source.js';
 
 /**
@@ -142,14 +144,24 @@ interface Dreieck {
   bone: number;
 }
 
-/** Orthographische Frontansicht mit Tiefenpuffer, flache Bone-Farben. */
-function rasterize(tris: Dreieck[], boneCount: number): Buffer {
+type Ansicht = 'front' | 'seite' | 'oben';
+
+/** Projektion je Ansicht: [Bildschirm-X, Bildschirm-Y, Tiefe]. */
+function projiziere(p: Vec3, v: Ansicht): [number, number, number] {
+  if (v === 'seite') return [p[2], p[1], -p[0]];
+  if (v === 'oben') return [p[0], p[2], p[1]];
+  return [p[0], p[1], p[2]];
+}
+
+/** Orthographische Ansicht mit Tiefenpuffer, flache Bone-Farben. */
+function rasterize(tris: Dreieck[], boneCount: number, ansicht: Ansicht = 'front'): Buffer {
   const px = new Uint8Array(W * H * 3).fill(18);
   const zb = new Float32Array(W * H).fill(-Infinity);
   if (tris.length === 0) return encodePng(W, H, px);
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const t of tris) for (const p of t.p) {
+  for (const t of tris) for (const q of t.p) {
+    const p = projiziere(q, ansicht);
     if (p[0] < minX) minX = p[0];
     if (p[0] > maxX) maxX = p[0];
     if (p[1] < minY) minY = p[1];
@@ -159,11 +171,14 @@ function rasterize(tris: Dreieck[], boneCount: number): Buffer {
   const spanY = Math.max(1e-6, maxY - minY);
   const s = Math.min((W - 16) / spanX, (H - 16) / spanY);
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  const toScreen = (p: Vec3): [number, number, number] => [
-    W / 2 + (p[0] - cx) * s,
-    H / 2 - (p[1] - cy) * s, // Bildschirm-Y zeigt nach unten
-    p[2],
-  ];
+  const toScreen = (q: Vec3): [number, number, number] => {
+    const p = projiziere(q, ansicht);
+    return [
+      W / 2 + (p[0] - cx) * s,
+      H / 2 - (p[1] - cy) * s, // Bildschirm-Y zeigt nach unten
+      p[2],
+    ];
+  };
 
   for (const t of tris) {
     const a = toScreen(t.p[0]), b = toScreen(t.p[1]), c = toScreen(t.p[2]);
@@ -278,7 +293,7 @@ describe.skipIf(!available)('Realdaten: R4-Bildtafel für die Sichtprüfung', ()
       }
     }
 
-    let best: { skeleton: Skeleton; meshes: Map<number, MeshSource[]>; clip: AnimationClipSource } | null = null;
+    const kandidaten: { skeleton: Skeleton; meshes: Map<number, MeshSource[]>; clip: AnimationClipSource }[] = [];
     for (const [hrcName, aName] of [...paare].slice(0, 40)) {
       if (!idByName.has(hrcName)) continue;
       const skeleton = parseHrc(await read(hrcName), hrcName).value;
@@ -297,52 +312,58 @@ describe.skipIf(!available)('Realdaten: R4-Bildtafel für die Sichtprüfung', ()
       }
       const clip = parseA(await read(aName), aName).value;
       if (!clip || clip.frames.length === 0 || meshes.size === 0) continue;
-      if (!best || meshes.size > best.meshes.size) best = { skeleton, meshes, clip };
+      kandidaten.push({ skeleton, meshes, clip });
     }
     await dir.closeAll();
-    expect(best).not.toBeNull();
-    const { skeleton, meshes, clip } = best!;
+    kandidaten.sort((a, b) => b.meshes.size - a.meshes.size);
+    expect(kandidaten.length).toBeGreaterThan(2);
+    const best = kandidaten[0]!;
+    const { skeleton, meshes, clip } = best;
     const frame = clip.frames[0]!;
 
     const konfigs = konfigurationen();
     const zellen: string[] = [];
 
-    for (const k of konfigs) {
-      // Bone-Matrizen und -Ursprünge für diese Kette.
+    /** Dreiecke einer Kettenkonfiguration im Szenenraum. */
+    const dreieckeFuer = (
+      m: { skeleton: Skeleton; meshes: Map<number, MeshSource[]> },
+      frm: typeof frame,
+      k: Konfig,
+    ): Dreieck[] => {
       const mats: M3[] = [];
       const origins: Vec3[] = [];
-      for (let i = 0; i < skeleton.bones.length; i++) {
-        const bone = skeleton.bones[i]!;
-        const rx = frame.rotations[bone.fileOrder * 3] ?? 0;
-        const ry = frame.rotations[bone.fileOrder * 3 + 1] ?? 0;
-        const rz = frame.rotations[bone.fileOrder * 3 + 2] ?? 0;
+      for (let i = 0; i < m.skeleton.bones.length; i++) {
+        const bone = m.skeleton.bones[i]!;
+        const rx = frm.rotations[bone.fileOrder * 3] ?? 0;
+        const ry = frm.rotations[bone.fileOrder * 3 + 1] ?? 0;
+        const rz = frm.rotations[bone.fileOrder * 3 + 2] ?? 0;
         const local = eulerYxz(rx, ry, rz);
         if (bone.parentIndex < 0) {
-          const r = frame.rootRotation;
+          const r = frm.rootRotation;
           mats.push(mul3(eulerYxz(r[0] + k.pitch, r[1], r[2]), local));
           origins.push([0, 0, 0]);
         } else {
           const pm = mats[bone.parentIndex]!;
           const po = origins[bone.parentIndex]!;
-          const plen = skeleton.bones[bone.parentIndex]!.length * k.versatzSign;
+          const plen = m.skeleton.bones[bone.parentIndex]!.length * k.versatzSign;
           // „Versatz VOR Rotation" verschiebt entlang der ELTERN-Achse,
-          // „NACH Rotation" entlang der eigenen — der Unterschied ist genau
-          // das, was Segmente neben den Körper wandern lässt.
-          const m = mul3(pm, local);
-          const achse = k.versatzNach ? m : pm;
+          // „NACH Rotation" entlang der eigenen.
+          const mm = mul3(pm, local);
+          const achse = k.versatzNach ? mm : pm;
           origins.push([
             po[0] + achse[0]![2]! * plen,
             po[1] + achse[1]![2]! * plen,
             po[2] + achse[2]![2]! * plen,
           ]);
-          mats.push(m);
+          mats.push(mm);
         }
       }
-
       const basis = BASEN[k.basis]!;
-      const wurzel = k.modus === 'roh' ? null : eulerYxz(frame.rootRotation[0] + k.pitch, frame.rootRotation[1], frame.rootRotation[2]);
+      const wurzel = k.modus === 'roh'
+        ? null
+        : eulerYxz(frm.rootRotation[0] + k.pitch, frm.rootRotation[1], frm.rootRotation[2]);
       const tris: Dreieck[] = [];
-      for (const [boneIndex, liste] of meshes) {
+      for (const [boneIndex, liste] of m.meshes) {
         for (const mesh of liste) {
           const pos = mesh.positions;
           const idx = mesh.indices;
@@ -351,21 +372,90 @@ describe.skipIf(!available)('Realdaten: R4-Bildtafel für die Sichtprüfung', ()
             for (let e = 0; e < 3; e++) {
               const v = idx[i + e]! * 3;
               const raw: Vec3 = [pos[v]!, pos[v + 1]!, pos[v + 2]!];
-              let p: Vec3;
-              if (k.modus === 'kette') p = apply(mats[boneIndex]!, origins[boneIndex]!, raw);
-              else if (k.modus === 'modellraum') p = apply(wurzel!, [0, 0, 0], raw);
-              else p = raw;
-              ecken.push(basis(p));
+              let q: Vec3;
+              if (k.modus === 'kette') q = apply(mats[boneIndex]!, origins[boneIndex]!, raw);
+              else if (k.modus === 'modellraum') q = apply(wurzel!, [0, 0, 0], raw);
+              else q = raw;
+              ecken.push(basis(q));
             }
             tris.push({ p: [ecken[0]!, ecken[1]!, ecken[2]!], bone: boneIndex });
           }
         }
       }
+      return tris;
+    };
 
-      const png = rasterize(tris, skeleton.bones.length);
+    for (const k of konfigs) {
+      const png = rasterize(dreieckeFuer(best, frame, k), skeleton.bones.length);
       zellen.push(
         `<figure><img src="data:image/png;base64,${png.toString('base64')}" width="${W}" height="${H}" alt="Konfiguration ${k.id}"><figcaption><b>#${k.id}</b> <span class="g">${k.gruppe}</span><br>${k.label}</figcaption></figure>`,
       );
+    }
+
+    // --- Nachweis: Reproduziert die PRODUKTIONSKETTE die als richtig
+    // erkannte Zelle? Das ist der eigentliche Abschluss — ohne ihn hätte die
+    // Sichtprüfung zwar entschieden, aber nichts wäre damit verdrahtet.
+    const produktionsDreiecke = (
+      m: { skeleton: Skeleton; meshes: Map<number, MeshSource[]> },
+      frm: typeof frame,
+    ): Dreieck[] => {
+      const poses = computePose(m.skeleton, frm, true);
+      const out: Dreieck[] = [];
+      for (const [boneIndex, liste] of m.meshes) {
+        const mat = poses[boneIndex]?.matrix;
+        if (!mat) continue;
+        for (const mesh of liste) {
+          const pos = mesh.positions;
+          const idx = mesh.indices;
+          for (let i = 0; i + 3 <= idx.length; i += 3) {
+            const ecken: Vec3[] = [];
+            for (let e = 0; e < 3; e++) {
+              const v = idx[i + e]! * 3;
+              const mp = transformPoint(mat, [pos[v]!, pos[v + 1]!, pos[v + 2]!]);
+              ecken.push(ff7ToScene(mp) as Vec3);
+            }
+            out.push({ p: [ecken[0]!, ecken[1]!, ecken[2]!], bone: boneIndex });
+          }
+        }
+      }
+      return out;
+    };
+
+    const box = (tris: Dreieck[]): { min: Vec3; max: Vec3 } => {
+      const mn: Vec3 = [Infinity, Infinity, Infinity];
+      const mx: Vec3 = [-Infinity, -Infinity, -Infinity];
+      for (const t of tris) for (const q of t.p) for (let k = 0; k < 3; k++) {
+        if (q[k]! < mn[k]!) mn[k] = q[k]!;
+        if (q[k]! > mx[k]!) mx[k] = q[k]!;
+      }
+      return { min: mn, max: mx };
+    };
+
+    // Verglichen wird WURZELRELATIV: Die Tafel rechnet ohne Wurzeltranslation,
+    // die Produktion mit. Eine reine Verschiebung darf den Nachweis nicht
+    // stören — die Aussage ist „gleiche Form, gleiche Lage zur Wurzel",
+    // nicht „gleiche Weltkoordinaten".
+    const prodPoses = computePose(best.skeleton, frame, true);
+    const prodWurzel = ff7ToScene(transformPoint(prodPoses[0]!.matrix, [0, 0, 0])) as Vec3;
+    const prodBox = box(produktionsDreiecke(best, frame));
+    const refBox = box(dreieckeFuer(best, frame, konfigs.find((k) => k.id === 15)!));
+    for (let k = 0; k < 3; k++) {
+      expect(prodBox.min[k]! - prodWurzel[k]!).toBeCloseTo(refBox.min[k]!, 3);
+      expect(prodBox.max[k]! - prodWurzel[k]!).toBeCloseTo(refBox.max[k]!, 3);
+    }
+    console.log('Produktionskette == Konfiguration #15 (wurzelrelativ): bestaetigt');
+
+    // --- Bestätigungstafel: ANDERE Modelle, drei Ansichten.
+    const bestaetigung: string[] = [];
+    for (const [n, m] of kandidaten.slice(1, 4).entries()) {
+      const frm = m.clip.frames[0]!;
+      const tris = produktionsDreiecke(m, frm);
+      for (const ansicht of ['front', 'seite', 'oben'] as Ansicht[]) {
+        const png = rasterize(tris, m.skeleton.bones.length, ansicht);
+        bestaetigung.push(
+          `<figure><img src="data:image/png;base64,${png.toString('base64')}" width="${W}" height="${H}" alt="Bestaetigung"><figcaption><b>Modell ${n + 2}</b> <span class="g">${ansicht}</span><br>Produktionskette (−len · WurzelX −90° · adr009)</figcaption></figure>`,
+        );
+      }
     }
 
     const html = `<!doctype html><meta charset="utf-8"><title>R4-Sichtprüfung — 50 Konfigurationen</title>
@@ -381,7 +471,10 @@ b{color:#fff;font-size:13px} .g{color:#7aa2f7}
 <h1>R4 — Sichtprüfung, 50 Renderketten</h1>
 <p>Frontansicht, orthographisch, Frame&nbsp;0 einer echten Animation. <b>Jede Farbe ist ein Bone</b> — zusammengehörige Segmente sind so auch bei korrekter Figur unterscheidbar, und freischwebende Teile fallen sofort auf.</p>
 <p>Gesucht: aufrecht, von vorn, Segmente sitzen zusammen. Bitte die Nummern nennen, die richtig aussehen — und gern auch die, die „fast" richtig sind.</p>
-<div class="grid">${zellen.join('\n')}</div>`;
+<div class="grid">${zellen.join('\n')}</div>
+<h1 style="margin-top:36px">Bestätigung — andere Modelle, drei Ansichten</h1>
+<p>Dieselbe Kette, die oben als richtig erkannt wurde, jetzt aus der <b>Produktionsimplementierung</b> heraus gerendert (wurzelrelativ identisch zu #15) und auf drei weitere Modelle angewandt. Steht hier alles aufrecht und zusammenhängend, ist die Entscheidung nicht an ein einzelnes Modell überangepasst.</p>
+<div class="grid">${bestaetigung.join('\n')}</div>`;
 
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, html, 'utf8');
