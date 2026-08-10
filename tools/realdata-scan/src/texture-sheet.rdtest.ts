@@ -97,7 +97,7 @@ function texRgb(tex: TextureSource, perm: (r: number, g: number, b: number, a: n
 }
 
 /** Orthographische Frontansicht, Tiefenpuffer, Textur- oder Vertexfarbe. */
-function rasterize(tris: Dreieck[]): Buffer {
+function rasterize(tris: Dreieck[], spaetereGewinnen = false): Buffer {
   const px = new Uint8Array(W * H * 3).fill(18);
   const zb = new Float32Array(W * H).fill(-Infinity);
   if (tris.length === 0) return encodePng(W, H, px);
@@ -130,7 +130,12 @@ function rasterize(tris: Dreieck[]): Buffer {
         if (w0 < 0 || w1 < 0 || w2 < 0) continue;
         const z = w0 * a[2] + w1 * b[2] + w2 * c[2];
         const i = y * W + x;
-        if (z <= zb[i]!) continue;
+        // Koplanare Flaechen: FF7 legt Augen und Mund als Aufkleber GENAU auf
+        // die Gesichtsflaeche. Bei strikter Tiefenpruefung gewinnt dann,
+        // was zufaellig zuerst gezeichnet wurde -- und das ist regelmaessig
+        // das Gesicht. `spaetereGewinnen` laesst bei Gleichstand die spaeter
+        // gezeichnete Flaeche durch, was der Aufkleber-Reihenfolge entspricht.
+        if (spaetereGewinnen ? z < zb[i]! : z <= zb[i]!) continue;
         zb[i] = z;
 
         let r: number, g: number, bl: number;
@@ -507,18 +512,38 @@ describe.skipIf(!available)('Realdaten: B5/B6-Testformular (Palette, Vertexfarbe
     // Unabhängig von der Palette: Ein geflipptes Bild ist geflippt, egal in
     // welchen Farben. Deshalb hier eine feste Palette und nur die vier
     // UV-Kombinationen.
+    // Prüfgegenstand mit EINDEUTIGER Oberseite. Der erste Anlauf nahm das
+    // Modell mit den meisten texturierten Dreiecken — und das war ein
+    // rotierendes Objekt, an dem keine Ausrichtung falsch sein kann. Genau
+    // derselbe Fehlertyp wie beim mehrdeutigen Effektsprite: Der
+    // Prüfgegenstand trug die gesuchte Information nicht.
+    const figuren = [...modelle].sort((a, b) => b.skeleton.bones.length - a.skeleton.bones.length);
+    const gesicht = figuren.find((m) => texturierteDreiecke(m) > 0) ?? haupt;
     let un = 1;
     for (const flipV of [false, true]) {
       for (const flipU of [false, true]) {
         faelle.push({
           id: `U${un++}`,
           gruppe: '2 — UV-Ursprung (B6b)',
-          frage: 'Welche Zelle zeigt die Textur richtig herum? Nur auf Ausrichtung achten, nicht auf Farbe — die entscheidet Gruppe 1.',
+          frage: 'Welche Zelle zeigt die Textur richtig herum? Nur auf Ausrichtung achten (Augen über Mund), nicht auf Farbe — die entscheidet Gruppe 1.',
           variante: `V ${flipV ? 'geflippt' : 'roh'} · U ${flipU ? 'geflippt' : 'roh'}`,
-          detail: 'Modell, Palette BGRA',
-          png: rasterize(dreiecke(haupt, { palette: 'BGRA (heute)', flipV, flipU, vertexPerm: null })),
+          detail: `figürliches Modell · ${gesicht.skeleton.bones.length} Bones · Palette BGRA`,
+          png: rasterize(dreiecke(gesicht, { palette: 'BGRA (heute)', flipV, flipU, vertexPerm: null }), true),
         });
       }
+    }
+
+    // --- Gruppe 4: fehlende Augen — Tiefenregel bei koplanaren Flächen.
+    let an = 1;
+    for (const spaeter of [false, true]) {
+      faelle.push({
+        id: `A${an++}`,
+        gruppe: '4 — Augen: Tiefenregel bei koplanaren Flächen',
+        frage: 'In welcher Zelle sind die Augen sichtbar? Die Augentexturen sind nachweislich geladen (626/626 Flächen auflösbar) — es geht nur darum, ob sie das Gesicht überdecken dürfen.',
+        variante: spaeter ? 'spätere Fläche gewinnt bei Gleichstand' : 'frühere gewinnt (bisher)',
+        detail: `figürliches Modell · ${gesicht.skeleton.bones.length} Bones`,
+        png: rasterize(dreiecke(gesicht, { palette: 'BGRA (heute)', flipV: false, flipU: false, vertexPerm: null }), spaeter),
+      });
     }
 
     // --- Gruppe 3: Vertexfarben, Texturen abgeschaltet.
@@ -527,8 +552,7 @@ describe.skipIf(!available)('Realdaten: B5/B6-Testformular (Palette, Vertexfarbe
       'RGBA': (r, g, b) => [b, g, r],
     };
     let vn = 1;
-    const figuren = [...modelle].sort((a, b) => b.skeleton.bones.length - a.skeleton.bones.length).slice(0, 2);
-    for (const [n, m] of figuren.entries()) {
+    for (const [n, m] of figuren.slice(0, 2).entries()) {
       for (const [name, fn] of Object.entries(VERTEX)) {
         faelle.push({
           id: `V${vn++}`,
@@ -544,7 +568,7 @@ describe.skipIf(!available)('Realdaten: B5/B6-Testformular (Palette, Vertexfarbe
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, html(faelle), 'utf8');
     console.log(`B5/B6-Testformular geschrieben: ${OUT}`);
-    console.log(`Testfälle: ${faelle.length} (Palette ${pn - 1}, UV ${un - 1}, Vertexfarben ${vn - 1})`);
+    console.log(`Testfälle: ${faelle.length} (Palette ${pn - 1}, UV ${un - 1}, Vertexfarben ${vn - 1}, Augen ${an - 1})`);
 
     // Kontrolle: Je Textur müssen sich die vier Auslegungen unterscheiden —
     // sonst wäre der Texturpfad tot und das Formular wertlos.
@@ -563,7 +587,7 @@ describe.skipIf(!available)('Realdaten: B5/B6-Testformular (Palette, Vertexfarbe
       entartet += 4 - verschieden;
     }
     console.log(`zusammenfallende Palettenvarianten (graue Paletten): ${entartet} von ${pFaelle.length}`);
-    expect(faelle.length).toBe(24);
+    expect(faelle.length).toBe(26);
   }, 900_000);
 });
 
