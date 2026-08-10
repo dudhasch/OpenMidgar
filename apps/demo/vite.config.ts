@@ -26,6 +26,7 @@ export default defineConfig({
       '@webmidgar/formats-model': r('../../packages/formats-model/src/index.ts'),
       '@webmidgar/render-actor': r('../../packages/render-actor/src/index.ts'),
       '@webmidgar/interpreter-debug': r('../../packages/interpreter-debug/src/index.ts'),
+      '@webmidgar/license-steam': r('../../packages/license-steam/src/index.ts'),
       '@webmidgar/fixture-gen': r('../../tools/fixture-gen/src/index.ts'),
       '@webmidgar/nfr-run': r('../../tools/nfr-run/src/index.ts'),
       '@webmidgar/pipeline': r('../../packages/pipeline/src/index.ts'),
@@ -38,7 +39,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),

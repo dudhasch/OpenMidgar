@@ -96,7 +96,9 @@ export function buildActor(skeleton: Skeleton, resolve: (boneIndex: number) => A
     if (bone.parentIndex < 0) {
       model.add(group);
     } else {
-      group.position.set(0, 0, skeleton.bones[bone.parentIndex]!.length);
+      // Kindversatz entgegen der Bone-Achse (R4, sichtgeprüft) — muss mit
+      // `computePose` in pose.ts übereinstimmen, sonst bricht die Dualität.
+      group.position.set(0, 0, -skeleton.bones[bone.parentIndex]!.length);
       boneGroups[bone.parentIndex]!.add(group);
     }
     for (const bundle of resolve(i)) group.add(buildMeshObject(bundle));

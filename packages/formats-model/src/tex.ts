@@ -36,8 +36,17 @@ export function parseTex(bytes: Uint8Array, asset: string): ParseResult<TextureS
     return fail('E-TEX-FORMAT', `nicht unterstützt: hasPalette=${hasPalette}, bytesPerPixel=${bytesPerPixel} (S7: 8-bpp-palettiert)`);
   }
 
-  // Palettenblock BGRA → RGBA (🟡 dokumentierte Ordnung, `Zu validieren`
-  // gegen Referenzbilder). Alle Paletten werden konserviert.
+  // Palettenblock BGRA → RGBA. 🟢 **Sichtgeprüft (B5, 2026-08-10):** In einem
+  // Formular mit vier Texturen × vier Kanalauslegungen wurde BGRA bei drei
+  // Texturen einstimmig als richtig und jede Alternative als „falsche Farbe"
+  // bewertet; die vierte war ein Effektsprite und blieb bewusst unentschieden
+  // (bei einer Flamme ist cyan so plausibel wie rot — genau deshalb standen
+  // mehrere Texturen zur Wahl).
+  //
+  // Alle Paletten werden konserviert. 🟢 Gemessen tragen allerdings **alle
+  // 695** Texturen des Bestands genau EINE Palette (`numPalettes = 1` im Kopf,
+  // `nP·cPP == pSize` in 695/695) — die Mehrpaletten-Auslegung ist also
+  // Vorsorge, kein aktiver Pfad.
   const perPalette = numPalettes > 0 && numPalettes * colorsPerPalette === paletteSize ? colorsPerPalette : paletteSize;
   const paletteCount = perPalette > 0 ? paletteSize / perPalette : 0;
   const palettes: Uint8Array[] = [];

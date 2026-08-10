@@ -8,8 +8,12 @@ import type { AnimationFrame, Skeleton } from '@webmidgar/formats-model';
  * Konventionen (R4, 🟡 `Zu validieren` per Referenzszene):
  *  - Bindpose: Rotationen neutral; Kind-Ursprung liegt am Parent-Ende,
  *    versetzt um die Parent-Bone-Länge entlang der BONE-ACHSE.
- *  - BONE-ACHSE: lokales +Z → Versatz (0, 0, length). Längen sind im
- *    Bestand negativ — die Kette wächst nach −Z im Modellraum.
+ *  - BONE-ACHSE: lokales +Z, Kindversatz (0, 0, **−**length). Die Längen sind
+ *    im Bestand negativ, die Kette wächst also nach +Z im Modellraum.
+ *    🟢 Sichtgeprüft (R4, 2026-08-10): In einer Tafel über 50 Renderketten
+ *    trugen ausschließlich die als korrekt erkannten Zellen dieses Vorzeichen.
+ *    Vier vorherige Messungen hatten es falsch entschieden, weil ihre
+ *    Gütefunktionen die Richtung wegaggregierten.
  *  - Eulerreihenfolge: R = Ry · Rx · Rz (entspricht Three-Order 'YXZ'),
  *    Winkel in Grad, Frame-Zuordnung in Bone-DATEIreihenfolge.
  *  - Wurzel: M = T(rootTranslation) · R(rootRotation).
@@ -183,13 +187,14 @@ export function computePose(
     } else {
       const parent = skeleton.bones[bone.parentIndex]!;
       parentMatrix = poses[bone.parentIndex]!.matrix;
-      offset = translation(0, 0, parent.length);
+      // Kindversatz entgegen der Bone-Achse (R4, sichtgeprüft 2026-08-10).
+      offset = translation(0, 0, -parent.length);
     }
     const matrix = matMul(parentMatrix, matMul(offset, local));
     poses.push({
       matrix,
       origin: transformPoint(matrix, [0, 0, 0]),
-      tip: transformPoint(matrix, [0, 0, bone.length]),
+      tip: transformPoint(matrix, [0, 0, -bone.length]),
     });
   }
   return poses;

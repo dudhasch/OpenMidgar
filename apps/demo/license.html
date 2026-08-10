@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — Steam-Lizenznachweis</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1.5rem auto; max-width: 60rem; padding: 0 1rem; }
+    button, input { font: inherit; padding: .3rem .8rem; }
+    input[type="url"] { width: 22rem; }
+    .hint { background: #fff6d8; border: 1px solid #d8c26a; padding: .6rem .9rem; border-radius: 4px; }
+    .row { margin: .6rem 0; display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+    #status { font-family: ui-monospace, monospace; font-size: 12px; }
+    #badge { display: inline-block; padding: .35rem .9rem; border-radius: 999px; font-weight: 600; background: #ddd; }
+    #badge.verified { background: #2f9e44; color: #fff; }
+    #badge.not-owned { background: #f08c00; color: #fff; }
+    #badge.unverifiable, #badge.error, #badge.cancelled { background: #adb5bd; color: #212529; }
+    #detail { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #f4f4f4; border: 1px solid #ccc; padding: .6rem; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Steam-Lizenznachweis (opt-in)</h1>
+  <p class="hint">
+    Freiwilliger Besitznachweis für FF7 (AppID 39140) über einen selbst-gehosteten
+    Auth-Relay: Du meldest dich per Steam OpenID an, das Relay prüft den Besitz
+    gegen die Steam Web API und meldet nur das Ergebnis (<em>verified /
+    not-owned / unverifiable</em>) zurück. Es werden weder SteamID noch
+    Profildaten gespeichert; der Nachweis ist ein Badge, <strong>keine</strong>
+    Sperre — WebMidgar funktioniert auch ohne ihn.
+  </p>
+
+  <div class="row">
+    <label for="relayUrl">Relay-URL:</label>
+    <input type="url" id="relayUrl" value="http://localhost:8787" />
+    <button id="verify">Mit Steam anmelden</button>
+    <button id="cancel" disabled>Abbrechen</button>
+  </div>
+
+  <div class="row">
+    <span id="badge">—</span>
+    <span id="status">Bereit.</span>
+  </div>
+
+  <div id="detail">—</div>
+
+  <script type="module" src="/src/license-demo.ts"></script>
+</body>
+</html>
