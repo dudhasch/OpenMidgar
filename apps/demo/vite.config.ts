@@ -27,6 +27,9 @@ export default defineConfig({
       '@webmidgar/interpreter-debug': r('../../packages/interpreter-debug/src/index.ts'),
       '@webmidgar/license-steam': r('../../packages/license-steam/src/index.ts'),
       '@webmidgar/fixture-gen': r('../../tools/fixture-gen/src/index.ts'),
+      '@webmidgar/nfr-run': r('../../tools/nfr-run/src/index.ts'),
+      '@webmidgar/pipeline': r('../../packages/pipeline/src/index.ts'),
+      '@webmidgar/telemetry': r('../../packages/telemetry/src/index.ts'),
     },
   },
   // Vite nimmt ohne diese Liste nur `index.html` als Einstiegspunkt — der
@@ -35,7 +38,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'license'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'license'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),
