@@ -42,7 +42,7 @@ export default defineConfig({
     environment: 'node',
     // `--expose-gc` macht die Heap-Messung der NFR-Läufe erst belastbar:
     // ohne erzwungene Speicherbereinigung ist ein Baselinevergleich nur
-    // Rauschen (gemessen: 12,5 % „Abweichung“ ohne echtes Leck).
+    // Rauschen (gemessen: 12,5 % „Abweichung" ohne echtes Leck).
     pool: 'forks',
     poolOptions: { forks: { execArgv: ['--expose-gc'] } },
   },
