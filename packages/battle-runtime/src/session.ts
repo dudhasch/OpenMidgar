@@ -55,6 +55,8 @@ export interface EnemyInstanceSpec {
   exp: number;
   ap: number;
   gil: number;
+  /** 🟡 Drop-Kandidaten aus dem itemRaw-Block (4 Paare Rate/Item-ID). */
+  drops?: { rate: number; itemId: number }[];
 }
 
 /** Kapselt die 🟡-Felddeutung des statsRaw-Blocks an genau EINER Stelle. */
@@ -108,7 +110,15 @@ export interface BattleConfig {
 }
 
 export type BattleOutcome =
-  | { kind: 'victory'; exp: number; ap: number; gil: number; defeatedEnemyTypeIds: number[] }
+  | {
+      kind: 'victory';
+      exp: number;
+      ap: number;
+      gil: number;
+      defeatedEnemyTypeIds: number[];
+      /** Item-IDs der gefallenen Beute (🔵 Wurf: roll256 < rate, am Siegzeitpunkt mit dem Sitzungs-PRNG). */
+      drops: number[];
+    }
   | { kind: 'defeat' }
   | { kind: 'escape' };
 
@@ -153,6 +163,7 @@ interface ActorState {
   gil: number;
   attackIds: number[];
   aiScript: AiScript | null;
+  drops: { rate: number; itemId: number }[];
 }
 
 export interface BattleSnapshot {
@@ -237,6 +248,7 @@ export class BattleSession {
         gil: 0,
         attackIds: [],
         aiScript: null,
+        drops: [],
       });
     }
     config.enemies.forEach((e, i) => {
@@ -257,6 +269,7 @@ export class BattleSession {
         gil: e.gil,
         attackIds: e.attackIds.filter((id) => id !== 0xffff),
         aiScript: e.aiScript ? parseAiScript(e.aiScript) : null,
+        drops: e.drops ?? [],
       });
     });
   }
@@ -443,12 +456,23 @@ export class BattleSession {
     const partyAlive = this.actors.some((a) => a.side === 'party' && a.hp > 0);
     if (!enemiesAlive) {
       const dead = this.actors.filter((a) => a.side === 'enemy');
+      // 🔵 Beutewurf am Siegzeitpunkt, mit dem Sitzungs-PRNG (im Snapshot —
+      // Replay-identisch). Ratensemantik des Originals unbelegt; Regel:
+      // roll256 < rate, in Aufstellungs- und Slot-Reihenfolge.
+      const drops: number[] = [];
+      for (const a of dead) {
+        for (const d of a.drops) {
+          if (d.itemId === 0xffff) continue;
+          if (this.roll256() < d.rate) drops.push(d.itemId);
+        }
+      }
       this.outcome = {
         kind: 'victory',
         exp: dead.reduce((s, a) => s + a.exp, 0),
         ap: dead.reduce((s, a) => s + a.ap, 0),
         gil: dead.reduce((s, a) => s + a.gil, 0),
         defeatedEnemyTypeIds: dead.map((a) => a.enemyTypeId ?? -1),
+        drops,
       };
       events.push({ kind: 'outcome', outcome: this.outcome });
     } else if (!partyAlive) {
@@ -519,6 +543,13 @@ export function battleConfigFromScene(
     const typeIndex = scene.enemyTypeIds.indexOf(slot.enemyTypeId);
     const record = typeIndex >= 0 ? scene.enemies[typeIndex] : null;
     if (!record) continue;
+    // 🟡 itemRaw-Deutung (Community): 4×u8 Raten + 4×u16 Item-IDs; 0xFFFF = leer.
+    const itemView = new DataView(record.itemRaw.buffer, record.itemRaw.byteOffset, record.itemRaw.byteLength);
+    const drops: { rate: number; itemId: number }[] = [];
+    for (let d = 0; d < 4; d++) {
+      const itemId = itemView.getUint16(4 + d * 2, true);
+      if (itemId !== 0xffff) drops.push({ rate: record.itemRaw[d]!, itemId });
+    }
     enemies.push({
       enemyTypeId: slot.enemyTypeId,
       level: record.level,
@@ -530,6 +561,7 @@ export function battleConfigFromScene(
       exp: record.exp,
       ap: record.ap,
       gil: record.gil,
+      drops,
     });
   }
   const attackTable = new Map<number, AttackSpec>();

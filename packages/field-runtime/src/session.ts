@@ -17,6 +17,7 @@ import {
   type PreparedScript,
   type RuntimeSnapshot,
 } from '@webmidgar/interpreter';
+import { DEFAULT_STEPS_PER_CHECK, EncounterModel, parseEncounterTables } from './encounter.js';
 
 /**
  * Field-Sitzung (Masterplan Phase 5, vertikaler Durchstich): bindet Walkmesh-
@@ -143,10 +144,19 @@ export interface FieldSessionOptions {
    * wäre nicht falsch, aber er würde etwas anderes messen als vorher.
    */
   menuMode?: 'auto' | 'manual' | undefined;
+  /**
+   * Zufallskämpfe aus der Encounter-Tabelle (S33). Standard: aktiv, sobald
+   * die Tabelle des Fields `enabled` trägt; `BTLON` (0x71) schaltet zur
+   * Laufzeit über `randomEncountersDisabled`. `false` unterdrückt das Modell
+   * ganz (z. B. Story-Durchläufe im ADR-011-Testmodus).
+   */
+  encounters?: boolean | undefined;
+  /** 🔵 Prüfabstand des Ratenmodells in bewegten Takten. */
+  encounterStepsPerCheck?: number | undefined;
 }
 
 export interface FieldSessionSnapshot {
-  schemaVersion: 2;
+  schemaVersion: 3;
   fieldId: string;
   tick: number;
   player: PlayerState | null;
@@ -166,9 +176,15 @@ export interface FieldSessionSnapshot {
    */
   moveStalls: Array<[number, number]>;
   runtime: RuntimeSnapshot | null;
+  /**
+   * Schrittzähler des Zufallskampf-Modells (Schema 2 → 3, S33): Ohne ihn
+   * verlöre eine mitten im Prüffenster gesicherte Sitzung ihren Zählerstand —
+   * dieselbe Fehlerklasse wie die moveStalls beim Schritt 1 → 2.
+   */
+  encounterSteps: number;
 }
 
-export const SESSION_SCHEMA_VERSION = 2;
+export const SESSION_SCHEMA_VERSION = 3;
 
 const DEFAULT_SPEED = 6;
 
@@ -253,6 +269,8 @@ export class FieldSession {
   private prevConfirm = false;
   /** Takte ohne Bewegungsfortschritt je Entität (Deadlock-Schutz). */
   private moveStalls = new Map<number, number>();
+  /** Zufallskampf-Modell (null = Tabelle fehlt/deaktiviert). */
+  private encounterModel: EncounterModel | null = null;
 
   constructor(
     readonly bundle: FieldBundle,
@@ -284,6 +302,15 @@ export class FieldSession {
     if (this.solver && bundle.walkmesh && bundle.walkmesh.triangles.length > 0) {
       const start = options.start ?? centroidOfFirstWalkable(bundle);
       if (start) this.placeAt(start.x, start.y);
+    }
+
+    // Zufallskämpfe (S33): erste Tabelle der Sektion 7, sofern aktiv.
+    if (options.encounters !== false && this.runtime) {
+      const tables = parseEncounterTables(bundle.rawSections[7]);
+      const table = tables[0];
+      if (table && table.enabled && table.standard.length > 0) {
+        this.encounterModel = new EncounterModel(table, options.encounterStepsPerCheck ?? DEFAULT_STEPS_PER_CHECK);
+      }
     }
   }
 
@@ -367,6 +394,20 @@ export class FieldSession {
     // Invariante „immer im Mesh" auch für Skript-Entitäten gilt.
     const arrivals = this.stepScriptedMovement();
     const hostRequestsBefore = this.runtime?.state.hostRequests.length ?? 0;
+
+    // Zufallskampf-Prüfung: nur bewegte Takte, nur wenn `BTLON` die Kämpfe
+    // nicht abgeschaltet hat. Der Wurf nutzt den Interpreter-PRNG (Snapshot).
+    const movedThisTick = this.player?.moving === true && (mx !== 0 || my !== 0);
+    if (movedThisTick && this.runtime && this.encounterModel && !this.runtime.state.randomEncountersDisabled) {
+      const battleId = this.encounterModel.onMovedTick(this.runtime.state);
+      if (battleId !== null) {
+        const requestId = this.runtime.state.nextRequestId++;
+        // Gleicher Request-Typ wie der BATTLE-Opcode — für den Wirt ist ein
+        // Zufallskampf vom skriptierten Kampf nicht unterscheidbar (Vertrag).
+        this.runtime.state.hostRequests.push({ kind: 'battle', encounterId: battleId, requestId });
+      }
+    }
+
     this.runtime?.tick();
     const hostRequests = this.runtime?.state.hostRequests.slice(hostRequestsBefore) ?? [];
 
@@ -542,6 +583,7 @@ export class FieldSession {
       prevConfirm: this.prevConfirm,
       moveStalls: [...this.moveStalls.entries()].sort((a, b) => a[0] - b[0]),
       runtime: this.runtime ? snapshotRuntime(this.runtime.state) : null,
+      encounterSteps: this.encounterModel?.stepAccum ?? 0,
     };
   }
 
@@ -573,6 +615,7 @@ export class FieldSession {
     this.activeTriggers = new Set(snapshot.activeTriggers);
     this.prevConfirm = snapshot.prevConfirm;
     this.moveStalls = new Map(snapshot.moveStalls);
+    if (this.encounterModel) this.encounterModel.stepAccum = snapshot.encounterSteps;
     return { ok: true, warnings };
   }
 

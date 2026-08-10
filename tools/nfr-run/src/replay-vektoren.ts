@@ -198,10 +198,22 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * Vorherige Werte (Stand nach O9): `diagonal d3db5a117a435444`,
  * `gleiten c004f67d35b3e19c`, `skript 81dc6abb5d5e9311`.
  */
+/**
+ * **Fortschreibung 2026-08-10 (S33).** Erneut alle drei Werte, erneut EINE
+ * benennbare Ursache: Sitzungsschema 2 → 3 — der Snapshot führt jetzt den
+ * Schrittzähler des Zufallskampf-Modells (`encounterSteps`) mit. Die
+ * Gegenprobe trägt wie immer: Auch `diagonal` und `gleiten` (ohne
+ * Encounter-Tabelle, das Feld ist dort konstant 0) wandern mit — wäre nur
+ * `skript` gewandert, hätte die Kampfintegration die Bewegungsrechnung
+ * berührt, und DAS wäre der Fehler gewesen.
+ *
+ * Vorherige Werte (Stand nach S21): `diagonal ae692c2df57cee63`,
+ * `gleiten c09f412edb884cdb`, `skript 2cbf1510b831a8f8`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: 'ae692c2df57cee63',
-  gleiten: 'c09f412edb884cdb',
-  skript: '2cbf1510b831a8f8',
+  diagonal: 'd1f2f69588a75aa4',
+  gleiten: '4538950e18f2622c',
+  skript: '068e7fb42783b857',
 };
 
 export interface VektorVergleich {

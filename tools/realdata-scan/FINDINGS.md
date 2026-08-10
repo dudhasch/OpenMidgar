@@ -501,6 +501,17 @@ ausschließlich `data/wm` (Originalbestand).
 | **WM2-Anordnung: 3 Spalten × 4 Zeilen** (Naht-Quote 0,985 über 68 Paare gegen 0,40–0,53 aller Alternativen; die fehlenden 1,5 % sind wenige Paare — 🟡 Randnotiz, Zerlegung selbst unstrittig) | ✅ gemessen |
 | **WM3-Anordnung: NICHT messbar** — alle Kandidatenbreiten liefern Quote 1,0, weil das Schneefeld nur 12 Unikate auf 64 Meshes trägt (die Gütefunktion ist gegen die Anordnung blind, klassischer Fall). Default 2×2 als dokumentierte Annahme | 🟡 Annahme, nicht Befund |
 
+## S33 — Kampf-Integration: outcome-Probe, O9-Restposten (2026-08-10)
+
+Werkzeuge: `battle-outcome-probe.rdtest.ts`. ADR: [ADR-026](../../docs/ADR-S33-KAMPFINTEGRATION.md).
+
+| Befund | Status |
+|---|---|
+| **outcome-Zielvariable: belastbarer NEGATIVBEFUND.** Ausgesprochene Annahme: „Das Original spiegelt den Kampfausgang in eine Script-Variable, verzweigende Skripte lesen sie kurz nach `BATTLE`." Messung über 189 BATTLE-Vorkommen (68 mit IF im 8-Instruktionen-Fenster): Top-Adresse bank5/addr0 mit 38,2 % — aber Faktor **2,83** gegen die MAPJUMP-Kontrolle und Faktor **1,04** gegen die um 12 Instruktionen verschobene Kontrolle. Die verschobene Kontrolle ist der Killer: Dieselbe Adresse wird weit nach dem Kampf genauso oft gelesen — sie ist populär, kein Ausgangs-Spiegel. **Unter Faktor 3 ⇒ kein Befund; der Interpreter schreibt weiterhin nichts** (die S17-Haltung bestätigt sich) | 🔴 bleibt offen — bewusst |
+| **O9-Restposten geschlossen:** Die vier Makou-Kampf-Opcode-Längen einzeln nachgemessen — 0x22→4: 48004/48004 (gleich), 0x23→2: **48002** (schlechter), 0x4B→1: gleich, 0x72→2: gleich. Keine verbessert den Abschluss; die eigene Tabelle bleibt (Baseline 48004/48041 = 99,92 %) | ✅ gemessen statt verwiesen |
+| Zufallskämpfe: Ratenmodell 🔵 (`encounter.ts`) auf dem Formatfakt Sektion 7; Fixture-Abnahmen: Ratenordnung messbar, Rate 0 und `BTLON`-Aus ⇒ 0 Kämpfe, IDs ausnahmslos maskiert (die maskenlose Auslegung läge außerhalb des 10-Bit-Raums), Schrittzähler snapshot-fest (Schema 2 → 3) | ✅ Modell steht; Original-Schrittmodell 🔴 |
+| Modus-Vertrag: Replay über die Modusgrenze bitidentisch + Gegenprobe; Save→Load nach dem Kampf digestgleich; ADR-011-Stub bleibt Testmodus | ✅ Fixture-Abnahmen |
+
 ## S32 — Battle-Darstellung: Komposition, Kamera, Sichtnachweis (2026-08-10)
 
 Werkzeuge: `battle-model-sheet.rdtest.ts` (Bildtafel, derselbe Rasterizer wie

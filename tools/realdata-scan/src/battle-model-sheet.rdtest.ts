@@ -94,7 +94,7 @@ describe.skipIf(!available)('S32-Tafel: Battle-Modelle im Standbild', () => {
         const modell: Modell = {
           skeleton,
           res,
-          clip: { schemaVersion: 1, name: 'bind', frames: [frame], boneCount: bs.boneCount, diagnostics: [] },
+          clip: { schemaVersion: 1, frames: [frame], boneCount: bs.boneCount, rotationOrder: [1, 0, 2], diagnostics: [] },
           texAnzahl: texturen.length,
           texDreiecke: 0,
         };
