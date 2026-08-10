@@ -6,13 +6,16 @@
   "workspaces": [
     "packages/*",
     "tools/*",
-    "apps/*"
+    "apps/*",
+    "!apps/studio"
   ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "demo": "vite --config apps/demo/vite.config.ts"
+    "demo": "vite --config apps/demo/vite.config.ts",
+    "studio": "npm --prefix apps/studio run dev",
+    "studio:build": "npm --prefix apps/studio run build"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

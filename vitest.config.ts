@@ -26,6 +26,8 @@ export default defineConfig({
       '@webmidgar/telemetry': r('./packages/telemetry/src/index.ts'),
       '@webmidgar/io': r('./packages/io/src/index.ts'),
       '@webmidgar/cache': r('./packages/cache/src/index.ts'),
+      '@webmidgar/studio-core': r('./packages/studio-core/src/index.ts'),
+      '@webmidgar/studio-compiler': r('./packages/studio-compiler/src/index.ts'),
       '@webmidgar/fixture-gen': r('./tools/fixture-gen/src/index.ts'),
     },
   },

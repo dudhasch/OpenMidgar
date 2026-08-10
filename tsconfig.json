@@ -9,5 +9,8 @@
     "packages/*/src/**/*.ts",
     "tools/*/src/**/*.ts",
     "apps/*/src/**/*.ts"
+  ],
+  "exclude": [
+    "apps/studio"
   ]
 }

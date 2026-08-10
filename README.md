@@ -23,12 +23,19 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 - ✅ **S11 — Field-Integration (vertikaler Durchstich)**: `packages/field-runtime` bindet Solver, Trigger, Interpreter und Dialogbrücke zu einer Fixed-Tick-Sitzung mit Snapshot/Restore und Eingabe-Replay (Realdaten: 702 Fields × 240 Takte, **0 Digest-Abweichungen**; Wechselbudget Median 5,1 ms gegen 500 ms NFR). Der Field-Wechsel läuft: Zielfield über die `maplist` (u16@14, per Graph-Symmetrie belegt — 78,8 % Rückkanten gegen 0,2 % Kontrolle), Ankunft über das Gegen-Gateway, weil der Zielpunkt nachweislich **nicht** im Record steht. **Offen:** R4-Sichtprüfungen B1–B8 (brauchen ein Auge, [Begründung](docs/R4-MODELL-KONVENTIONEN.md))
 - ✅ **S12 — Interpreter-Ausbau**: Operandenlängen **aus den Realdaten abgeleitet** statt aus Dokumentation übernommen (Spannen-Abschluss 43,19 % → 99,73 %); unknown-op-Faults von 7241 auf **0**, Fault-Rate rund 3 %; Bewegungs-Opcodes gegen den Solver, Feldaufteilung realdaten-geprüft
 - ✅ **S13 — Kernel-Datenbasis + Textdekoder** (`packages/formats-kernel`): 27-Sektionen-Container mit gzip, Zeichentabellen-Versatz 0x20 aus den Daten abgeleitet, 98,9 % der Zeichenketten dekodieren vollständig
-- ✅ **S14 — Bankmodell + Spielstände** (`packages/formats-save`): Bank-Aliasing korrigiert (5 persistente Regionen statt 15 unabhängiger Bänke), eigenes versioniertes Spielstandsformat mit IndexedDB-Speicher; Original-Saves vollständig gelesen **inklusive Prüfsumme** (CRC-16/CCITT mit Nachlauf-XOR über `slot[4…]`, 8/8 belegte Slots; die Prüfsumme entscheidet zugleich die zuvor mehrdeutige Kopflänge)
+- ✅ **S14 — Bankmodell + Spielstände** (`packages/formats-save`): Bank-Aliasing korrigiert (5 persistente Regionen statt 15 unabhängiger Bänke), eigenes versioniertes Spielstandsformat mit IndexedDB-Speicher; Original-Saves als Inventar lesbar (Prüfsumme 🔴 ungeklärt)
 - ✅ **S15 — Dialog- und Textsystem** (`packages/dialog`): Fenster-/Textlayout mit Umbruch, Seiten, Textgeschwindigkeit und Auswahl — vollständig in Takten statt Millisekunden, damit Replays exakt bleiben
 - 🔶 **S16 — Audio** (`packages/audio`): OGG-Schleifenmarken und Engine-Kommandomodell mit Autoplay-Sperre stehen; `audio.fmt` und die Musikindex-Zuordnung sind **Negativbefunde**
-- ✅ **S17 — Story-Progression**: Wirkungen nach außen als Daten (`HostRequest`); Audio-Ops, der **aus den Daten identifizierte** Field-Wechsel-Opcode `0x60` und der **Kampf-Opcode `0x70`** sind verdrahtet — inklusive Wartezustand und Rückkanal. Der Kampf-Opcode war lange ein Negativbefund, weil in der falschen Menge gesucht wurde: Die Formationsnummer ist global, nicht aus der Encounter-Tabelle des Fields (nachgemessen 1/173 gegen 1/173 im Kontrollfield)
+- 🔶 **S17 — Story-Progression**: Wirkungen nach außen als Daten (`HostRequest`), Audio-Ops und der **aus den Daten identifizierte** Field-Wechsel-Opcode `0x60` sind verdrahtet; der Kampf-Opcode ist nicht auffindbar (🔴)
 - ✅ **S18 — App-Shell** (`packages/app-shell`): Import-Zustandsmaschine inkl. Re-Grant-Pfad, Fähigkeitsmatrix mit Einzeldiagnosen, **beweisbar assetfreier** Diagnose-Export
 - ✅ **S19 — Modding-MVP** (`packages/modding`): Manifest-Validierung mit mod-lokalen Fehlern, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order, generationsbasierte Umschaltung
+
+**Studio-Strang (Branch `modding-suite`):**
+- ✅ **MS1 — Studio-Kern** (`packages/studio-core`) + **MS3-Kern — Studio-Compiler** (`packages/studio-compiler`): siehe [docs/STUDIO-ANNAHMEN.md](docs/STUDIO-ANNAHMEN.md)
+- ✅ **Studio-Schale** (`apps/studio`): Dialog-, Quest-/Script-, Charakter-, Field-Editor + Publish (eigenständige React-App)
+- ✅ **MS15/MS16 — Gegner- & Battle-Creator**: `EnemyDoc`/`BattleDoc` + versionierte Effekt-Taxonomie (ADR-020/024/025), v3-Kandidaten `enemy-add`/`battle-add`, Editoren `#/gegner` + `#/schlacht` inkl. Probekampf-Heuristik (A-ST-17)
+- ✅ **MS17 — UI-Vereinfachung**: globaler Einfach/Profi-Modus (data-profi, TopBar-Umschalter, ⌘⇧P), Wizard-Erzeugung für alle Flüsse, Schnellaktionen, Primär-CTA-Hierarchie — ohne Feature-Verlust
+- 📐 **MS9–MS14 geplant** ([docs/STUDIO-FEATURE-ROADMAP.md](docs/STUDIO-FEATURE-ROADMAP.md)): Char-Baukasten, Party-Member-, Item-, Musik-, Map- und Animation-Creator
 
 ## Struktur
 
@@ -58,12 +65,17 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 | `tools/realdata-scan` | Diagnose-Scan gegen lokale Installation (`npx vitest run --config vitest.realdata.config.ts`) |
 | `tools/fixture-gen` | Eigenständige Writer für Golden Fixtures: LGP, Field-Composer, Script-Assembler + Defekt-Mutationen |
 | `apps/demo` | Diagnose- und Kalibrierseiten: Import, Kamera/Tile-Depth, Walkmesh, Actor, Field-Hintergrund |
+| `packages/studio-core` | Studio-Kern: Projektmodell, Command-Bus, Undo/Redo, inkrementelle Validierung, Stores, Autosave/Crash-Journal |
+| `packages/studio-compiler` | Studio-Compiler: Manifest v2 (abgeleitete Capabilities), totale Befundliste, deterministisches `.wmmod`, Provenienz-Audit |
+| `apps/studio` | WebMidgar Studio (eigenständige React-App): fünf Editoren + Publish; separater Stack (`npm run studio`) |
 
 ## Kommandos
 
 ```bash
 npm test        # Vitest (Golden Fixtures + alle Fehlerklassen)
 npm run demo    # Diagnose-Demo auf http://localhost:5199
+npm run studio  # WebMidgar Studio (Dev-Server, apps/studio)
+npm run studio:build  # Studio-App produktiv bauen (apps/studio/dist)
 npx tsc --noEmit
 ```
 
