@@ -187,6 +187,13 @@ export interface TexSpec {
   palettes: Rgba[][];
   /** Palettenindizes, width·height Einträge. */
   pixels: number[];
+  /**
+   * Farbschlüssel-Schalter bei 0x08. Ohne Angabe wird er aus dem Alpha des
+   * ersten Paletteneintrags abgeleitet — so verhält sich der Bestand
+   * (695/695, `tex-alpha-probe`). Explizit setzbar, damit eine Fixture den
+   * Widerspruch zwischen Kopf und Palette absichtlich herstellen kann.
+   */
+  colorKey?: boolean | undefined;
 }
 
 export function composeTex(spec: TexSpec): Uint8Array {
@@ -195,6 +202,8 @@ export function composeTex(spec: TexSpec): Uint8Array {
   const bytes = new Uint8Array(236 + paletteSize * 4 + spec.width * spec.height);
   const view = new DataView(bytes.buffer);
   view.setUint32(0x00, 1, true); // version
+  const schluessel = spec.colorKey ?? (spec.palettes[0]?.[0]?.[3] === 0);
+  view.setUint32(0x08, schluessel ? 1 : 0, true); // colorKeyFlag
   view.setUint32(0x30, spec.palettes.length, true);
   view.setUint32(0x34, colorsPerPalette, true);
   view.setUint32(0x38, 8, true); // bitDepth
@@ -210,7 +219,9 @@ export function composeTex(spec: TexSpec): Uint8Array {
   let o = 236;
   for (const palette of spec.palettes) {
     for (const c of palette) {
-      // Palettenblock in BGRA (🟡 dokumentiert, `Zu validieren`).
+      // Palettenblock in BGRA. 🟢 Sichtgeprüft (B5, 2026-08-10): vier Texturen
+      // × vier Kanalauslegungen, BGRA durchgehend als richtig, jede
+      // Alternative als falsche Farbe bewertet.
       bytes[o] = c[2];
       bytes[o + 1] = c[1];
       bytes[o + 2] = c[0];

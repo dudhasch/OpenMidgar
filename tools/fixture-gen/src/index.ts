@@ -9,3 +9,5 @@ export * from './background-composer.js';
 export * from './model-loader-composer.js';
 export * from './maplist-composer.js';
 export * from './kernel-composer.js';
+export * from './world-composer.js';
+export * from './world-script-assembler.js';
