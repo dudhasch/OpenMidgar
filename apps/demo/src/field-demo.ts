@@ -16,6 +16,18 @@ import {
   type InputRecording,
 } from '@webmidgar/field-runtime';
 import { buildFallbackActor, type Actor } from '@webmidgar/render-actor';
+import {
+  DEFAULT_TOUCH_LAYOUT,
+  GamepadFeed,
+  InputSampler,
+  KeyboardFeed,
+  TouchFeed,
+  defaultBindings,
+  parseBindings,
+  resolveTouchLayout,
+  toFieldInput,
+  type Viewport,
+} from '@webmidgar/input';
 
 /**
  * S11-Demo: Durchstich-Seite — ein echtes Field aus der lokalen Installation
@@ -31,7 +43,7 @@ const FAR = 10000;
 const FOV_BASE: FovBase = 240; // realdaten-entschieden seit S9
 const TICK_HZ = 30;
 const TICK_DT_MS = 1000 / TICK_HZ;
-const MAX_ACCUMULATOR_MS = 250; // Schutz vor „spiral of death" nach Tab-Wechsel
+const MAX_ACCUMULATOR_MS = 250; // Schutz vor „spiral of death“ nach Tab-Wechsel
 const LOG_LINES = 8;
 const SNAPSHOT_KEY = 'webmidgar:field-demo:snapshot';
 
@@ -305,32 +317,103 @@ function updateActorFromPlayer(): void {
 
 // --- Eingaben --------------------------------------------------------------------
 
-const MOVEMENT_KEYS = new Set(['a', 'd', 'w', 's', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' ']);
-const keys = new Set<string>();
+// S27: Alle Quellen laufen über `@webmidgar/input` — diese Seite sammelt nur
+// noch Roh-Ereignisse in die Feeds; abgetastet wird ausschließlich am Takt.
+const BINDINGS_KEY = 'webmidgar:input:bindings';
+const storedBindings = localStorage.getItem(BINDINGS_KEY);
+const parsedBindings = storedBindings ? parseBindings(storedBindings) : null;
+const bindings = parsedBindings?.ok && parsedBindings.table ? parsedBindings.table : defaultBindings();
+if (parsedBindings && parsedBindings.diagnostics.length > 0) {
+  console.warn('Eingabe-Belegung mit Diagnosen geladen:', parsedBindings.diagnostics);
+}
 
-window.addEventListener('keydown', (e) => {
-  const k = e.key.toLowerCase();
-  if (!MOVEMENT_KEYS.has(k)) return;
-  if (document.activeElement !== selectEl) e.preventDefault();
-  keys.add(k);
-});
-window.addEventListener('keyup', (e) => {
-  const k = e.key.toLowerCase();
-  if (MOVEMENT_KEYS.has(k)) keys.delete(k);
-});
+const keyboardFeed = new KeyboardFeed();
+const gamepadFeed = new GamepadFeed();
 
-function buildInputFromKeys(): FieldInput {
-  const left = keys.has('a') || keys.has('arrowleft');
-  const right = keys.has('d') || keys.has('arrowright');
-  const up = keys.has('w') || keys.has('arrowup');
-  const down = keys.has('s') || keys.has('arrowdown');
+function currentViewport(): Viewport {
+  const style = getComputedStyle(document.documentElement);
+  const inset = (name: string): number => Number.parseFloat(style.getPropertyValue(name)) || 0;
+  // Maßgeblich ist der SICHTBARE Viewport: Auf Mobilgeräten zoomt der Browser
+  // nicht-responsive Seiten heraus; `innerWidth/Height` beschreiben dann den
+  // Layout-Viewport und das Overlay läge außerhalb des Sichtbaren.
+  const vv = window.visualViewport;
   return {
-    moveX: (right ? 1 : 0) - (left ? 1 : 0),
-    moveY: (up ? 1 : 0) - (down ? 1 : 0),
-    confirm: keys.has(' '),
-    cancel: false,
+    width: vv?.width ?? window.innerWidth,
+    height: vv?.height ?? window.innerHeight,
+    safeArea: {
+      top: inset('--sat'),
+      right: inset('--sar'),
+      bottom: inset('--sab'),
+      left: inset('--sal'),
+    },
   };
 }
+
+const touchFeed = new TouchFeed(resolveTouchLayout(DEFAULT_TOUCH_LAYOUT, currentViewport()));
+const sampler = new InputSampler(bindings, [keyboardFeed, gamepadFeed, touchFeed]);
+
+const HANDLED_CODES = new Set(Object.keys(bindings.field?.keyboard ?? {}));
+window.addEventListener('keydown', (e) => {
+  if (!HANDLED_CODES.has(e.code)) return;
+  if (document.activeElement !== selectEl) e.preventDefault();
+  keyboardFeed.handleKey(e.code, true);
+});
+window.addEventListener('keyup', (e) => {
+  if (HANDLED_CODES.has(e.code)) keyboardFeed.handleKey(e.code, false);
+});
+// Fokusverlust: alles loslassen, sonst klemmen Tasten nach Alt+Tab für immer.
+window.addEventListener('blur', () => keyboardFeed.clear());
+
+window.addEventListener('gamepadconnected', () => gamepadFeed.setConnected(true));
+window.addEventListener('gamepaddisconnected', () => gamepadFeed.setConnected(false));
+
+/** Polling im rAF (die Gamepad API ist Poll-only); ausgewertet wird am Takt. */
+function pollGamepad(): void {
+  const pads = navigator.getGamepads?.() ?? [];
+  const pad = pads.find((p) => p !== null) ?? null;
+  if (!pad) return;
+  gamepadFeed.setState({
+    buttons: pad.buttons.map((b) => b.pressed),
+    axes: [...pad.axes],
+  });
+}
+
+// Touch-Overlay: gezeichnet wird ausschließlich, was der Resolver liefert.
+const touchOverlayEl = document.createElement('div');
+touchOverlayEl.id = 'touch-overlay';
+touchOverlayEl.style.cssText =
+  'position:fixed;inset:0;pointer-events:none;z-index:40;display:none;';
+document.body.appendChild(touchOverlayEl);
+const touchCapable = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+
+function rebuildTouchOverlay(): void {
+  const controls = resolveTouchLayout(DEFAULT_TOUCH_LAYOUT, currentViewport());
+  touchFeed.updateLayout(controls);
+  touchOverlayEl.replaceChildren(
+    ...controls.map((c) => {
+      const el = document.createElement('div');
+      el.dataset['controlId'] = c.id;
+      el.style.cssText =
+        `position:absolute;left:${c.x}px;top:${c.y}px;width:${c.width}px;height:${c.height}px;` +
+        `border:1px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.12);` +
+        `border-radius:${c.shape === 'circle' ? '50%' : '6px'};`;
+      return el;
+    }),
+  );
+  touchOverlayEl.style.display = touchCapable ? 'block' : 'none';
+}
+rebuildTouchOverlay();
+window.addEventListener('resize', rebuildTouchOverlay);
+window.visualViewport?.addEventListener('resize', rebuildTouchOverlay);
+window.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'mouse') touchFeed.pointerDown(e.pointerId, e.clientX, e.clientY);
+});
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') touchFeed.pointerMove(e.pointerId, e.clientX, e.clientY);
+});
+const releaseTouch = (e: PointerEvent): void => touchFeed.pointerUp(e.pointerId);
+window.addEventListener('pointerup', releaseTouch);
+window.addEventListener('pointercancel', releaseTouch);
 
 // --- Spielschleife: fester Takt (30 Hz) über Akkumulator ------------------------
 
@@ -377,8 +460,9 @@ function frame(now: number): void {
   const delta = now - lastFrameTime;
   lastFrameTime = now;
   accumulator = Math.min(accumulator + delta, MAX_ACCUMULATOR_MS);
+  pollGamepad();
   while (accumulator >= TICK_DT_MS) {
-    if (session) runTick(buildInputFromKeys());
+    if (session) runTick(toFieldInput(sampler.sampleTick()));
     accumulator -= TICK_DT_MS;
   }
   if (camera) compositor.render(scene, camera);
