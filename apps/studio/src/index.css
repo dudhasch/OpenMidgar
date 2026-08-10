@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* shadcn/ui-Aliase → Design-Tokens (dark-only, kein Light-Theme) */
+    --background: #0B0F14;
+    --foreground: #E6EDF3;
+    --card: #10151D;
+    --card-foreground: #E6EDF3;
+    --popover: #161D27;
+    --popover-foreground: #E6EDF3;
+    --primary: #3DDC97;
+    --primary-foreground: #0B0F14;
+    --secondary: #161D27;
+    --secondary-foreground: #E6EDF3;
+    --muted: #161D27;
+    --muted-foreground: #9AA8B6;
+    --accent: #161D27;
+    --accent-foreground: #E6EDF3;
+    --destructive: #F66B6B;
+    --destructive-foreground: #0B0F14;
+    --border: #1E2833;
+    --input: #1E2833;
+    --ring: #3DDC97;
+    --radius: 6px;
+
+    /* WebMidgar Studio — Design Tokens (design.md Abschnitt 2) */
+    --bg-app: #0B0F14;
+    --bg-panel: #10151D;
+    --bg-elevated: #161D27;
+    --bg-inset: #080B10;
+    --border-subtle: #1E2833;
+    --border-strong: #2B3947;
+    --text-primary: #E6EDF3;
+    --text-secondary: #9AA8B6;
+    --text-muted: #5B6B7B;
+    --accent-mako: #3DDC97;
+    --accent-mako-hover: #62E8B0;
+    --accent-mako-dim: rgba(61, 220, 151, 0.12);
+    --accent-engine: #4C8DFF;
+    --warn: #FFB454;
+    --error: #F66B6B;
+    --info: #56B6F7;
+    --locked: #5B6B7B;
+    --ff7-box-top: #0A1440;
+    --ff7-box-bottom: #050A24;
+    --ff7-box-border: #4E6CF0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* IDs, Hashes, Pfade immer in JetBrains Mono */
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
+  }
+  /* Fokusring: 2px Mako mit 2px Offset — Tastatur First-Class */
+  :focus-visible {
+    outline: 2px solid var(--accent-mako);
+    outline-offset: 2px;
+  }
+  /* Dünne Custom-Scrollbars (8px), Thumb --border-strong, Hover --text-muted */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::selection {
+    background: var(--accent-mako-dim);
+  }
+
+  /* MS17: Einfach/Profi-Modus — einzige globale Sichtbarkeitsregel
+     (vereinfachung.md §1.2). Das Attribut data-ui-mode sitzt am <html>-
+     Element; ein Umschalten erfordert kein Re-Render der Panel-Logik.
+     !important, damit die Regel auch Tailwind-Display-Utilities (flex
+     etc. im Utilities-Layer) schlägt. Ausnahme: Elemente innerhalb einer
+     geöffneten „Profi-Optionen"-Disclosure ([data-profi-offen], siehe
+     shared/ProfiDisclosure.tsx) bleiben sichtbar — gleiche Controls,
+     gleiche Bindings, kein Klon-UI. */
+  [data-ui-mode='einfach'] [data-profi]:not([data-profi-offen] *) {
+    display: none !important;
+  }
+}
+
+@layer components {
+  /* FF7-Dialogbox (nur Dialog-Vorschau) */
+  .ff7-box {
+    background: linear-gradient(180deg, var(--ff7-box-top), var(--ff7-box-bottom));
+    border: 2px solid var(--ff7-box-border);
+    box-shadow: inset 0 0 0 1px rgba(78, 108, 240, 0.35);
+    border-radius: 4px;
+  }
+}

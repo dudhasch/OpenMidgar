@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- WebMidgar Studio Logo-Mark: Hexagon-Reaktor mit Mako-Energiekern -->
+  <path d="M32 4 56 18v28L32 60 8 46V18L32 4Z" stroke="#3DDC97" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M32 12 49 21.5v21L32 52 15 42.5v-21L32 12Z" stroke="#3DDC97" stroke-opacity="0.28" stroke-width="1.5" stroke-linejoin="round"/>
+  <line x1="28.5" y1="20" x2="28.5" y2="44" stroke="#3DDC97" stroke-width="3" stroke-linecap="round"/>
+  <line x1="35.5" y1="20" x2="35.5" y2="44" stroke="#3DDC97" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 64" fill="none">
+  <!-- Walkmesh-Legende: (a) valides Dreieck, (b) degeneriertes Dreieck, (c) Gateway -->
+  <g stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- valide -->
+    <path d="M32 12 52 48H12L32 12Z" stroke="#3DDC97"/>
+    <!-- degeneriert -->
+    <path d="M96 12 116 48H76L96 12Z" stroke="#F66B6B"/>
+    <line x1="88" y1="26" x2="104" y2="42" stroke="#F66B6B"/>
+    <line x1="104" y1="26" x2="88" y2="42" stroke="#F66B6B"/>
+    <!-- Gateway -->
+    <path d="M160 14 176 32 160 50 144 32 160 14Z" stroke="#4C8DFF"/>
+    <circle cx="160" cy="32" r="3" stroke="#4C8DFF"/>
+  </g>
+</svg>
