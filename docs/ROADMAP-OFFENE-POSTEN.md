@@ -18,7 +18,7 @@ Messung lügt".
 | `audio.fmt`-Layout | 🔴 | 🟡 Eintragsgröße 74 B gemessen, WAVEFORMATEX belegt, Vorspann offen |
 | Musikindex → Dateiname | 🔴 | 🟡 Zielmenge geschlossen (94/94), Permutation offen |
 | Kampf-Opcode | 🔴 | 🟢 **gelöst** (`BATTLE` = 0x70, verdrahtet und getestet) |
-| R4-Sichtprüfungen B1–B8 | ⏳ | ⏳ unverändert (braucht ein Auge, s. u.) |
+| R4-Sichtprüfungen B1–B8 | ⏳ | ✅ **durchgeführt** (Gegenprüfung 2026-08-10: 6 entschieden, 3 unbelegt-belastbar, B7 widerlegt → neuer Posten O10) |
 
 ## Stand nach der Repo-Recherche 2026-08-10
 
@@ -216,20 +216,38 @@ Koordinatenabstieg, nur mit besseren Startwerten.
 Interpreter heute aus dem Tritt gerät. Jede korrigierte Länge schließt eine
 davon.
 
-## O4 — R4-Sichtprüfungen B1–B8 (jederzeit, braucht 20 Minuten)
+## O4 — R4-Sichtprüfungen B1–B8 ✅ durchgeführt, ein Folgeposten bleibt
 
-Das ist der einzige Posten, bei dem **du** schneller bist als jede Messung —
-und er braucht keinerlei Fachwissen. Details und Anleitung in
-[R4-MODELL-KONVENTIONEN.md](R4-MODELL-KONVENTIONEN.md).
+**Gegengeprüft am 2026-08-10.** Die Sichtprüfungen sind erledigt; die
+Merkzettel-Tabelle in [R4-MODELL-KONVENTIONEN.md](R4-MODELL-KONVENTIONEN.md)
+war veraltet und ist nachgeführt (Abschnitt „O4-Bilanz").
 
-Zwei Automatisierungsversuche sind sauber gescheitert und sind dort
-dokumentiert, damit sie niemand wiederholt.
+| Klasse | Posten |
+|---|---|
+| ✅ entschieden (6) | B1 (Kindversatz **−len**, Tafel mit 50 Renderketten), B2 (YXZ aus dem Dateikopf, 3209/3209), B5/B6a/B6b (Sichtprüfung), B8, B9 (695/695) |
+| 🟡 belastbar, unbelegt (3) | B3 (nur eingegrenzt), B4 (indirekt gestützt), B10 (Bauformregel) |
+| ❌ widerlegt, ohne Ersatz (1) | **B7** — Wurzelpivot liegt in der **Hüfte**, nicht am Bodenkontaktpunkt |
 
-**Falls es doch automatisiert werden soll** (Aufwand: eine halbe Session): Die
-Bindpose trägt die Information nicht, weil FF7-Modelle starr segmentiert sind
-und die Kette dabei gerade ausfällt. Ein tragfähiger Test müsste die
-`.p`-Segmente über die Bone-Matrizen transformieren und die Bounding-Box der
-**Mesh-Geometrie** messen, nicht die des Skeletts.
+**Was O4 nicht liefern konnte, und warum das kein Versäumnis ist:** B7 lässt
+sich per Auge grundsätzlich nicht schließen. Die Wurzeltranslation verschiebt
+Figur und Pivot **gemeinsam** — das Bild sieht bei jedem Versatz gleich aus.
+Das ist die blinde Gütefunktion, diesmal gegenüber dem Auge statt gegenüber
+einer Kennzahl. Ein tragfähiger Test braucht eine **externe Referenz**: den
+Bodenkontakt gegen eine bekannte Walkmesh-Höhe.
+
+**Restrisiko:** Figuren stehen im Field womöglich systematisch zu hoch oder zu
+tief. Der Fehler ist konstant und fällt deshalb erst an einer Kante auf.
+
+**Neuer Posten O10** (ersetzt den offenen Rest von O4): Höhenversatz
+Figur↔Walkmesh und Abbildung der Wurzeltranslation gemeinsam bestimmen —
+Messung an der Field-Integration, kein Bild.
+
+Zwei Automatisierungsversuche sind sauber gescheitert und in der R4-Notiz
+dokumentiert, damit sie niemand wiederholt. Die Lehre daraus steht dort als
+Bilanz der fünf Messanläufe: Vier Aggregatmaße haben dieselbe Frage viermal
+nicht beantwortet und dabei jedes Mal überzeugend ausgesehen — **für Fragen
+nach einer Richtung im Raum ist die Sichtprüfung kein Notbehelf, sondern das
+schärfere Instrument.**
 
 ## O5 — LGP-„Check-Code" im TOC (Ziel: S20, Härtung)
 
@@ -310,7 +328,8 @@ ist sie ein Migrationsproblem.
 | ~~O3 Kampf-Opcode~~ | ✅ erledigt | — |
 | O3b Sektion 7 | S23 | Zufallskämpfe |
 | O9 Längentabelle | S20 | 0,22 % Overrun im Interpreter |
-| O4 R4-Sichtprüfung | jederzeit | nichts — aber acht Annahmen bleiben ungeprüft |
+| ~~O4 R4-Sichtprüfung~~ | ✅ durchgeführt | — (6 entschieden, 3 belastbar-unbelegt, B7 widerlegt → O10) |
+| O10 Höhenversatz Figur↔Walkmesh + Wurzeltranslation | offen | Bodenkontakt der Figuren im Field (konstanter Fehler, fällt spät auf) |
 | O5 LGP-Check-Code | S20 | nichts (Fehlererkennung entfällt) |
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
 | O7 0xFF-Wrap | S20 | nichts (Randfall) |

@@ -13,21 +13,30 @@ Masterplan). Ergänzt [R1-REQUEST-SEMANTIK.md](R1-REQUEST-SEMANTIK.md).
 | `.a`: Header 36 B; **Frame = 24 B Wurzel + 12 B je Bone**; nBones 0–29 | 3209/3209 exakt |
 | `.hrc`/`.rsd`-Grammatik + Alt-Endungs-Mapping (PLY→.p, TIM→.tex) | 385/385 bzw. 4180/4180; alle 385 Ketten vollständig auflösbar |
 
-## Offene Semantik-Annahmen (🟡, je genau EINE Codestelle)
+## Semantik-Annahmen B1–B10 — Stand nach der O4-Bilanz (2026-08-10)
 
-| # | Annahme | Ort | Validierung |
+**Diese Tabelle ist der maßgebliche Merkzettel.** Sie wurde am 2026-08-10 gegen
+den gesamten Verlauf dieses Dokuments nachgeführt; die Einzelnachweise stehen
+in den Abschnitten weiter unten. Ausführliche Einordnung: „O4-Bilanz" am Ende.
+
+| # | Annahme | Ort | Stand |
 |---|---|---|---|
-| B1 | Bone-Längsachse = lokales +Z; Kindversatz T(0,0,parentLength); Längen im Bestand negativ ⇒ Kette wächst nach −Z | `render-actor/pose.ts`, `actor.ts` | Sichtprüfung echtes Modell (aufrechte Figur) |
-| B2 | Eulerreihenfolge **'YXZ'** (R = Ry·Rx·Rz), Winkel in Grad | `pose.ts EULER_ORDER` | „Bekannte Pose"-Vergleich gegen Original-Screenshot |
-| B3 | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | dito — vertauschte Deutung fiele durch springende Figuren auf |
-| B4 | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | Skelett mit ungleichen Kettenlängen sichtprüfen |
+| B1 ✅ | Bone-Längsachse = lokales +Z; Kindversatz **T(0,0,−parentLength)** | `render-actor/pose.ts`, `actor.ts` | **Gelöst 2026-08-10:** Tafel mit 50 Renderketten, Bewertung in sich konsistent (zwei Zerlegungen desselben Transforms); numerisch gegen die Produktionskette nachgewiesen, gegen Überanpassung an drei weiteren Modellen in je drei Ansichten. Das Vorzeichen lief nach `+len`, richtig ist `−len` |
+| B2 ✅ | Eulerreihenfolge **'YXZ'** (R = Ry·Rx·Rz), Winkel in Grad | `pose.ts EULER_ORDER` | **Gelöst als Datum:** steht im `.a`-Dateikopf, **3209/3209**. Die zwischenzeitliche Notiz „B2 widerlegt" betraf die *Hypothese*, eine wechselnde Reihenfolge erkläre das Kippen — die ist widerlegt, YXZ selbst ist bestätigt. Ursache des Kippens war B1 |
+| B3 🟡 | 24 Wurzel-Bytes je Frame: **Rotation vor Translation** | `formats-model/anim.ts` | **Nur eingegrenzt, nicht entschieden.** Belegt ist ausschließlich, dass die Wurzel das Kippen nicht verursacht (Bytes 0–11 zu 98,7 % genau 0; Bytes 12–23 max. 16,45). Welche Hälfte welche ist, bleibt unbelegt — bei diesen Wertgrößen folgenlos, aber es ist kein Formatfakt |
+| B4 🟡 | Frames adressieren Bones in **Dateireihenfolge** | `pose.ts`/`actor.ts` via `fileOrder` | **Indirekt gestützt, nie direkt geprüft.** Die B1-Tafel und die drei Gegenmodelle zeigen zusammensitzende Segmente in drei Ansichten — eine falsche Bone-Adressierung würde Segmente verstreuen. Das ist ein starkes Indiz, aber keine gezielte Messung an einem Skelett mit ungleichen Kettenlängen |
 | B5 ✅ | Palettenblock **BGRA** | `tex.ts`, `model-writers.ts` | **Sichtgeprüft 2026-08-10:** 4 Texturen × 4 Auslegungen, BGRA 4/4 richtig, alle Alternativen 12/12 als falsche Farbe |
 | B6a ✅ | Vertexfarben **BGRA** | `p.ts` | **Sichtgeprüft 2026-08-10:** zwei Modelle einstimmig, RGBA zweimal verworfen |
 | B6b ✅ | UV-Koordinaten **roh**, weder U noch V geflippt | `p.ts`, `actor.ts` | **Sichtgeprüft 2026-08-10:** genau 1 von 4 Kombinationen richtig |
+| B7 ❌ | ~~Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz aus rootTranslation~~ | Demo/`actor.ts` | **Widerlegt, ohne Ersatz.** Der Wurzelpivot liegt **in der Hüfte**, nicht am Bodenkontaktpunkt. Der Höhenversatz Figur↔Walkmesh muss anders bestimmt werden. **Einziger echt offener B-Posten** — s. „Offen bleibt" unter der B1-Lösung |
+| B8 ✅ | Skalierungsfaktor kommt aus dem **Modelldateifeld**, nicht aus der Field-Sektion | `formats-model` | **Präzisiert 2026-08-10** — s. Abschnitt „B8 präzisiert" |
 | B9 ✅ | Farbschlüssel: Palettenalpha 0 = durchsichtig, Kopfschalter bei 0x08 | `tex.ts`, `actor.ts` | **Realdaten 695/695** (`tex-alpha-probe`), Bildwirkung sichtgeprüft |
 | B10 🟡 | Texturierte Teilnetze sind Aufkleber und bekommen Tiefenvorzug | `actor.ts` | Bauformregel, kein Dateidatum — s. Abschnitt „Streifen über den Augen" |
-| B7 | Wurzelpivot am Walkmesh-Kontaktpunkt; Höhenversatz kommt aus rootTranslation der Animation | Demo/`actor.ts` | Bodenkontakt echter Modelle |
-| B8 | Field-Skalierungsfaktor als Modell-Divisor noch NICHT angewendet | — | bei Field-Integration (S11) |
+
+**Zusätzlich offen, ohne B-Nummer:** Die Abbildung der **Wurzeltranslation**
+ist unbelegt. Sie verschiebt Figur und Pivot gemeinsam und ist damit für jede
+Sichtprüfung **und** jedes formbasierte Maß unsichtbar — sie braucht den
+Bodenkontakt als Referenz und hängt damit an B7.
 
 ## Sichtprüfung durchgeführt (2026-08-09) — und was sie ausgelöst hat
 
@@ -564,3 +573,46 @@ Gesicht plus zwei Augen) — aber es ist eine **Bauformregel und kein Datum der
 Datei**. Ein texturiertes Teilnetz, das kein Aufkleber ist, bekäme den Vorzug
 ebenfalls. Bei dieser Versatzgröße folgenlos, aber es bleibt eine Annahme und
 wird als solche geführt.
+
+---
+
+## O4-Bilanz (2026-08-10) — der Posten ist FAST, aber nicht ganz erledigt
+
+Anlass: [ROADMAP-OFFENE-POSTEN.md](ROADMAP-OFFENE-POSTEN.md) führte O4 noch als
+„⏳ unverändert (braucht ein Auge)", während die README R4 als gelöst meldet und
+dieses Dokument mehrere Teillösungen und **eine Rücknahme** enthält. Der
+Widerspruch ist hier aufgelöst; die Merkzettel-Tabelle oben ist nachgeführt.
+
+### Ergebnis
+
+| Klasse | Posten |
+|---|---|
+| ✅ **entschieden (6)** | B1 (Kindversatz −len), B2 (YXZ, 3209/3209 aus dem Dateikopf), B5, B6a, B6b (Sichtprüfung), B8 (Modelldateifeld), B9 (695/695) |
+| 🟡 **belastbar, aber unbelegt (3)** | B3 (nur eingegrenzt: Wurzel verursacht das Kippen nicht — welche Hälfte welche ist, steht nicht fest), B4 (indirekt durch die B1-Tafel gestützt, nie gezielt gemessen), B10 (Bauformregel) |
+| ❌ **widerlegt, ohne Ersatz (1)** | **B7** — der Wurzelpivot liegt in der Hüfte, nicht am Bodenkontaktpunkt |
+
+**Die acht Sichtprüfungen B1–B8, um die es O4 ging, sind also durchgeführt.**
+Was O4 nicht geliefert hat, ist ein *Ersatz* für die dabei widerlegte Annahme
+B7 — und den kann keine Sichtprüfung liefern.
+
+### Warum B7 nicht per Auge zu schließen ist
+
+Die Wurzeltranslation verschiebt **Figur und Pivot gemeinsam**. Für eine
+Sichtprüfung ist sie damit unsichtbar: Das Bild sieht bei jedem Versatz gleich
+aus. Dasselbe gilt für jedes formbasierte Aggregatmaß. Das ist exakt die
+**blinde Gütefunktion** aus der Bilanz der fünf Messanläufe — nur diesmal
+gegenüber dem Auge statt gegenüber einer Kennzahl.
+
+Ein tragfähiger Test braucht deshalb eine **externe Referenz**: den
+Bodenkontakt. Konkret die Frage, ob die Füße eines Feldmodells in einem Field
+mit bekannter Walkmesh-Höhe auf der Ebene stehen, oder ob ein konstanter
+Versatz bleibt — und ob dieser Versatz je Modell konstant oder eine Funktion
+des Skeletts ist. Das ist eine Messung an der Field-Integration, kein Bild.
+
+### Restrisiko, solange B7 offen ist
+
+Figuren können im Field systematisch zu hoch oder zu tief stehen. Der Fehler
+ist **konstant** (kein Zucken, kein Driften) und fällt deshalb bei einer
+Einzelansicht kaum auf — er wird erst an einer Kante sichtbar, an der die
+Figur den Boden verlässt oder in ihn eintaucht. Zielsession: zusammen mit der
+Wurzeltranslation.
