@@ -1,3 +1,4 @@
+import { ATLAS_SIZE as SHARED_ATLAS_SIZE, ShelfPacker, blitRgba } from '@webmidgar/atlas';
 import { effectiveTileRef, type BackgroundTile, type FieldBackground, type FieldPalette } from '@webmidgar/formats-field';
 import {
   baseLayerIndex,
@@ -20,7 +21,13 @@ import {
  * Punktabtastung (NEAREST) macht Randstege überflüssig.
  */
 
-export const ATLAS_SIZE = 2048;
+/**
+ * 🔵 Der Packer selbst wohnt seit F25 in `@webmidgar/atlas` — Weltkarte und
+ * Kampfbühne brauchen denselben. Hier bleibt nur der Field-spezifische Teil
+ * (Kachelvarianten auflösen); die Kantenlänge wird durchgereicht, damit
+ * bestehende Importe von `ATLAS_SIZE` aus `render-field` gültig bleiben.
+ */
+export const ATLAS_SIZE = SHARED_ATLAS_SIZE;
 
 export interface AtlasEntry {
   atlas: number;
@@ -65,29 +72,11 @@ export function buildTileAtlas(
   const atlases: Uint8Array[] = [];
   const issues: TileResolveIssue[] = [];
 
-  let current = -1;
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowHeight = 0;
-
+  // Punktabtastung (NEAREST) im Field-Pfad ⇒ Polsterung 0.
+  const packer = new ShelfPacker(atlasSize, 0);
   const place = (size: number): { atlas: number; x: number; y: number } => {
-    if (current < 0 || cursorX + size > atlasSize) {
-      if (current >= 0) {
-        cursorX = 0;
-        cursorY += rowHeight;
-        rowHeight = 0;
-      }
-      if (current < 0 || cursorY + size > atlasSize) {
-        atlases.push(new Uint8Array(atlasSize * atlasSize * 4));
-        current = atlases.length - 1;
-        cursorX = 0;
-        cursorY = 0;
-        rowHeight = 0;
-      }
-    }
-    const spot = { atlas: current, x: cursorX, y: cursorY };
-    cursorX += size;
-    if (size > rowHeight) rowHeight = size;
+    const spot = packer.place(size, size)!;
+    while (atlases.length <= spot.atlas) atlases.push(new Uint8Array(atlasSize * atlasSize * 4));
     return spot;
   };
 
@@ -111,12 +100,7 @@ export function buildTileAtlas(
         continue;
       }
       const spot = place(size);
-      const target = atlases[spot.atlas]!;
-      for (let y = 0; y < size; y++) {
-        const from = y * size * 4;
-        const to = ((spot.y + y) * atlasSize + spot.x) * 4;
-        target.set(texels.subarray(from, from + size * 4), to);
-      }
+      blitRgba(atlases[spot.atlas]!, atlasSize, texels, size, size, spot.x, spot.y);
       entries.set(key, {
         atlas: spot.atlas,
         u0: spot.x / atlasSize,

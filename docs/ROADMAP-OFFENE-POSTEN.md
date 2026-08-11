@@ -208,8 +208,19 @@ Field-Raster und ist ein eigener Posten (🔴).
 ## O9 — Operandenlängen ✅ gelöst (2026-08-10)
 
 **Ergebnis.** 16 von 103 abweichenden Längen übernommen, der Rest verworfen.
-Spannen-Abschluss **99,73 % → 99,92 %**, Overrun **0,23 % → 0,06 %**. Ein
-erneuter Lauf übernimmt nichts mehr — die Tabelle ist ein Fixpunkt.
+Spannen-Abschluss **99,73 % → 99,92 %**, Overrun **0,23 % → 0,06 %**.
+
+> ⚠️ **Korrektur 2026-08-11.** Hier stand: „Ein erneuter Lauf übernimmt nichts
+> mehr — die Tabelle ist ein Fixpunkt." **Das ist falsch und war es schon bei
+> der Niederschrift.** Der Abstieg schlägt sehr wohl etwas vor: heute acht
+> Änderungen, die den Spannen-Abschluss auf 99,9417 % heben würden. Ursache ist
+> nicht Zufall, sondern Mechanik — seit O9 sind vier Längen gewandert
+> (0x16–0x19, 0x52, 0xA6/0xA7), und **jede Längenänderung verschiebt den
+> Instruktionsstrom und damit die Gütelandschaft aller übrigen Opcodes**. Ein
+> Fixpunkt kann diese Tabelle konstruktionsbedingt nie sein.
+>
+> Richtig ist die schwächere, aber haltbare Aussage: **Kein Vorschlag des
+> Abstiegs übersteht die Einzelprüfung.** Details im Abschnitt „O9-Nachlese II".
 
 **Die Referenz pauschal zu übernehmen wäre ein Absturz gewesen: 86,77 %.**
 Der Projektstandard „Referenz ist Hypothese, nicht Autorität" hat hier keine
@@ -273,8 +284,8 @@ Zwei neue Gütefunktionen schließen die Lücke
 | `MINIGAME` 0x20 | 134 in 78 Fields | 0 → 10 | ❌ **widerlegt** |
 | `BGMOVIE` 0x27 | 36 in 13 Fields | 0 → 1 | ❌ nicht belegt |
 | `MVCAM` 0xFB | 55 in 23 Fields | 0 → 1 | ❌ nicht belegt |
-| `BGROL` 0xE2 | 13 in 6 Fields | 1 → 2 | ❌ nicht belegt |
-| `BGROL2` 0xE3 | 5 in 2 Fields | 2 = 2 | ❌ nicht messbar |
+| `BGROL` 0xE2 | 13 in 6 Fields | 1 → 2 | ~~❌ nicht belegt~~ → ✅ **Runde 4** |
+| `BGROL2` 0xE3 | 5 in 2 Fields | 2 = 2 | ~~❌ nicht messbar~~ → ✅ **Runde 4** |
 
 **XYI/XYZ.** Grenzplausibilität 2,37 ± 0,37 bzw. 1,76 bei Länge 8 — über dem
 Kontrollniveau echter Instruktionsanfänge; Struktursonde 90,6 % bzw. 88,1 %
@@ -301,6 +312,12 @@ Vergleich das Niveau eines belegten Opcodes: `BGON` trifft an derselben Stelle
 würde die BGON-Maske derselben Gruppe beschädigen und wäre schlechter als der
 heutige Übersprung. Was fehlt, ist ein Bestand mit mehr Vorkommen.
 
+> ⛔ **ZURÜCKGENOMMEN (Runde 4, 2026-08-11).** Der Vergleich ist zirkulär (die
+> Menge wird aus BGON gebaut), und acht der neun Fundstellen waren Phantome
+> der eigenen Längentabelle. `BGROL` steht seit Runde 4 auf Länge **2** und ist
+> implementiert. Was fehlte, war kein anderer Bestand, sondern ein anderes
+> Mittel — siehe „Runde 4" weiter unten.
+
 **Spannen-Abschluss vorher wie nachher 99,9230 % (48.004/48.041)**, Overrun
 0,0645 %. Dass sich die Kennzahl *nicht* bewegt, ist hier kein Nullergebnis,
 sondern die Bestätigung des Befunds: Sie kann diese Posten nicht sehen.
@@ -314,6 +331,80 @@ erzwingt jetzt Disjunktheit und lückenlose 256er-Abdeckung.
 0x54. Beide Längen (3 bzw. 1) waren längst richtig, beide sind Stubs — es
 ändert sich kein Verhalten, nur der Name hing am falschen Opcode. Dieselbe
 Fehlerklasse wie damals `DIR`/`TURA`.
+
+## O9-Nachlese II — der Abstieg schlägt acht vor, keiner übersteht (2026-08-11)
+
+Vier Restposten der ersten Nachlese entschieden. **Keine Operandenlänge
+geändert, kein `engineCompat`-Schritt.** Vollständig mit allen Zahlen in
+[FINDINGS.md](../tools/realdata-scan/FINDINGS.md), Abschnitt „Nachlese Welle 1".
+
+**Der Abstieg (implementierte Opcodes eingefroren) macht acht Vorschläge.**
+Jeder einzeln, isoliert auf die Ist-Tabelle gesetzt und auf seiner betroffenen
+Teilmenge gegen alle 17 Längen gemessen:
+
+| Vorschlag | ist → neu | Maximum | Vorsprung | Urteil |
+|---|---|---|---|---|
+| `0x0d` | 0 → 3 | 2-fach | 1 | mehrdeutig |
+| `0x1d` | 4 → 3 | 3-fach | −3 | schlechter als Ist |
+| `0x20` | 0 → 1 | 2-fach (1/4) | 2 | mehrdeutig |
+| `0x3a` | 4 → 0 | 3-fach | 1 | mehrdeutig |
+| `0x41` | 1 → 4 | 3-fach | 0 | Gleichstand |
+| `0x7f` | 2 → 6 | **eindeutig** | **1** | unter Rauschschwelle |
+| `0xb7` | 2 → 3 | 7-fach | 0 | Gleichstand |
+| `0xef` | 0 → 5 | 2-fach | 1 | mehrdeutig |
+
+**Der Ertrag ist eine neue Kontrolle: die Rauschschwelle.** `0x7f` besteht das
+O9-Kriterium formal (50/50 gegen 49/50, beide Nachbarn schlechter, eindeutiges
+Maximum) — auf einem Vorsprung von **einer Spanne**. Was eine Spanne wert ist,
+sagt erst die Kalibrierung an den **68 eingefrorenen, unabhängig gedeckten**
+Opcodes: Dort schlägt in **5 Fällen (7,4 %)** eine nachweislich **falsche**
+Länge die richtige, mit median 1 und maximal 3 Spannen Vorsprung — `MUL` (0x89)
+um 2, `IFUWL` (0x19) um 3. Ein Ein-Spannen-Vorsprung ist damit **exakt das
+Rauschniveau**. Neue stehende Regel: Ein Vorschlag muss mehr Vorsprung bieten
+als der größte Vorsprung einer falschen Länge an einem gedeckten Opcode.
+
+**BGROL: das Urteil hält, der Maßstab war falsch.**
+> ⛔ **ZURÜCKGENOMMEN (Runde 4).** Der Maßstabswechsel auf BGCLR war richtig,
+> die Fundstellenmenge war es nicht: 8 von 9 Stellen waren Phantome. Gepaart
+> auf denselben Fields hatte die BGCLR-Eichung **n = 1**; die behauptete
+> Disjunktheit verglich 273 fremde Fields gegen 5. Vier der neun Stellen lagen
+> in `frcyo` als byteidentische Kopien — Pseudoreplikation. Absatz bleibt als
+> Fehlerprotokoll stehen.
+
+Die erste Nachlese verglich
+`BGROL`@+2 mit `BGON`@+2 (98,0 %) — tautologisch, weil die Vergleichsmenge aus
+BGON selbst gebaut wird. Der ehrliche Maßstab ist `BGCLR` (gleiche Form, gleiche
+Länge 2, nicht in der Menge): **98,1 %** (608/620), 95-%-Intervall
+[96,6 %, 98,9 %], gegen `BGROL` **12,5 %** (1/8), [2,2 %, 47,1 %] — **disjunkt**.
+Trotz n = 8 ist damit belegt, dass @+2 bei BGROL kein Parameterbyte dieser
+Familie trägt. Die als Zweitmessung erwogene *Nachfolgerprobe* wurde an BGCLR
+und BGON geeicht und **fällt dort durch** (sie zeigt bei beiden auf Länge 0);
+sie wurde deshalb nicht ausgewertet. 🔴 `0xE2`/`0xE3` bleiben Skip.
+
+**MINIGAME/BGMOVIE/MVCAM: sie kommen vor, entscheidbar sind sie nicht.**
+> ⛔ **Zur Hälfte zurückgenommen (Runde 4).** „Sie kommen vor" ist mit der
+> verankerten Zählung nicht belegt — ein nachweislich falsches Raster findet
+> zehnmal so viel. Und die harte Schranke ≤ 5 beruht auf einem eigenen
+> Tabellenfehler bei `IFKEYON`. Was steht: Die Referenzlänge 10 bleibt in
+> jeder Lesart draußen.
+
+Verankerte Vorkommen 118 (79 Fields), 18 (13), 38 (23). Harte Schranken ≤ 5,
+≤ 3, ≤ 3 — die Referenz 10 für `MINIGAME` bleibt physisch widerlegt. Über alle
+Längen 0…12 erreicht keiner ein eindeutiges Maximum über der Rauschschwelle;
+bei `BGMOVIE` schließen 0, 1 und 2 identisch 18/18. 🔴 Alle drei bleiben auf
+dem Ist-Wert — mit dem ausdrücklich benannten Preis, dass Länge 0 die VM
+Operandenbytes ausführen lässt.
+
+**junonr2 (Ermittlung, keine Codeänderung).** Der BG-Bereich [1688, 2293) wird
+**ausschließlich über Slot 0** betreten (Init/Main, Priorität 7); in 300 Ticks
+feuert **kein einziger REQ** (0 von 6013 Kontextstarts), 151 der 174 Spannen
+werden nie betreten. Die Verdrängungsregel wird damit an diesem Field **nie
+ausgelöst** — die Frage ist dort nicht beantwortbar. Die Masken sind nicht
+„stehengeblieben": `smoke1`/Slot 0 fährt eine BGOFF/BGON-Paarfolge über
+s = 0…7 mit Periode 33 Ticks; `door` und `smoke0` löschen ihre Gruppen im Init
+per BGCLR selbst. Korpusweit sind **alle 329** nach 300 Ticks leeren
+Kachelgruppen vom Skript geleert worden, **keine einzige** durch Nichtbeachtung
+— eine leere Maske ist ein regulärer Skriptzustand, kein Interpreterfehler.
 
 ## O9-alt — der Weg dorthin (historisch)
 
@@ -508,6 +599,73 @@ ist sie ein Migrationsproblem.
 
 ---
 
+## Runde 4 (2026-08-11) — BGROL entschieden, ein neuer Posten aufgemacht
+
+**BGROL 0xE2 ist implementiert, Operandenlänge 2.** Entschieden hat nicht eine
+Quote, sondern die **Struktur einer einzigen Spanne**: `hyou4` [2137, 2213)
+enthält fünf 0xE2- und vier 0xE3-Blöcke, die byteidentisch gebaut sind
+(`24 07 00 · eX 00 01`). 0xE3 stand immer auf Länge 2; unter der alten Länge 1
+für 0xE2 zerfiel die e2-Hälfte in `BGROL 00 / REQ / RET`, während die e3-Hälfte
+sauber las — dieselbe Konstruktion, zwei Lesarten in einer Spanne. Unter
+Länge 2 lesen beide gleich. Stützend: Der Schleifenrumpf ab 2145 schließt nur
+unter Länge 2 hinter dem `JMPB` (erstes RET bei 2212 statt 2161).
+
+**Kostenfreies Referenzbündel: 53 Längen übernommen.** Kriterium war „der
+Spannen-Abschluss wird nicht schlechter"; gemeinsam angewandt geht er von
+48.004/31/6 auf **48.006/29/6**. ⚠️ Kostenfreiheit ist kein Beleg für
+Richtigkeit — der Ertrag ist die gesenkte **Phantomrate**, alle 53 stehen 🟡
+mit Herkunft Referenz. Wirkung: 0xE2 fällt von 13 Fundstellen in 6 Fields auf
+6 in 2, `MINIGAME` 0x20 von 118 verankerten in 79 Fields auf 67 in 49.
+
+**Semantik.** BGROL rotiert die Zustandsmaske ein Bit weiter, BGROL2 eines
+zurück; Breite **8 Bit** (gemessen: der Zustandsoperand von BGON/BGOFF nimmt
+über 9684 Literalvorkommen genau die Werte 0…7 an). 🟡 Ob „weiterschalten"
+rotieren oder auf den nächsten *tatsächlich vorkommenden* Zustand springen
+heißt, geben die Daten nicht her: 195 von 1256 Kachelgruppen haben Lücken, aber
+keine davon liegt in einem Field, das BGROL benutzt. Gewählt ist die Rotation
+als einfachere Regel, die Alternative ist im Quelltext benannt.
+
+**Nebenbefund zum `RET` bei 2144: (c) toter Code, belegt.** Die Entität `nami`
+hat 32 Skript-Slots, und alle 32 zeigen auf 2137 — es gibt keinen
+Eintrittspunkt bei 2145. Korpusweit enthalten **26,7 % aller Spannen**
+unerreichbare Instruktionen (32,5 % aller Instruktionen). Der Rollblock ist
+eine stillgelegte Animationsschleife.
+
+### 🔴 NEU: O11 — Rückwärtssprünge liegen um ein Byte daneben
+
+| Posten | Befund | Wirkung |
+|---|---|---|
+| **O11** `JMPB`/`JMPBL` | `vm.ts` rechnet `ip + 1 − off`; das Ziel liegt in **39/5286 (0,7 %)** auf einer Instruktionsgrenze. `ip − off` trifft **5266/5286 (99,6 %)**, bei `JMPBL` 97/97 gegen 0/97. | Auf echten Field-Daten läuft fast jeder Rücksprung ins Leere. |
+
+Die Messanlage ist an den Vorwärtssprüngen geeicht und besteht dort (`JMPF`
+7809/7876 mit der heutigen Rechnung gegen 974/7876 verschoben) — vorwärts
+stimmt, rückwärts nicht.
+
+**Bewusst nicht behoben:** Der Fixture-Assembler
+(`tools/fixture-gen/src/script-assembler.ts`) erzeugt Rücksprünge mit derselben
+Konvention. Beide Seiten sind konsistent falsch, alle Fixtures laufen; eine
+einseitige Korrektur zerreißt jede Fixture-Schleife und bewegt alle
+Replay-Digests. Die Korrektur gehört in **einem** Zug mit dem Assembler
+gemacht — Interpreter und `tools/fixture-gen` gehören verschiedenen Revieren.
+
+### Sonden konsolidiert
+
+Fünfzehn Wegwerfsonden dieses Tages (`bgrol-adversarial2…5`,
+`bgrol-*-gegenprobe`, `gegenprobe-minigame*`, `minigame-gegenprobe*`,
+`zz-gegenprobe-fixpunkt`) sind gelöscht und durch **drei** Dauerproben ersetzt:
+`bgrol-belegkette.rdtest.ts` (Bündel, Phantomrate, Spannenstruktur,
+Semantikfrage), `minigame-laengenfrage.rdtest.ts` (Rauschboden, Schranke,
+Abschlussverlauf) und das bestehende `oplen-abstieg-nachlese.rdtest.ts`
+(Abstieg und Rauschschwelle).
+
+### Die Lehre
+
+**Wenn eine Gütefunktion blind ist, folgt daraus, mit einem anderen Mittel zu
+entscheiden — nicht, dass es nichts zu entscheiden gibt.** Die vollständige
+Fehlkette steht als Lehrstück in `packages/interpreter/src/opcodes.ts`.
+
+---
+
 ## Einordnung in die bestehenden Bögen
 
 | Posten | Session | Blockiert |
@@ -523,6 +681,7 @@ ist sie ein Migrationsproblem.
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
 | ~~O7 0xFF-Wrap~~ | ✅ geschlossen | — (1 Fundstelle im ganzen Bestand, Dauerprobe steht) |
 | O8 Mod-Variablenbänke | S22, vor MS5 | Mod-Kombinierbarkeit |
+| **O11 Rücksprungziel** | S22 (mit `fixture-gen`) | Kontrollfluss auf echten Field-Daten |
 
 *Rückverweis: [ROADMAP-S13-S19.md](ROADMAP-S13-S19.md) ·
 [ROADMAP-S20-S26.md](ROADMAP-S20-S26.md) ·

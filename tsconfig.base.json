@@ -12,6 +12,7 @@
     "declaration": true,
     "composite": true,
     "paths": {
+      "@webmidgar/atlas": ["./packages/atlas/src/index.ts"],
       "@webmidgar/formats-lgp": ["./packages/formats-lgp/src/index.ts"],
       "@webmidgar/formats-field": ["./packages/formats-field/src/index.ts"],
       "@webmidgar/convert": ["./packages/convert/src/index.ts"],
@@ -42,7 +43,9 @@
       "@webmidgar/world-runtime": ["./packages/world-runtime/src/index.ts"],
       "@webmidgar/fixture-gen": ["./tools/fixture-gen/src/index.ts"],
       "@webmidgar/nfr-run": ["./tools/nfr-run/src/index.ts"],
-      "@webmidgar/menu": ["./packages/menu/src/index.ts"]
+      "@webmidgar/menu": ["./packages/menu/src/index.ts"],
+      "@webmidgar/ui-window": ["./packages/ui-window/src/index.ts"],
+      "@webmidgar/ui-battle-hud": ["./packages/ui-battle-hud/src/index.ts"]
     }
   }
 }

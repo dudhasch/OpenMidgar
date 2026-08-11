@@ -6,7 +6,9 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
+    "@webmidgar/atlas": "*",
     "@webmidgar/convert": "*",
+    "@webmidgar/formats-model": "*",
     "@webmidgar/formats-world": "*"
   }
 }

@@ -8,6 +8,8 @@
   "dependencies": {
     "@webmidgar/formats-kernel": "*",
     "@webmidgar/formats-save": "*",
+    "@webmidgar/ui-window": "*",
+    "@webmidgar/dialog": "*",
     "@webmidgar/fixture-gen": "*",
     "@webmidgar/field-runtime": "*",
     "@webmidgar/formats-field": "*"

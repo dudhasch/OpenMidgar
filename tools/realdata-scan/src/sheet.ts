@@ -29,6 +29,9 @@ export type Vec2 = [number, number];
 
 export const W = 210;
 export const H = 270;
+/** Vorgabegröße einer Tafelzelle (durch `RasterOpt.groesse` überschreibbar). */
+const BREITE = W;
+const HOEHE = H;
 
 /**
  * Kanalpermutationen, ausgedrückt auf dem, was der Parser BEREITS liefert.
@@ -94,13 +97,29 @@ export interface RasterOpt {
    * Varianten eines Modells dasselbe Fenster geben.
    */
   fenster?: { cx: number; cy: number; halbHoehe: number };
+  /**
+   * Abweichende Zellgröße. Ohne Angabe die Tafelgröße `W`×`H` (210×270) —
+   * richtig für Vergleichstafeln mit vielen Zellen. Für IDENTIFIKATIONSfragen
+   * („welche Figur ist das?") ist 210×270 zu klein: Ein Stachelhaar oder ein
+   * Waffenarm verschwindet dort im Rauschen. K4 rendert deshalb einzeln und
+   * groß. Der Rasterizer bleibt derselbe — nur die Auflösung ändert sich.
+   */
+  groesse?: { w: number; h: number };
 }
 
 /** Orthographische Frontansicht, Tiefenpuffer, Textur- oder Vertexfarbe. */
 export function rasterize(tris: Dreieck[], opt: RasterOpt = {}): Buffer {
+  const bild = rasterizePixels(tris, opt);
+  return encodePng(bild.w, bild.h, bild.px);
+}
+
+/** Wie `rasterize`, aber als roher RGB-Puffer (für Montagen/Weiterverarbeitung). */
+export function rasterizePixels(tris: Dreieck[], opt: RasterOpt = {}): { w: number; h: number; px: Uint8Array } {
+  const W = opt.groesse?.w ?? BREITE;
+  const H = opt.groesse?.h ?? HOEHE;
   const px = new Uint8Array(W * H * 3).fill(18);
   const zb = new Float32Array(W * H).fill(-Infinity);
-  if (tris.length === 0) return encodePng(W, H, px);
+  if (tris.length === 0) return { w: W, h: H, px };
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   let minZ = Infinity, maxZ = -Infinity;
@@ -173,7 +192,7 @@ export function rasterize(tris: Dreieck[], opt: RasterOpt = {}): Buffer {
       }
     }
   }
-  return encodePng(W, H, px);
+  return { w: W, h: H, px };
 }
 
 export interface BoneRes {

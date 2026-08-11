@@ -40,6 +40,12 @@ export default defineConfig({
       '@webmidgar/nfr-run': r('../../tools/nfr-run/src/index.ts'),
       '@webmidgar/pipeline': r('../../packages/pipeline/src/index.ts'),
       '@webmidgar/telemetry': r('../../packages/telemetry/src/index.ts'),
+      '@webmidgar/ui-window': r('../../packages/ui-window/src/index.ts'),
+      '@webmidgar/ui-battle-hud': r('../../packages/ui-battle-hud/src/index.ts'),
+      // Ergaenzt beim Kampf-HUD (K6): das neue Paket war in vitest.config.ts
+      // registriert, hier aber nicht — dadurch war game.html mit
+      // 'Failed to resolve import @webmidgar/atlas' gar nicht ladbar.
+      '@webmidgar/atlas': r('../../packages/atlas/src/index.ts'),
     },
   },
   // Vite nimmt ohne diese Liste nur `index.html` als Einstiegspunkt — der
@@ -48,7 +54,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license', 'world', 'game'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'menu', 'license', 'world', 'game', 'window-skin', 'battle-hud'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),

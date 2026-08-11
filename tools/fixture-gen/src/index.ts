@@ -16,3 +16,4 @@ export * from './battle-ai-assembler.js';
 export * from './world-script-assembler.js';
 export * from './field-tbl-composer.js';
 export * from './audio-composer.js';
+export * from './window-bin-composer.js';

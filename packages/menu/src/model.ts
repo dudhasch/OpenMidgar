@@ -1,5 +1,5 @@
 import type { CharacterRecord, Savemap } from '@webmidgar/formats-save';
-import type { InventoryNameLookup } from '@webmidgar/formats-kernel';
+import type { FfSpacing, InventoryNameLookup, MateriaRecord } from '@webmidgar/formats-kernel';
 import { barFill, formatDuration, formatNumber, formatRatio } from './format.js';
 
 /**
@@ -31,11 +31,52 @@ export interface MenuData {
    * das war F18/F24-A: 65 von 79 Inventarzeilen trugen Zaubernamen.
    */
   itemName: InventoryNameLookup;
-  /** Anzeigename des aktuellen Ortes; `null`, wenn nicht bestimmbar. */
+  /**
+   * **Ersatz**-Ortsname des Wirts (Feldname, „Weltkarte", …).
+   *
+   * ⚠️ Seit F24-B ist das nicht mehr die Hauptquelle. Der Ortsname steht in
+   * der Savemap (0x0F0C, ersatzweise 0x0028 im Vorschaublock) und ist dort
+   * gemessen belegt; siehe {@link resolveLocation}. Dieses Feld greift nur,
+   * wenn beide Ablagen leer sind — und die Ansicht macht sichtbar, dass sie
+   * es getan hat.
+   */
   locationName: string | null;
+
+  // --- ab hier optional: die neuen Ansichten (F24-B, Teil 2 und 4) ----------
+
+  /**
+   * Beschreibungstext zu einer Inventarkennung (F24-B, Teil 4). Kommt aus
+   * `inventoryDescriptionLookup` (S13-Kernel). Fehlt er, zeigt die
+   * Gegenstandsansicht keine Beschreibung — statt einer erfundenen.
+   */
+  itemDescription?: InventoryNameLookup | undefined;
+  /** Materianamen (96 Einträge, Kennung = Index). */
+  materiaName?: InventoryNameLookup | undefined;
+  /** Zaubernamen (256 Einträge, Kennung = Index). */
+  magicName?: InventoryNameLookup | undefined;
+  /** Materia-Recordtabelle aus `KERNEL.BIN` — für Stufe und Zauberzuordnung. */
+  materiaRecords?: readonly MateriaRecord[] | undefined;
+  /**
+   * Gemessene Glyphenmetrik aus `WINDOW.BIN`. **Muss** aus `dialogMetrics`
+   * stammen; `metricsMeasured === false` gehört sichtbar in die Ansicht.
+   */
+  spacing?: FfSpacing | undefined;
+  metricsMeasured?: boolean | undefined;
+  metricsDiagnostic?: string | null | undefined;
 }
 
-export type MenuViewId = 'status' | 'party' | 'items' | 'time';
+export type MenuViewId =
+  | 'main'
+  | 'status'
+  | 'party'
+  | 'items'
+  | 'time'
+  | 'equip'
+  | 'materia'
+  | 'magic'
+  | 'limit'
+  | 'phs'
+  | 'config';
 
 export interface MenuRow {
   /** Stabile Kennung der Zeile — Anker für Tests und für die Darstellung. */
@@ -44,8 +85,15 @@ export interface MenuRow {
   value: string;
   /** Balkenanteil 0…1, wenn die Zeile einen Balken zeigt. */
   fill?: number;
+  /** Färbung des Balkens; ohne Angabe wie HP. */
+  barTone?: 'hp' | 'mp' | 'limit' | 'exp';
   /** Zeile ist nicht auswählbar (Überschrift, Trenner). */
   static?: boolean;
+  /**
+   * Beschreibungstext aus den Kernel-Beschreibungslisten (F24-B, Teil 4).
+   * Fehlt, wenn keine Beschreibung auflösbar ist — nie ein Ersatztext.
+   */
+  description?: string;
 }
 
 export interface MenuViewModel {
@@ -54,6 +102,66 @@ export interface MenuViewModel {
   rows: MenuRow[];
   /** Zeilen, die der Zeiger anspringen kann (Indizes in `rows`). */
   selectable: number[];
+  /**
+   * Hinweise, die **in der Ansicht** stehen müssen — nicht in einem Protokoll.
+   * Hier landet alles, was nicht gemessen ist: Ersatzmetrik statt
+   * `WINDOW.BIN`, geratener Ortsname, unbelegte Zauberzuordnung. Eine Ansicht,
+   * die ihre eigenen Unsicherheiten verschweigt, ist genau der Fehler, der
+   * F18/F24-A eine Welle lang unentdeckt gelassen hat.
+   */
+  notes?: string[];
+}
+
+/**
+ * Woher der angezeigte Ortsname kommt. Die Reihenfolge ist die Rangfolge der
+ * Quellen, und sie ist **gemessen** (siehe `LOCATION_NAME_OFFSET` in
+ * `@webmidgar/formats-save`): Die Savemap-Fassung ist die laufende, der
+ * Vorschaublock die beim Speichern festgehaltene; der Wirtsname ist gar keine
+ * Spielstandsangabe und deshalb der letzte Ausweg.
+ */
+export type LocationSource = 'savemap' | 'preview' | 'wirt' | 'keiner';
+
+export interface ResolvedLocation {
+  name: string | null;
+  source: LocationSource;
+  /** Hinweis, wenn die Quelle nicht die Savemap ist; sonst `null`. */
+  note: string | null;
+}
+
+/**
+ * Bestimmt den anzuzeigenden Ortsnamen (F24-B, Teil 3).
+ *
+ * 🟢 **Beleg** (Probe `menu-views-probe.rdtest.ts`, V1): Ein Sweep über alle
+ * 4340 Offsets des Slots findet in den acht belegten Spielständen der
+ * Installation **genau zwei** eigenständige Stellen, an denen durchgehend ein
+ * terminiertes, druckbares und über die Stände variierendes Namensfeld steht —
+ * 0x0028 und 0x0F0C. Auf byteweise verwürfelten Slots findet derselbe Sweep
+ * **null** Stellen. Wo beide Ablagen gefüllt sind, tragen sie denselben Text
+ * (7/7).
+ *
+ * Der achte Stand ist ein Notspeicherstand: Savemap-Feld leer, Vorschaublock
+ * gefüllt. Genau deshalb ist der Vorschaublock hier zweite Quelle und nicht
+ * bloß eine Gegenprobe.
+ */
+export function resolveLocation(data: MenuData): ResolvedLocation {
+  const sm = data.savemap.locationName ?? '';
+  if (sm.length > 0) return { name: sm, source: 'savemap', note: null };
+  const pv = data.savemap.previewLocationName ?? '';
+  if (pv.length > 0) {
+    return {
+      name: pv,
+      source: 'preview',
+      note: 'Ort aus dem Vorschaublock (0x0028) — die laufende Ablage 0x0F0C ist leer',
+    };
+  }
+  if (data.locationName) {
+    return {
+      name: data.locationName,
+      source: 'wirt',
+      note: 'Ort nicht aus dem Spielstand, sondern vom Wirt gemeldet (Feldname) — 🟡',
+    };
+  }
+  return { name: null, source: 'keiner', note: 'Kein Ortsname im Spielstand' };
 }
 
 /**
@@ -143,14 +251,19 @@ export function buildItemsView(data: MenuData, page = 0): MenuViewModel {
   const selectable: number[] = [];
   for (const e of entries.slice(from, from + ITEMS_PER_PAGE)) {
     selectable.push(rows.length);
+    // F24-B Teil 4: Die Beschreibung wurde bisher weggeworfen. Fehlt sie,
+    // bleibt das Feld weg — ein Ersatztext wäre eine Erfindung.
+    const beschreibung = data.itemDescription?.(e.itemId) ?? null;
     rows.push({
       key: `i${e.slot}`,
       label: data.itemName(e.itemId) ?? `?${e.itemId}`,
       value: `×${formatNumber(e.count)}`,
+      ...(beschreibung ? { description: beschreibung } : {}),
     });
   }
   if (rows.length === 0) rows.push({ key: 'leer', label: '', value: 'Keine Gegenstände', static: true });
-  return { view: 'items', title: `Gegenstände (${clamped + 1}/${pages})`, rows, selectable };
+  const notes = data.itemDescription ? [] : ['Keine Beschreibungsliste geladen — Gegenstandstexte fehlen'];
+  return { view: 'items', title: `Gegenstände (${clamped + 1}/${pages})`, rows, selectable, notes };
 }
 
 export function itemPageCount(data: MenuData): number {
@@ -159,15 +272,21 @@ export function itemPageCount(data: MenuData): number {
 
 /** Gil, Spielzeit und Ort — die Kopfzeile des Originalmenüs als eigene Ansicht. */
 export function buildTimeView(data: MenuData): MenuViewModel {
+  const ort = resolveLocation(data);
   const rows: MenuRow[] = [
     { key: 'gil', label: 'Gil', value: formatNumber(data.savemap.gil), static: true },
     { key: 'zeit', label: 'Spielzeit', value: formatDuration(data.savemap.playtimeSeconds), static: true },
-    { key: 'ort', label: 'Ort', value: data.locationName ?? 'Unbekannt', static: true },
+    { key: 'ort', label: 'Ort', value: ort.name ?? 'Unbekannt', static: true },
   ];
   // Eine widersprüchliche Doppelablage ist ein Befund und gehört sichtbar in
   // die Ansicht — nicht in ein Protokoll, das niemand liest.
   if (!data.savemap.duplicatesConsistent) {
     rows.push({ key: 'warnung', label: 'Hinweis', value: 'Gil/Spielzeit stehen im Spielstand widersprüchlich', static: true });
   }
-  return { view: 'time', title: 'Übersicht', rows, selectable: [] };
+  const notes: string[] = [];
+  if (ort.note) notes.push(ort.note);
+  if (data.savemap.locationConsistent === false) {
+    notes.push('Ortsname steht im Spielstand doppelt und widersprüchlich (0x0028 ≠ 0x0F0C)');
+  }
+  return { view: 'time', title: 'Übersicht', rows, selectable: [], notes };
 }

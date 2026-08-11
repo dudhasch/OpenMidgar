@@ -285,6 +285,25 @@ export interface MateriaRecord {
   typeNibble: number;
   /** Vollständiges Byte 0x0D — die oberen vier Bit sind 🔴 ungedeutet. */
   typeRaw: number;
+  /**
+   * Die sechs Attributbytes 0x0E…0x13, **roh**. Bei Zaubermateria sind das
+   * die gewährten Zauberindizes (0xFF = kein weiterer Eintrag).
+   *
+   * 🟡 **Teilbelegt, bewusst nicht gedeutet.** Gemessen (Probe
+   * `menu-views-probe.rdtest.ts`, V4, 96 Records der echten `KERNEL.BIN`):
+   * 79 Records tragen hier eine hinten mit 0xFF aufgefüllte Liste, und in
+   * 45 davon steigt sie streng. Das Kontrollniveau ist scharf: In den beiden
+   * gleich großen Nachbarfenstern 0x08…0x0D und 0x02…0x07 steigt **kein
+   * einziger** Record (0/88 und 0/63). Hier steht also nachweislich eine
+   * geordnete Indexfolge und kein Zahlenrauschen.
+   *
+   * 🔴 Was **nicht** belegt ist: dass jeder Eintrag ein Zauberindex ist. Der
+   * Versuch, die steigenden Records über den Typnibble zu isolieren, ist
+   * gescheitert — auch der größte Typ (24 Records) steigt nur in 17 von 19
+   * Fällen. Wer daraus eine Zauberliste baut, muss das als Annahme kenntlich
+   * machen; `buildMagicView` in `@webmidgar/menu` tut genau das.
+   */
+  attributesRaw: number[];
 }
 
 function view(bytes: Uint8Array): DataView {
@@ -414,6 +433,7 @@ export function readMateriaRecords(container: KernelContainer, sections: KernelD
       elementIndex: r.data[b + 0x0c]!,
       typeNibble: r.data[b + 0x0d]! & 0x0f,
       typeRaw: r.data[b + 0x0d]!,
+      attributesRaw: [0, 1, 2, 3, 4, 5].map((k) => r.data[b + 0x0e + k]!),
     });
   }
   return out;

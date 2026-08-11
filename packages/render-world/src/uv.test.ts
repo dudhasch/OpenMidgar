@@ -127,7 +127,7 @@ describe('Geometrie führt textureId/locationId/UV mit', () => {
       undefined,
       { width: 64, height: 64, uOffset: 0, vOffset: 0 },
     ];
-    const geo = buildTexturedMeshGeometry(mesh, 0, 0, grid, tabelle);
+    const geo = buildTexturedMeshGeometry(mesh, 0, 0, grid, { table: tabelle });
     expect(geo.positions).toHaveLength(2 * 9);
     expect(geo.uvs).toHaveLength(2 * 6);
     // Dreieck 0 hat Metadaten, Dreieck 1 (textureId 0) nicht.

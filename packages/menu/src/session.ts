@@ -8,6 +8,16 @@ import {
   type MenuViewId,
   type MenuViewModel,
 } from './model.js';
+import {
+  buildConfigView,
+  buildEquipView,
+  buildLimitView,
+  buildMagicView,
+  buildMateriaView,
+  buildPhsView,
+} from './views.js';
+import { buildMainScreen, buildViewScreen, COMMAND_LABELS, type MenuScreen } from './screen.js';
+import { MENU_ITEM_ORDER } from '@webmidgar/formats-save';
 
 /**
  * Menü-Ablauf (S21) als reines Zustandsmodell — dieselbe Bauform wie die
@@ -41,12 +51,53 @@ export const NEUTRAL_MENU_INPUT: MenuInput = {
   cancel: false,
 };
 
-/** Reihenfolge, in der `links`/`rechts` durch die Ansichten blättert. */
-export const VIEW_ORDER: readonly MenuViewId[] = ['party', 'items', 'status', 'time'];
+/**
+ * Reihenfolge, in der `links`/`rechts` durch die Ansichten blättert.
+ *
+ * Die vier Ansichten aus Welle 1 stehen bewusst vorn und in unveränderter
+ * Folge — das Blätterverhalten ist in den Golden-Tests von S21 verankert, und
+ * eine Umsortierung wäre eine Verhaltensänderung ohne Anlass. Die sechs neuen
+ * Ansichten (F24-B) hängen hinten an.
+ */
+export const VIEW_ORDER: readonly MenuViewId[] = [
+  'party',
+  'items',
+  'status',
+  'time',
+  'equip',
+  'materia',
+  'magic',
+  'limit',
+  'phs',
+  'config',
+];
+
+/**
+ * Kommando → Ansicht. `formation` und `save` haben in dieser Welle keine
+ * Ansicht: Reihenwechsel ist eine Handlung (nicht mein Auftrag), Speichern ist
+ * S24. Sie bleiben in der Kommandospalte sichtbar und tun nichts — das ist
+ * ehrlicher als sie auszublenden, denn das Original hat sie.
+ */
+export const COMMAND_TO_VIEW: Readonly<Partial<Record<(typeof MENU_ITEM_ORDER)[number], MenuViewId>>> = {
+  item: 'items',
+  magic: 'magic',
+  materia: 'materia',
+  equip: 'equip',
+  status: 'status',
+  limit: 'limit',
+  config: 'config',
+  phs: 'phs',
+};
 
 export interface MenuState {
   open: boolean;
   view: MenuViewId;
+  /**
+   * Ansicht, zu der `Abbrechen` zurückkehrt. Wird beim Öffnen gesetzt.
+   * Steht der Zeiger schon dort, schließt `Abbrechen` das Menü — dieselbe
+   * zweistufige Regel wie im Original.
+   */
+  root: MenuViewId;
   /** Zeilenzeiger innerhalb der aktuellen Ansicht. */
   cursor: number;
   /** Seitenzeiger der Gegenstandsliste. */
@@ -56,7 +107,7 @@ export interface MenuState {
 }
 
 export function createMenuState(): MenuState {
-  return { open: false, view: 'party', cursor: 0, page: 0, characterIndex: 0 };
+  return { open: false, view: 'party', root: 'party', cursor: 0, page: 0, characterIndex: 0 };
 }
 
 export class MenuSession {
@@ -79,6 +130,7 @@ export class MenuSession {
   open(view?: MenuViewId): void {
     this.state.open = true;
     if (view) this.state.view = view;
+    this.state.root = this.state.view;
     this.state.cursor = 0;
     this.clampCursor();
   }
@@ -98,7 +150,62 @@ export class MenuSession {
         return buildStatusView(this.data, this.state.characterIndex);
       case 'time':
         return buildTimeView(this.data);
+      case 'equip':
+        return buildEquipView(this.data, this.state.characterIndex);
+      case 'materia':
+        return buildMateriaView(this.data, this.state.characterIndex);
+      case 'magic':
+        return buildMagicView(this.data, this.state.characterIndex);
+      case 'limit':
+        return buildLimitView(this.data, this.state.characterIndex);
+      case 'phs':
+        return buildPhsView(this.data);
+      case 'config':
+        return buildConfigView(this.data);
+      case 'main':
+        // Das Hauptmenü ist ein Bildschirm, keine Zeilenliste. Als
+        // Zeilenmodell liefert es die Kommandospalte — so bleibt die
+        // Zeigerlogik dieselbe wie überall.
+        return this.mainAsViewModel();
     }
+  }
+
+  private mainAsViewModel(): MenuViewModel {
+    const sichtbar = this.visibleCommands();
+    return {
+      view: 'main',
+      title: 'Menü',
+      rows: sichtbar.map((s) => ({
+        key: `cmd.${s.key}`,
+        label: COMMAND_LABELS[s.key],
+        value: s.locked ? 'gesperrt' : '',
+        ...(s.locked ? { static: true } : {}),
+      })),
+      selectable: sichtbar.map((s, i) => (s.locked ? -1 : i)).filter((i) => i >= 0),
+    };
+  }
+
+  /** Die Kommandos, die der Spielstand gerade zeigt. */
+  visibleCommands(): Array<{ key: (typeof MENU_ITEM_ORDER)[number]; locked: boolean }> {
+    const sicht = this.data.savemap.settings?.menuVisible ?? 0xffff;
+    const sperre = this.data.savemap.settings?.menuLocked ?? 0;
+    return MENU_ITEM_ORDER.map((key, bit) => ({ key, bit }))
+      .filter(({ bit }) => ((sicht >> bit) & 1) === 1)
+      .map(({ key, bit }) => ({ key, locked: ((sperre >> bit) & 1) === 1 }));
+  }
+
+  /**
+   * Der Bildschirm zur aktuellen Ansicht — **das** ist die Schnittstelle für
+   * die Darstellung. Sie enthält Fenster, Zeilen, Spaltenanker und Balken;
+   * die UI wendet nur noch `applyWindowSkin` an und setzt Text.
+   */
+  screen(): MenuScreen | null {
+    if (!this.state.open) return null;
+    if (this.state.view === 'main') {
+      return buildMainScreen(this.data, { commandCursor: this.state.cursor, partyCursor: null });
+    }
+    const vm = this.viewModel();
+    return vm ? buildViewScreen(vm, this.data, this.state.cursor) : null;
   }
 
   private clampCursor(): void {
@@ -123,7 +230,22 @@ export class MenuSession {
       else this.open();
     } else if (this.state.open) {
       if (flanke('cancel')) {
-        this.close();
+        /**
+         * Zweistufig — aber **nur** im Hauptmenüfluss: Wurde das Menü mit
+         * `main` geöffnet, führt Abbrechen aus einer Unteransicht zurück ins
+         * Hauptmenü und erst von dort hinaus. Wurde es direkt auf einer
+         * Listenansicht geöffnet (der Weg aus Welle 1, den der Menü-Opcode
+         * nimmt), schließt Abbrechen sofort. Diese Fallunterscheidung ist
+         * bewusst: Der zweite Weg hat kein Hauptmenü, in das er zurückkehren
+         * könnte, und sein Verhalten ist in den S21-Tests verankert.
+         */
+        if (this.state.root === 'main' && this.state.view !== 'main') {
+          this.state.view = 'main';
+          this.state.cursor = 0;
+          this.clampCursor();
+        } else {
+          this.close();
+        }
       } else {
         const vm = this.viewModel();
         const n = vm?.selectable.length ?? 0;
@@ -173,6 +295,19 @@ export class MenuSession {
    * schlimmer als eine, die erkennbar nicht wirkt.
    */
   private bestaetigen(): void {
+    // Im Hauptmenü öffnet Bestätigen die Ansicht des gewählten Kommandos.
+    if (this.state.view === 'main') {
+      const sichtbar = this.visibleCommands();
+      const auswahl = this.mainAsViewModel().selectable[this.state.cursor];
+      const befehl = auswahl === undefined ? undefined : sichtbar[auswahl];
+      const ziel = befehl ? COMMAND_TO_VIEW[befehl.key] : undefined;
+      if (!ziel) return;
+      this.state.view = ziel;
+      this.state.cursor = 0;
+      this.state.page = 0;
+      this.clampCursor();
+      return;
+    }
     if (this.state.view !== 'party') return;
     const vm = buildPartyView(this.data);
     const zeile = vm.selectable[this.state.cursor];

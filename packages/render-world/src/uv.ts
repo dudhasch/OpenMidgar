@@ -17,18 +17,25 @@
  * Schritt 2 fängt `vOffset`-Werte bis 480 bei nur 8 Bit v-Byte ab — die
  * Texturseite steckt NICHT im Dreieck.
  *
- * 🔴 OFFEN (Forschungsposten **F11b**, ausdrücklich NICHT Gegenstand dieser
- * Arbeit): welche `.tex`-Datei aus `world_us.lgp` zu welcher `textureId`
- * gehört und wie `uOffset`/`vOffset`/`width`/`height` daraus zu MESSEN sind
- * (die Referenzen führen eine fertige Tabelle mit 282/8/4 Einträgen; deren
- * INHALT wird nicht übernommen). Bis F11b liegt, ist `WorldTextureMeta` eine
- * leere Schnittstelle: `resolveTriangleUv` gibt ohne Tabelle `null` zurück und
- * die Geometrie führt die ROHEN Bytes weiter — sichtbar falsch, aber ehrlich.
+ * 🟢 **F11b ist gelöst** (2026-08-11); die Tabelle entsteht jetzt so:
+ *   - NAME je `textureId`: Zeigerfeld in der Spiel-EXE, gelesen von
+ *     `parseWorldTextureNames` (`formats-world/texture-names.ts`) — 402
+ *     Einträge = 390 Overworld + 8 Unterwasser + 4 Gletscher, davon 22
+ *     namenlose (animierte Texturen aus `wm.ta`).
+ *   - `width`/`height`: Kopffelder der `.tex`-Datei bzw. gemessenes Maß der
+ *     animierten Textur. `uOffset`/`vOffset`: aus den beobachteten
+ *     UV-Spannweiten abgeleitet — `buildWorldTextureTable`
+ *     (`texture-table.ts`), dort steht auch die Gütemessung mit Kontrolle
+ *     (WM0 282/282 = 1,0000 gegen Verwürfelungsmedian 0,6028; über seltene
+ *     Texturgrößen zweitgerechnet 20/20 gegen Median 0,5500).
  *
- * Gemessene Vorarbeit für F11b (world-fieldtbl-probe, 2026-08-11): die real
- * belegten `textureId`-Werte sind LÜCKENLOS 0…281 (WM0, 282 Werte), 0…7 (WM2)
- * und 0…3 (WM3). Eine Tabelle für F11b muss also genau so viele Einträge
- * haben, indexpositioniert ab 0.
+ * Ohne Tabelle bleibt das alte Verhalten: `resolveTriangleUv` gibt `null`
+ * zurück, die Geometrie führt die ROHEN Bytes weiter — sichtbar falsch, aber
+ * ehrlich.
+ *
+ * Belegung (world-fieldtbl-probe, 2026-08-11): die real belegten
+ * `textureId`-Werte sind LÜCKENLOS 0…281 (WM0), 0…7 (WM2) und 0…3 (WM3) —
+ * WM0 nutzt also 282 der 390 Overworld-Plätze, 108 bleiben unbenutzt.
  */
 
 /** Texturmetadaten je `textureId` — Inhalt kommt aus F11b, nicht von hier. */

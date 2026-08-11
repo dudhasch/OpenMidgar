@@ -23,6 +23,31 @@ const TIME_AT = 36;
 const GIL_AT_2 = 2940;
 const TIME_AT_2 = 2944;
 
+// --- F24-B: Felder der neuen Menüansichten ----------------------------------
+// Auch diese Offsets stehen absichtlich noch einmal eigenständig hier.
+const PREVIEW_LOCATION_AT = 0x28;
+const PREVIEW_LOCATION_LEN = 32;
+const LOCATION_AT = 0x0f0c;
+const LOCATION_LEN = 24;
+const PARTY_MATERIA_AT = 0x077c;
+const PARTY_MATERIA_ENTRIES = 200;
+const MENU_VISIBLE_AT = 0x0bc0;
+const MENU_LOCKED_AT = 0x0bc2;
+const PHS_ALLOWED_AT = 0x10a4;
+const PHS_VISIBLE_AT = 0x10a6;
+const OPTIONS_AT = 0x10da;
+const BATTLE_SPEED_AT = 0x10d8;
+const BATTLE_MSG_SPEED_AT = 0x10d9;
+const FIELD_MSG_SPEED_AT = 0x10ec;
+const DISC_AT = 0x0ea4;
+/** Relativ zum Charakterrecord. */
+const CHAR_LIMIT_LEVEL = 0x0e;
+const CHAR_LIMIT_BAR = 0x0f;
+const CHAR_ROW = 0x20;
+const CHAR_LIMITS = 0x22;
+const CHAR_EXP = 0x3c;
+const CHAR_EXP_NEXT = 0x80;
+
 export interface FixtureCharacter {
   id: number;
   name: string;
@@ -36,6 +61,16 @@ export interface FixtureCharacter {
   armor?: number | undefined;
   accessory?: number | undefined;
   materia?: ReadonlyArray<{ id: number; ap: number }> | undefined;
+  /** 1…4; ohne Angabe 1. */
+  limitLevel?: number | undefined;
+  /** 0…255; 255 heißt „bereit". */
+  limitBar?: number | undefined;
+  /** Bitmaske der gelernten Limits (Bits 0,1,3,4,6,7,9). */
+  limitsLearned?: number | undefined;
+  /** 0xFF vorne, 0xFE hinten; ohne Angabe vorne. */
+  row?: number | undefined;
+  exp?: number | undefined;
+  expToNext?: number | undefined;
 }
 
 export interface FixtureSavemap {
@@ -51,6 +86,23 @@ export interface FixtureSavemap {
    * meldet statt es zu überlesen.
    */
   breakDuplicates?: boolean | undefined;
+
+  // --- F24-B ---------------------------------------------------------------
+  /** Ortsname in der laufenden Ablage (0x0F0C). Leer heißt „nicht eingetragen". */
+  location?: string | undefined;
+  /** Ortsname im Vorschaublock (0x0028). Ohne Angabe derselbe wie `location`. */
+  previewLocation?: string | undefined;
+  /** Materiavorrat der Gruppe. */
+  partyMateria?: ReadonlyArray<{ id: number; ap: number }> | undefined;
+  menuVisible?: number | undefined;
+  menuLocked?: number | undefined;
+  phsAllowed?: number | undefined;
+  phsVisible?: number | undefined;
+  options?: number | undefined;
+  battleSpeed?: number | undefined;
+  battleMessageSpeed?: number | undefined;
+  fieldMessageSpeed?: number | undefined;
+  disc?: number | undefined;
 }
 
 /** FF-Textkodierung: linearer ASCII-Versatz 0x20, Terminator 0xFF. */
@@ -94,6 +146,12 @@ export function composeSavemapSlot(spec: FixtureSavemap): Uint8Array {
       slot[at + 2] = (ap >> 8) & 0xff;
       slot[at + 3] = (ap >> 16) & 0xff;
     }
+    slot[base + CHAR_LIMIT_LEVEL] = (c.limitLevel ?? 1) & 0xff;
+    slot[base + CHAR_LIMIT_BAR] = (c.limitBar ?? 0) & 0xff;
+    slot[base + CHAR_ROW] = (c.row ?? 0xff) & 0xff;
+    view.setUint16(base + CHAR_LIMITS, (c.limitsLearned ?? 0) & 0xffff, true);
+    view.setUint32(base + CHAR_EXP, (c.exp ?? 0) >>> 0, true);
+    view.setUint32(base + CHAR_EXP_NEXT, (c.expToNext ?? 0) >>> 0, true);
   });
 
   for (let i = 0; i < 3; i++) {
@@ -113,6 +171,32 @@ export function composeSavemapSlot(spec: FixtureSavemap): Uint8Array {
   view.setUint32(TIME_AT, spec.playtimeSeconds >>> 0, true);
   view.setUint32(GIL_AT_2, spec.breakDuplicates ? (spec.gil + 1) >>> 0 : spec.gil >>> 0, true);
   view.setUint32(TIME_AT_2, spec.playtimeSeconds >>> 0, true);
+
+  // F24-B: Ortsname in beiden Ablagen. Ohne eigene Vorschaufassung tragen
+  // beide denselben Text — genau so, wie es der Bestand in 7 von 7 Fällen
+  // zeigt, in denen beide gefüllt sind.
+  slot.set(encodeName(spec.location ?? '', LOCATION_LEN), LOCATION_AT);
+  slot.set(encodeName(spec.previewLocation ?? spec.location ?? '', PREVIEW_LOCATION_LEN), PREVIEW_LOCATION_AT);
+
+  for (let i = 0; i < PARTY_MATERIA_ENTRIES; i++) {
+    const at = PARTY_MATERIA_AT + i * 4;
+    const e = spec.partyMateria?.[i];
+    slot[at] = (e?.id ?? 0xff) & 0xff;
+    const ap = e?.ap ?? 0xffffff;
+    slot[at + 1] = ap & 0xff;
+    slot[at + 2] = (ap >> 8) & 0xff;
+    slot[at + 3] = (ap >> 16) & 0xff;
+  }
+
+  view.setUint16(MENU_VISIBLE_AT, (spec.menuVisible ?? 0xffff) & 0xffff, true);
+  view.setUint16(MENU_LOCKED_AT, (spec.menuLocked ?? 0) & 0xffff, true);
+  view.setUint16(PHS_ALLOWED_AT, (spec.phsAllowed ?? 0) & 0xffff, true);
+  view.setUint16(PHS_VISIBLE_AT, (spec.phsVisible ?? 0) & 0xffff, true);
+  view.setUint16(OPTIONS_AT, (spec.options ?? 0) & 0xffff, true);
+  slot[BATTLE_SPEED_AT] = (spec.battleSpeed ?? 128) & 0xff;
+  slot[BATTLE_MSG_SPEED_AT] = (spec.battleMessageSpeed ?? 128) & 0xff;
+  slot[FIELD_MSG_SPEED_AT] = (spec.fieldMessageSpeed ?? 128) & 0xff;
+  slot[DISC_AT] = (spec.disc ?? 1) & 0xff;
 
   return slot;
 }

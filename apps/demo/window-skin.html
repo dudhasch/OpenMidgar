@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — Fensterschale: Regressionsvergleich</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1rem auto; max-width: 76rem; padding: 0 1rem; background: #16161c; color: #ddd; }
+    .stage { position: relative; width: 640px; height: 200px; background: #000; border: 1px solid #555; }
+    .overlay { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; pointer-events: none; }
+    /*
+     * ALTZUSTAND, wortwörtlich aus apps/demo/game.html vor der Umstellung.
+     * Diese Regel ist die Referenz des Vergleichs und darf sich nicht ändern.
+     */
+    .box-alt {
+      margin-bottom: 1.2rem; min-width: 50%; max-width: 92%;
+      background: linear-gradient(135deg, #0001b7 0%, #000188 45%, #000022 100%);
+      color: #fff;
+      border: 2px solid #c6c4c5; outline: 2px solid #7a7c7d;
+      box-shadow: inset 0 0 0 1px #313035;
+      border-radius: 4px;
+      padding: 6px 12px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 21px; line-height: 32px;
+      text-shadow: 1px 1px 0 #000;
+      white-space: pre-wrap;
+    }
+    /* NEUZUSTAND: nur Layout — alles Optische kommt aus @webmidgar/ui-window. */
+    .box-neu {
+      margin-bottom: 1.2rem; min-width: 50%; max-width: 92%;
+      white-space: pre-wrap;
+    }
+    #diff { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #202027; border: 1px solid #444; padding: .6rem; }
+    h2 { font-size: 1rem; margin: 1rem 0 .3rem; }
+    .modes { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .modes .stage { width: 300px; height: 130px; background: #204020; }
+  </style>
+</head>
+<body>
+  <h1>Fensterschale — Vorher/Nachher</h1>
+  <p>Links das alte, handgeschriebene CSS aus <code>game.html</code>; rechts dieselbe Box, gezeichnet
+     von <code>applyWindowSkin()</code> aus <code>@webmidgar/ui-window</code>. Der Vergleich unten
+     stellt jede berechnete CSS-Eigenschaft gegenüber.</p>
+  <div style="display:flex; gap:1rem; flex-wrap:wrap">
+    <div>
+      <h2>Vorher (CSS)</h2>
+      <div class="stage"><div class="overlay"><div class="box-alt" id="alt">Cloud
+Was ist hier los?</div></div></div>
+    </div>
+    <div>
+      <h2>Nachher (Paket)</h2>
+      <div class="stage"><div class="overlay"><div class="box-neu" id="neu">Cloud
+Was ist hier los?</div></div></div>
+    </div>
+  </div>
+
+  <h2>Berechnete Eigenschaften</h2>
+  <div id="diff">—</div>
+
+  <h2>WMODE-Darstellungsarten</h2>
+  <div class="modes" id="modes"></div>
+
+  <script type="module" src="/src/window-skin-demo.ts"></script>
+</body>
+</html>

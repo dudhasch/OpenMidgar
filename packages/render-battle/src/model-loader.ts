@@ -111,21 +111,21 @@ async function resolveNames(prefix: string, src: BattleEntrySource | ReadBattleE
   return [...new Set(namen)].sort();
 }
 
-export async function loadBattleModel(
+/**
+ * Geometrie und Texturen eines Präfixes in SUFFIXORDNUNG einsammeln —
+ * gemeinsamer Kern von Modell- und Bühnenlader. Der Unterschied zwischen
+ * beiden ist NUR das Skelett: Bühnenpräfixe haben keines (🟢 gemessen:
+ * 90/90 im Band `og`…`rr` mit boneCount 0), tragen aber dieselben `.p`- und
+ * TEX-Dateien und werden deshalb über denselben Pfad gelesen.
+ */
+async function collectParts(
   prefix: string,
   source: BattleEntrySource | ReadBattleEntry,
-): Promise<BattleModelFiles | null> {
-  const read: ReadBattleEntry = isSource(source) ? (n) => source.readBattleEntry(n) : source;
-
-  const skeletonName = prefix + SKELETON_SUFFIX;
-  const skeletonBytes = await read(skeletonName);
-  if (!skeletonBytes) return null;
-  const { skeleton } = parseBattleSkeleton(skeletonBytes, skeletonName);
-  if (!skeleton) return null;
-
+  read: ReadBattleEntry,
+): Promise<{ parts: MeshSource[]; textures: (TextureSource | null)[] }> {
   const parts: MeshSource[] = [];
   const textures: (TextureSource | null)[] = [];
-
+  const skeletonName = prefix + SKELETON_SUFFIX;
   for (const name of await resolveNames(prefix, source)) {
     if (name === skeletonName) continue; // Skelettplatz ist namensfest belegt.
     const bytes = await read(name);
@@ -142,6 +142,85 @@ export async function loadBattleModel(
     // Alles Übrige (gemessen: ausschließlich die `ab`/`da`-Animationsfamilie)
     // wird nicht angefasst.
   }
+  return { parts, textures };
+}
 
+export async function loadBattleModel(
+  prefix: string,
+  source: BattleEntrySource | ReadBattleEntry,
+): Promise<BattleModelFiles | null> {
+  const read: ReadBattleEntry = isSource(source) ? (n) => source.readBattleEntry(n) : source;
+
+  const skeletonName = prefix + SKELETON_SUFFIX;
+  const skeletonBytes = await read(skeletonName);
+  if (!skeletonBytes) return null;
+  const { skeleton } = parseBattleSkeleton(skeletonBytes, skeletonName);
+  if (!skeleton) return null;
+
+  const { parts, textures } = await collectParts(prefix, source, read);
   return { skeleton, parts, textures };
+}
+
+/**
+ * 🟢 **Bühnenband** (gemessen 2026-08-11, `battle-model-loader.rdtest.ts` und
+ * `battle-stage.rdtest.ts`): Von den 481 Präfixen in battle.lgp haben genau
+ * 90 ein leeres Skelett (boneCount 0, `ab` exakt 8 B, keine `da`-Datei). Sie
+ * liegen ZUSAMMENHÄNGEND als `og`…`rr` auf den Sortierplätzen 370…459 — das
+ * Band ist an beiden Seiten scharf begrenzt, es gibt keinen einzigen
+ * skelettlosen Präfix ausserhalb und keinen Skelettpräfix darin.
+ */
+export const STAGE_PREFIX_FIRST = 'og';
+export const STAGE_PREFIX_LAST = 'rr';
+export const STAGE_COUNT = 90;
+/** Sortierplatz des ersten Bühnenpräfixes — nur als Quervergleich belegt. */
+export const STAGE_BAND_FIRST_INDEX = 370;
+
+/**
+ * Das Bühnenband aus einer Präfixliste. Bewusst über den NAMENSBEREICH und
+ * nicht über den Sortierplatz: Ein Mod, der irgendwo ein Präfix einfügt,
+ * verschiebt die Plätze, aber nicht die Namen.
+ */
+export function stageBand(prefixes: readonly string[]): string[] {
+  return prefixes
+    .filter((p) => p >= STAGE_PREFIX_FIRST && p <= STAGE_PREFIX_LAST)
+    .slice()
+    .sort();
+}
+
+/**
+ * 🟢 **`location` → Bühnenpräfix** (gemessen an scene.bin, Belege in
+ * `battle-stage.rdtest.ts`): Das u16 am Anfang des Setup-Satzes einer
+ * Formation indiziert DIREKT in das Bühnenband. Der Wertebereich schöpft das
+ * Band exakt aus (0…89); die Kontrollen `location±1` verlassen es an genau
+ * einem Ende, eine verwürfelte Zuordnung löst zwar auch auf, trifft aber
+ * keine passende Bühne — deshalb steht neben der Quote die Abdeckung.
+ */
+export function stagePrefixForLocation(location: number, prefixes: readonly string[]): string | null {
+  const band = stageBand(prefixes);
+  if (!Number.isInteger(location) || location < 0 || location >= band.length) return null;
+  return band[location]!;
+}
+
+export interface BattleStageFiles {
+  /** Bühnenteile in Suffixordnung. Skelettlos — siehe `loadBattleStage`. */
+  parts: MeshSource[];
+  textures: (TextureSource | null)[];
+}
+
+/**
+ * Bühnenlader. Anders als beim Modell gibt es KEIN Skelett und damit keine
+ * Kompositionsregel: 🟢 gemessen tragen die Bühnenteile ihre Lage in den
+ * eigenen Vertexkoordinaten (Streuung der Teilmittelpunkte gegenüber der
+ * mittleren Teilgröße, siehe `battle-stage.rdtest.ts`). Die Bühne ist damit
+ * die blosse VEREINIGUNG ihrer Teile — kein Teil wird versetzt, gedreht oder
+ * skaliert. Fehlt das Präfix ganz, kommt `null`.
+ */
+export async function loadBattleStage(
+  prefix: string,
+  source: BattleEntrySource | ReadBattleEntry,
+): Promise<BattleStageFiles | null> {
+  const read: ReadBattleEntry = isSource(source) ? (n) => source.readBattleEntry(n) : source;
+  const { parts, textures } = await collectParts(prefix, source, read);
+  if (parts.length === 0) return null;
+  return { parts, textures };
 }

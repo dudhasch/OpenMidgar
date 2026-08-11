@@ -180,7 +180,14 @@ function bakeLighting(mesh: MeshSource, licht: ActorLighting): Uint8Array {
   return out;
 }
 
-function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting): THREE.Mesh {
+/**
+ * Ein `.p`-Mesh als Three-Objekt — Submesh-Gruppen, Texturen, Vertexfarben,
+ * Aufkleber-Versatz. Exportiert, weil die Kampfbühne (render-battle) DIESELBE
+ * Geometrie- und Texturkette benutzt, aber kein Skelett hat: sie braucht den
+ * Mesh-Bau ohne den Bone-Baum drumherum. Zwei Implementierungen desselben
+ * Materialaufbaus würden sonst unbemerkt auseinanderlaufen.
+ */
+export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(bundle.mesh.positions, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(bundle.mesh.normals, 3));

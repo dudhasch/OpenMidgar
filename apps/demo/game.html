@@ -22,34 +22,41 @@
     #dialogOverlay { display: none; position: absolute; left: 0; right: 0; bottom: 0; justify-content: center; pointer-events: none; }
     #dialogOverlay.visible { display: flex; }
     /*
-     * Fensteroptik nach Original-Vermessung (Steam-Referenz 2026-08-10):
-     * Bordüre außen 2px #7A7C7D, dann 2px #C6C4C5, innen 1px #313035,
-     * Ecken ~4px; Füllung Diagonalverlauf #0001B7 (oben links) → #000022
-     * (unten rechts); Text weiß mit 1px-Schatten (+1/+1), Zeilenhöhe 32px.
+     * Fensteroptik: NICHT mehr hier. Die am Original vermessenen Werte (F40)
+     * stehen als Daten in @webmidgar/ui-window und werden zur Laufzeit von
+     * applyWindowSkin() gesetzt — dieselbe Schale für Dialog, Menü und
+     * Kampf-HUD. Hier bleibt nur, was Layout ist.
+     * Regressionsvergleich alt/neu: apps/demo/window-skin.html
      */
     #dialogOverlay .box {
       margin-bottom: 1.2rem; min-width: 50%; max-width: 92%;
-      background: linear-gradient(135deg, #0001b7 0%, #000188 45%, #000022 100%);
-      color: #fff;
-      border: 2px solid #c6c4c5; outline: 2px solid #7a7c7d;
-      box-shadow: inset 0 0 0 1px #313035;
-      border-radius: 4px;
-      padding: 6px 12px;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      font-size: 21px; line-height: 32px;
-      text-shadow: 1px 1px 0 #000;
       white-space: pre-wrap;
     }
     #dialogOverlay .choice { padding-left: 1.2em; }
     #dialogOverlay .choice.sel { padding-left: 0; }
     #dialogOverlay .choice.sel::before { content: '▶ '; }
-    #menuOverlay { display: none; position: absolute; inset: 6% 8%; background: #000030ee; border: 2px solid #ddd; border-radius: 6px; padding: 1rem; color: #fff; overflow: auto; }
+    /*
+     * Menü: nur noch die Zeichenfläche. Fenster, Zeilen und Balken setzt der
+     * gemeinsame Maler absolut in Koordinaten der 640×480-Menüfläche (F40);
+     * die Optik kommt aus @webmidgar/ui-window. Die frühere Tabelle in
+     * Monospace mit eigenem Rand und eigenem Blau ist ersatzlos weg.
+     */
+    #menuOverlay {
+      display: none; position: absolute; left: 0; top: 0;
+      width: 640px; height: 480px; overflow: hidden;
+    }
     #menuOverlay.visible { display: block; }
-    #menuOverlay table { border-collapse: collapse; width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
-    #menuOverlay td { padding: .1rem .5rem; }
-    #battleOverlay { display: none; position: absolute; left: 0; right: 0; top: 0; justify-content: center; pointer-events: none; }
-    #battleOverlay.visible { display: flex; }
-    #battleOverlay .box { margin-top: .8rem; background: #300808dd; border: 2px solid #c66; border-radius: 6px; padding: .5rem 1rem; font-family: ui-monospace, monospace; font-size: 13px; color: #fff; white-space: pre; }
+    /*
+     * Kampf-HUD und Ergebnisbildschirm: nur die Zeichenfläche steht hier.
+     * Jeder einzelne Kasten wird von @webmidgar/ui-battle-hud absolut in
+     * Koordinaten der 640×480-Renderfläche gesetzt (am Original vermessen,
+     * F40 + Nachmessung) — hier steht bewusst keine Farbe und keine Kante.
+     */
+    #battleOverlay, #resultOverlay {
+      display: none; position: absolute; left: 0; top: 0;
+      width: 640px; height: 480px; overflow: hidden; pointer-events: none;
+    }
+    #battleOverlay.visible, #resultOverlay.visible { display: block; }
     .controls-help { font-family: ui-monospace, monospace; font-size: 12px; color: #999; }
   </style>
 </head>
@@ -69,11 +76,13 @@
       <div class="stage">
         <canvas id="view" width="640" height="480"></canvas>
         <div id="dialogOverlay"><div class="box" id="dialogBox"></div></div>
-        <div id="battleOverlay"><div class="box" id="battleBox"></div></div>
-        <div id="menuOverlay"><div id="menuBox"></div></div>
+        <div id="battleOverlay"></div>
+        <div id="resultOverlay"></div>
+        <div id="menuOverlay"></div>
       </div>
       <p class="controls-help">
         WASD/Pfeile bewegen · Enter/Leertaste OK · Esc abbrechen · M Menü · Tab Fahrzeug (Welt) ·
+        T Weltkarten-Darstellung (Textur/Terrain/Region) ·
         F9 Field↔Welt (Ersatz, solange echte Einstiegspunkte 🔴 offen sind)
       </p>
     </div>

@@ -156,15 +156,29 @@ export function placeFormation(formation: BattleFormation): PlacedActor[] {
 }
 
 /**
- * 🔵 Party-Standardpositionen: gegenüber der Gegner-Mehrheitsseite
- * (Battle-z = +3200, Boden y = 0), gestaffelt in x — bis Partypositionen
- * aus Realdaten belegt sind.
+ * 🔵 Party-Standardpositionen. In scene.bin steht KEINE Partyposition — die
+ * Aufstellung der eigenen Reihe ist Sache der Engine. Statt eine Zahl zu
+ * erfinden, wird die Gegnerseite gespiegelt; deren Lage ist gemessen
+ * (2414 belegte Plätze, `battle-vollbild.rdtest.ts`, 2026-08-11):
+ *
+ *  - Tiefe z: Median **−1700** (10 %-Quantil −3500, 90 % +1700) — die Gegner
+ *    stehen mehrheitlich auf der −z-Seite. Die Party bekommt daher +1700.
+ *  - Seite x: Median **0**, 10 %/90 % bei **∓1200** — die Staffelung quer zur
+ *    Blickachse beträgt im Bestand also rund 1200 Einheiten je Platz. Genau
+ *    dieser Wert wird für den Abstand der Partyplätze übernommen.
+ *  - Höhe y: 0 (Boden; 91,8 % aller Gegnerplätze liegen exakt dort).
+ *
+ * Damit ist die Regel zwar weiterhin eine Ersatzregel, aber ihre beiden
+ * Zahlen sind aus den Daten abgeleitet und nicht geraten.
  */
+export const PARTY_ROW_DEPTH = 1700;
+export const PARTY_SLOT_SPACING = 1200;
+
 export function placeParty(count: number): [number, number, number][] {
   const out: [number, number, number][] = [];
   for (let i = 0; i < count; i++) {
-    const x = (i - (count - 1) / 2) * 1200;
-    out.push(battleToScene([Math.round(x), 0, 3200]));
+    const x = (i - (count - 1) / 2) * PARTY_SLOT_SPACING;
+    out.push(battleToScene([Math.round(x), 0, PARTY_ROW_DEPTH]));
   }
   return out;
 }

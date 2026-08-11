@@ -56,6 +56,17 @@ export function parseBattleSkeleton(bytes: Uint8Array, asset: string): ParseSkel
  * 354/354 gegen den Szenenbestand; ⚠️ die id+1-Kontrolle ist im dichten
  * Namensraum blind — die Arithmetik stützt sich zusätzlich auf den
  * S32-Sichtnachweis).
+ *
+ * 🟡 **Offener Nebenbefund (K5-Sichtprüfung, 2026-08-11).** Beim Rendern
+ * vollständiger Kämpfe fiel auf: **14 der 370 Gegnerpräfixe tragen weniger
+ * als 20 Dreiecke**, und zehn davon liegen ZUSAMMENHÄNGEND am Bandanfang
+ * (`aa`…`aj`, dazu `ap`, `bx`, `fi`, `iy`). Diese Präfixe rendern als eine
+ * einzelne flache Fläche. Zwei Deutungen sind möglich und keine ist
+ * gemessen: (a) es sind echte Platzhalter im Originalbestand, (b) die
+ * Basis-26-Zuordnung hat am Bandanfang einen Versatz. Für die frühen Szenen
+ * ist das sichtbar — Szene 0 und 1 liefern dadurch flache Gegner. Der
+ * Befund gehört zur Gegnerzuordnung, nicht zur Party (K4) oder zur Bühne
+ * (K5), und wird hier nur festgehalten, damit er nicht verloren geht.
  */
 export function enemyModelPrefix(enemyTypeId: number): string {
   return String.fromCharCode(97 + Math.floor(enemyTypeId / 26)) + String.fromCharCode(97 + (enemyTypeId % 26));

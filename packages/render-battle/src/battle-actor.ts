@@ -26,6 +26,42 @@ export interface BuiltBattleActor {
   unassignedParts: number[];
 }
 
+/**
+ * 🟢 **Maßstab der Kampfmodelle: 1 — kein Umrechnungsfaktor.**
+ *
+ * F37 hat für FELD-Modelle den Bezugswert 512/4 = 128 kalibriert (Feldfiguren
+ * werden also um 4 vergrößert). Ob im Kampf derselbe Bezug gilt, war eine
+ * eigene Frage: Die Szene trägt kein `modelScale`-Feld. Gemessen
+ * (`battle-vollbild.rdtest.ts`, 2026-08-11):
+ *
+ *  - Bindpose-Höhen der Spielermodelle: Median **852** (Cloud 817, Tifa 836,
+ *    Barret 972, Red XIII 898) — über alle 11 Spielerpräfixe 694…1630.
+ *  - Bindpose-Höhen der 369 Gegnermodelle: Median **1370** (10 % 646,
+ *    90 % 5329). Spieler und Gegner liegen also in DERSELBEN Größenordnung;
+ *    ein Faktor, der nur auf die Party wirkte, würde sie auseinanderreißen.
+ *  - Aufstellungsabstände in scene.bin: Median **1803** über 2545 Platzpaare.
+ *    Eine 850 hohe Figur bei 1800 Platzabstand ist genau die Dichte, die die
+ *    Originalaufnahme zeigt.
+ *
+ * KONTROLLE (Maßstabssweep 1 / 4 / 8 / 16 im selben Kampf, durch die
+ * Szenenkamera gerendert): Schon bei Faktor 4 füllt ein einzelner
+ * Party-Unterarm ein Drittel des Bildes und die Figuren ragen über die
+ * Bühnenfläche hinaus; bei 8 und 16 ist die Bühne unsichtbar. Nur Faktor 1
+ * stellt Party und Gegner gemeinsam auf die Arena. Der Feldfaktor 4 gilt im
+ * Kampf also NICHT.
+ */
+export const BATTLE_MODEL_SCALE = 1;
+
+/**
+ * ⚠️ **Nur EINE Basiswendung je Objekt.** Modelle gehen über
+ * `buildActor` → `root.quaternion = sceneBasisMatrix()` (ADR-009, Rx(−90°))
+ * plus Wurzel-Frame-X 270° und liegen damit BEREITS in der Battle-Lage
+ * Rx(180°) = `battleToScene`. Wer auf ein fertiges Modell zusätzlich
+ * `battleToScene` anwendet, dreht um weitere 180° und legt jede Figur flach
+ * (Rx(90°) statt Rx(180°)) — genau dieser Fehler ist beim ersten Vollbild
+ * aufgetreten. `battleToScene` gehört an Plätze, Bühne und Kamera; an Modelle
+ * NICHT.
+ */
 export function buildBattleActor(name: string, files: BattleModelFiles): BuiltBattleActor {
   const skeleton = battleSkeletonToSkeleton(files.skeleton, name);
   const { boneToPart, unassignedParts } = assignPartsToBones(files.skeleton, files.parts.length);
@@ -41,9 +77,15 @@ export function buildBattleActor(name: string, files: BattleModelFiles): BuiltBa
 }
 
 /**
- * 🔵 Ersatz-Stage: Bodenplatte + Horizontfarbe. Das Stage-Format des Originals
- * ist unbelegt (Formatlage 🔴) — das hier ist die dokumentierte
- * Ersatzdarstellung, keine Rekonstruktion.
+ * 🔵 Ersatz-Stage: Bodenplatte + Horizontfarbe.
+ *
+ * ⚠️ **Nur noch Rückfall.** Der Satz „das Stage-Format des Originals ist
+ * unbelegt" stimmt seit K5 nicht mehr: Die 90 Bühnen liegen als skelettlose
+ * `.p`/TEX-Präfixe `og`…`rr` in battle.lgp und werden von
+ * `loadBattleStage` + `buildBattleStage` echt geladen. Diese Funktion bleibt
+ * ausschließlich für den Fall, dass zu einer `location` kein Präfix auflösbar
+ * ist (im Originalbestand kommt das nicht vor — 1000/1000 Formationen lösen
+ * auf), und als Ersatz in Tests ohne Realdaten.
  */
 export function buildSubstituteStage(radius = 12000): THREE.Group {
   const group = new THREE.Group();

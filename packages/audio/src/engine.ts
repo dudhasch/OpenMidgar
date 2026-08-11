@@ -16,7 +16,25 @@ import type { LoopPlan } from './ogg-tags.js';
  */
 
 export type AudioCommand =
-  | { kind: 'play-music'; trackId: number; loop: LoopPlan; fadeInTicks?: number | undefined }
+  | {
+      kind: 'play-music';
+      trackId: number;
+      loop: LoopPlan;
+      fadeInTicks?: number | undefined;
+      /**
+       * Einmal abspielen statt schleifen (Siegfanfare, Jingles).
+       *
+       * 🔵 Architekturentscheidung: Das Kommandomodell kannte bisher nur
+       * Endlosschleifen, weshalb die Fanfare in der Demo dauerhaft lief. Der
+       * Schalter sitzt am Kommando und nicht am `LoopPlan`, weil der Plan
+       * beschreibt, WO die Schleife läge — nicht, ob es eine geben soll. Der
+       * Plan bleibt damit auch für Einmaltitel auswertbar (Diagnose).
+       *
+       * 🟡 Ungemessen bleibt, was das Original NACH der Fanfare tut. Hier endet
+       * die Quelle still; wer einen Folgetitel will, setzt ihn selbst ab.
+       */
+      once?: boolean | undefined;
+    }
   | { kind: 'stop-music'; fadeOutTicks?: number | undefined }
   | { kind: 'push-music' }
   | { kind: 'pop-music' }

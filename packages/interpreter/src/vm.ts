@@ -135,6 +135,29 @@ export function stepInstruction(
   const srcValue = (bank: number, raw: number, word: boolean): number =>
     bank === 0 ? raw : readBank(rt, bank, raw & 0xff, word);
   const jumpForward = (argOffset: number, offset: number): number => ctx.ip + 1 + argOffset + offset;
+  /**
+   * 🔴 **Belegter Defekt, hier bewusst NICHT behoben (2026-08-11).**
+   *
+   * Rückwärtssprünge rechnen bei uns vom Operandenbyte (`ip + 1 − offset`).
+   * Gemessen über alle 5286 im Instruktionsstrom erreichten `JMPB` des
+   * Bestands landet dieses Ziel in **39 Fällen (0,7 %)** auf einer
+   * Instruktionsgrenze; die Alternative `ip − offset` (vom Opcode-Byte aus) in
+   * **5266 (99,6 %)**. Bei `JMPBL` ist es 0/97 gegen 97/97.
+   *
+   * Die Messanlage ist an den Vorwärtssprüngen geeicht und besteht dort: Für
+   * `JMPF` trifft die heutige Rechnung `ip + 1 + offset` 7809/7876 (99,1 %),
+   * die um eins verschobene nur 974/7876. Vorwärts ist also richtig, rückwärts
+   * um genau ein Byte daneben.
+   *
+   * **Warum es trotzdem stehen bleibt:** Der Fixture-Assembler
+   * (`tools/fixture-gen/src/script-assembler.ts`) erzeugt Rücksprünge mit
+   * derselben Konvention. Beide Seiten sind konsistent falsch, alle Fixtures
+   * laufen. Eine einseitige Korrektur hier würde jede Fixture-Schleife
+   * zerreißen; die Korrektur gehört in einem Zug mit dem Assembler gemacht,
+   * und der liegt außerhalb dieses Reviers. Als Posten geführt in
+   * `docs/ROADMAP-OFFENE-POSTEN.md`. Auf **echten** Field-Daten läuft die VM
+   * mit dieser Rechnung heute in fast jedem Rücksprung ins Leere.
+   */
   const jumpBackward = (argOffset: number, offset: number): number => ctx.ip + 1 + argOffset - offset;
 
   switch (op) {
@@ -445,6 +468,43 @@ export function stepInstruction(
       const banks = u8(0);
       const param = srcValue(banks >> 4, u8(1), false);
       rt.bgStates[param] = 0;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.BGROL:
+    case OP.BGROL2: {
+      // Operanden: Bankpaar, param — dieselbe Form wie BGCLR (Länge 2 belegt,
+      // s. `opcodes.ts`). BGROL schaltet die Zustandsmaske der Gruppe einen
+      // Schritt weiter, BGROL2 einen zurück.
+      //
+      // 🟡 **Entscheidung, die die Daten nicht hergeben.** „Weiterschalten"
+      // kann zweierlei heißen:
+      //   (a) die Maske um ein Bit **rotieren**, oder
+      //   (b) auf den nächsten Zustand springen, der im Hintergrund dieses
+      //       Fields **tatsächlich vorkommt** (Lücken überspringen).
+      // In `hyou4` — dem einzigen Field, das nach den Längenkorrekturen BGROL
+      // belegt benutzt — fallen beide zusammen, weil dort die Bits 0…5
+      // lückenlos belegt sind. Korpusweit gibt es zwar 195 Kachelgruppen in
+      // 109 Fields mit Lücke oder ohne Bit 0, aber **keine davon liegt in
+      // einem Field, das BGROL benutzt**. Die Frage ist an diesem Bestand
+      // also nicht entscheidbar; gewählt ist (a) als die einfachere Regel.
+      // Für (b) läge der Weg bereit: `berechneAnfangsBgStates` in `state.ts`
+      // liest die vorkommenden Zustände je Parameter bereits aus dem Bundle,
+      // und die Sitzungsoption `initialBgStates` reicht sie herein.
+      //
+      // 🟢 **Die Rotationsbreite ist gemessen, nicht geraten: 8 Bit.** Der
+      // Zustandsoperand von BGON/BGOFF nimmt über 9684 Literalvorkommen genau
+      // die Werte 0…7 an und nie mehr; die Kachelzustände sind die acht
+      // Zweierpotenzen 1…128. Der Zustandsraum einer Gruppe ist damit exakt
+      // ein Byte breit.
+      //
+      // Eine leere Maske bleibt leer: Ohne gesetzten Zustand gibt es nichts
+      // weiterzuschalten, und ein Zustand aus dem Nichts wäre geraten.
+      const banks = u8(0);
+      const param = srcValue(banks >> 4, u8(1), false);
+      const alt = (rt.bgStates[param] ?? 0) & 0xff;
+      rt.bgStates[param] =
+        op === OP.BGROL ? ((alt << 1) | (alt >>> 7)) & 0xff : ((alt >>> 1) | (alt << 7)) & 0xff;
       ctx.ip = next;
       return { kind: 'continue' };
     }

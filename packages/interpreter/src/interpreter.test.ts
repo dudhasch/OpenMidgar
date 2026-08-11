@@ -715,6 +715,126 @@ describe('Anfangszustand der Hintergrundmasken (F35-1)', () => {
   });
 });
 
+describe('BGROL / BGROL2 (0xE2 / 0xE3)', () => {
+  const bgLauf = (bytes: number[], initial?: Record<number, number>): FieldRuntime => {
+    const rt = new FieldRuntime(prepare([{ name: 'bg', entries: [0] }], new Uint8Array(bytes)), {
+      mainLoop: false,
+      ...(initial ? { initialBgStates: initial } : {}),
+    });
+    rt.start();
+    rt.run(3);
+    return rt;
+  };
+
+  it('BGROL schaltet die Maske ein Bit weiter, BGROL2 eines zurück', () => {
+    expect(bgLauf([0xe2, 0x00, 0x01, 0x00], { 1: 1 }).state.bgStates).toEqual({ 1: 2 });
+    expect(bgLauf([0xe2, 0x00, 0x01, 0x00], { 1: 4 }).state.bgStates).toEqual({ 1: 8 });
+    expect(bgLauf([0xe3, 0x00, 0x01, 0x00], { 1: 8 }).state.bgStates).toEqual({ 1: 4 });
+  });
+
+  it('die Rotation ist 8 Bit breit und schließt sich zum Ring', () => {
+    // Gemessen: der Zustandsoperand von BGON/BGOFF nimmt korpusweit genau die
+    // Werte 0…7 an (9684 Literalvorkommen), die Kachelzustände sind die acht
+    // Zweierpotenzen. Deshalb rotiert die Maske über ein Byte, nicht über 32.
+    expect(bgLauf([0xe2, 0x00, 0x01, 0x00], { 1: 128 }).state.bgStates).toEqual({ 1: 1 });
+    expect(bgLauf([0xe3, 0x00, 0x01, 0x00], { 1: 1 }).state.bgStates).toEqual({ 1: 128 });
+  });
+
+  it('eine leere Maske bleibt leer — ein Zustand aus dem Nichts wäre geraten', () => {
+    expect(bgLauf([0xe2, 0x00, 0x01, 0x00], { 1: 0 }).state.bgStates).toEqual({ 1: 0 });
+    expect(bgLauf([0xe2, 0x00, 0x07, 0x00]).state.bgStates).toEqual({ 7: 0 });
+  });
+
+  it('BGROL und BGON greifen auf dieselbe Maske zu', () => {
+    // BGON(param 1, Zustand 2) setzt Bit 2 (= 4), BGROL macht daraus 8.
+    const rt = bgLauf([0xe0, 0x00, 0x01, 0x02, 0xe2, 0x00, 0x01, 0x00]);
+    expect(rt.state.bgStates).toEqual({ 1: 8 });
+  });
+
+  it('das Bankpaar adressiert den Parameter wie bei BGCLR', () => {
+    // Hohes Nibble = Bank des Parameters. Bank 3, Adresse 0x10 trägt 9.
+    const rt = new FieldRuntime(
+      prepare(
+        [{ name: 'bg', entries: [0] }],
+        // SETBYTE Bank3[0x10] ← 9 ; BGROL(banks=0x30, param-Adresse 0x10)
+        new Uint8Array([0x80, 0x30, 0x10, 0x09, 0xe2, 0x30, 0x10, 0x00]),
+      ),
+      { mainLoop: false, initialBgStates: { 9: 2 } },
+    );
+    rt.start();
+    rt.run(3);
+    expect(rt.state.bgStates).toEqual({ 9: 4 });
+  });
+
+  /**
+   * **Die Abnahme der Längenkorrektur 0xE2 = 2.**
+   *
+   * Rohbytes der Spanne [2137, 2213) aus `hyou4` (Field-Bytecode, reine
+   * Zahlenangabe über ein Dateiformat). Die Spanne enthält fünf 0xE2- und vier
+   * 0xE3-Blöcke, die byteidentisch gebaut sind: `24 07 00 · eX 00 01`. Unter
+   * der alten Länge 1 für 0xE2 zerfielen die e2-Blöcke in `BGROL 00 / REQ /
+   * RET`, während die e3-Blöcke sauber lasen — dieselbe Konstruktion, zwei
+   * Lesarten in EINER Spanne. Dieser Test hält fest, dass beide jetzt gleich
+   * lesen; bricht er, ist die Längenkorrektur zurückgedreht worden.
+   */
+  it('hyou4 [2137,2213) liest sich in beiden Blöcken gleich', () => {
+    const bytes = [
+      0xe4, 0x00, 0x01, 0xe0, 0x00, 0x01, 0x00, 0x00, 0xe1, 0x00, 0x01, 0x01, 0xe0, 0x00, 0x01,
+      0x00, 0x24, 0x07, 0x00, 0xe2, 0x00, 0x01, 0x24, 0x07, 0x00, 0xe2, 0x00, 0x01, 0x24, 0x07,
+      0x00, 0xe2, 0x00, 0x01, 0x24, 0x07, 0x00, 0xe2, 0x00, 0x01, 0x24, 0x07, 0x00, 0xe2, 0x00,
+      0x01, 0x24, 0x07, 0x00, 0xe3, 0x00, 0x01, 0x24, 0x07, 0x00, 0xe3, 0x00, 0x01, 0x24, 0x07,
+      0x00, 0xe3, 0x00, 0x01, 0x24, 0x07, 0x00, 0xe3, 0x00, 0x01, 0x24, 0x07, 0x00, 0x12, 0x41,
+      0x00,
+    ];
+    const laenge = (op: number): number => {
+      const l = IMPL_OPERAND_LEN[op] ?? SKIP_OPERAND_LEN[op];
+      if (l === undefined) throw new Error(`keine Länge für 0x${op.toString(16)}`);
+      return l;
+    };
+    // Linearer Durchlauf: Die Spanne muss exakt auf ihrem Ende schließen.
+    const grenzen: number[] = [];
+    let pc = 0;
+    while (pc < bytes.length) {
+      grenzen.push(pc);
+      pc += 1 + laenge(bytes[pc]!);
+    }
+    expect(pc).toBe(bytes.length);
+
+    // Die neun Rollblöcke liegen auf gleichem Raster: Jeder beginnt drei Byte
+    // hinter einem WAIT(7) und ist selbst drei Byte lang.
+    const rollen = grenzen.filter((p) => bytes[p] === 0xe2 || bytes[p] === 0xe3);
+    expect(rollen).toHaveLength(9);
+    expect(rollen.filter((p) => bytes[p] === 0xe2)).toHaveLength(5);
+    expect(rollen.filter((p) => bytes[p] === 0xe3)).toHaveLength(4);
+    // Operanden identisch, Abstände identisch — das ist die Gleichheit der
+    // beiden Lesarten in Zahlen.
+    for (const p of rollen) {
+      expect([bytes[p + 1], bytes[p + 2]]).toEqual([0x00, 0x01]);
+      expect(bytes[p - 3]).toBe(0x24); // WAIT davor
+      expect(grenzen).toContain(p - 3);
+    }
+    const abstaende = new Set(rollen.slice(1).map((p, i) => p - rollen[i]!));
+    expect([...abstaende]).toEqual([6]);
+
+    // Gegenprobe: Unter der alten Länge 1 zerfällt genau die e2-Hälfte. Der
+    // Rumpf ab 2145 (Index 8) träfe dann schon bei Index 24 auf ein RET —
+    // mitten im ersten Durchlauf, vor dem JMPB am Ende.
+    const alt = (op: number): number => (op === 0xe2 ? 1 : laenge(op));
+    const g2: number[] = [];
+    let q = 8;
+    while (q < bytes.length) {
+      g2.push(q);
+      q += 1 + alt(bytes[q]!);
+    }
+    const erstesRet = g2.find((p) => bytes[p] === 0x00)!;
+    expect(erstesRet).toBe(24); // absolut 2161 — die Schleife stürbe im ersten Lauf
+    // Unter Länge 2 ist das erste RET des Rumpfes die Marke HINTER dem JMPB.
+    const g3 = grenzen.filter((p) => p >= 8);
+    expect(g3.find((p) => bytes[p] === 0x00)).toBe(75); // absolut 2212
+    expect(bytes[g3[g3.length - 2]!]).toBe(0x12); // JMPB unmittelbar davor
+  });
+});
+
 describe('Serialisierung & Replay (Akzeptanzkriterien S6)', () => {
   function dialogueFixture(): { prepared: PreparedScript } {
     const asm = new ScriptAssembler();

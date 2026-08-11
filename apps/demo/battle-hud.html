@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>WebMidgar — Kampf-HUD und Ergebnisbildschirm gegen die Referenz</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 1rem auto; max-width: 90rem; padding: 0 1rem; background: #16161c; color: #ddd; }
+    h1 { font-size: 1.2rem; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin: .8rem 0; }
+    /*
+     * Genau die Renderfläche des Originals: 640×480, nichts skaliert. Jeder
+     * Kasten darin wird von @webmidgar/ui-battle-hud absolut gesetzt — hier
+     * steht bewusst keine Farbe und keine Kante des HUD.
+     */
+    .surface {
+      position: relative; width: 640px; height: 480px; overflow: hidden;
+      background: #0b0d10; border: 1px solid #555; image-rendering: pixelated;
+    }
+    .surface .stage { position: absolute; inset: 0; }
+    figure { margin: 0; }
+    figcaption { font-family: ui-monospace, monospace; font-size: 12px; color: #9ad; margin-bottom: .3rem; }
+    #report { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; background: #202027; border: 1px solid #444; padding: .6rem; overflow-x: auto; }
+    button { font: inherit; padding: .25rem .7rem; margin-right: .4rem; }
+  </style>
+</head>
+<body>
+  <h1>Kampf-HUD (K6) · Ergebnisbildschirm (N7) — Sichtnachweis</h1>
+  <p>
+    Beide Flächen sind 640×480 und unskaliert, also direkt gegen die
+    Originalaufnahmen in <code>apps/demo/.shots/ref/</code> vergleichbar
+    (<code>20260810223335_1.jpg</code>, <code>…223327_1.jpg</code>,
+    <code>…223347_1.jpg</code>). Die Zahlen sind dieselben wie in den
+    Referenzbildern, damit die Spalten direkt übereinanderliegen.
+  </p>
+  <div class="row">
+    <button id="toggleAtb">ATB voll / laufend umschalten</button>
+    <button id="toggleCmd">Kommandofenster ein/aus</button>
+    <button id="toggleFloat">Trefferzahl zeigen</button>
+  </div>
+  <div class="row">
+    <figure>
+      <figcaption>Kampf-HUD — Referenz: …223335_1.jpg (ATB grün) / …223327_1.jpg (ATB sandgelb, Kommandofenster)</figcaption>
+      <div class="surface"><div class="stage" id="hud"></div></div>
+    </figure>
+    <figure>
+      <figcaption>Ergebnisbildschirm — Referenz: …223347_1.jpg und …223349_1.jpg (LEVEL UP)</figcaption>
+      <div class="surface"><div class="stage" id="result"></div></div>
+    </figure>
+  </div>
+  <div id="report">—</div>
+  <script type="module" src="/src/battle-hud-demo.ts"></script>
+</body>
+</html>

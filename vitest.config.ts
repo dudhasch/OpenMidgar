@@ -6,6 +6,7 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@webmidgar/atlas': r('./packages/atlas/src/index.ts'),
       '@webmidgar/formats-lgp': r('./packages/formats-lgp/src/index.ts'),
       '@webmidgar/formats-field': r('./packages/formats-field/src/index.ts'),
       '@webmidgar/convert': r('./packages/convert/src/index.ts'),
@@ -15,6 +16,8 @@ export default defineConfig({
       '@webmidgar/formats-save': r('./packages/formats-save/src/index.ts'),
       '@webmidgar/dialog': r('./packages/dialog/src/index.ts'),
       '@webmidgar/menu': r('./packages/menu/src/index.ts'),
+      '@webmidgar/ui-window': r('./packages/ui-window/src/index.ts'),
+      '@webmidgar/ui-battle-hud': r('./packages/ui-battle-hud/src/index.ts'),
       '@webmidgar/app-shell': r('./packages/app-shell/src/index.ts'),
       '@webmidgar/modding': r('./packages/modding/src/index.ts'),
       '@webmidgar/audio': r('./packages/audio/src/index.ts'),

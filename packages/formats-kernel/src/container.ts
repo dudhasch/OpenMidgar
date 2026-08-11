@@ -1,4 +1,5 @@
 import { kdiag, type KernelDiagnostic, type KernelDiagnosticCode } from './diagnostics.js';
+import { gunzip } from './gzip.js';
 
 /**
  * `kernel.bin` — Containerformat der Spieldatenbasis (S13).
@@ -131,31 +132,6 @@ async function scoreDeclaredLengths(bytes: Uint8Array, reader: HeaderReader): Pr
     offset = start + compressed;
   }
   return hits;
-}
-
-async function gunzip(chunk: Uint8Array): Promise<Uint8Array> {
-  // Kopie in einen eigenen ArrayBuffer: `subarray` kann auf einen
-  // SharedArrayBuffer zeigen, den Blob nicht annimmt.
-  const owned = new Uint8Array(chunk.length);
-  owned.set(chunk);
-  const stream = new Blob([owned]).stream().pipeThrough(new DecompressionStream('gzip'));
-  const parts: Uint8Array[] = [];
-  let total = 0;
-  const reader = stream.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const part = value as Uint8Array;
-    parts.push(part);
-    total += part.length;
-  }
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
 }
 
 export async function parseKernelContainer(bytes: Uint8Array, asset: string): Promise<KernelContainer | null> {

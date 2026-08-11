@@ -199,6 +199,43 @@ describe('MusicRuntime: Quelle mit echten Schleifenmarken', () => {
     expect(rt.planOf(6)?.reason).toBe('whole-file');
   });
 
+  it('once: true schaltet die Schleife ab — die Marken bleiben trotzdem gesetzt', async () => {
+    const { rt, ctx } = runtimeWith({ 5: TAGGED_SHORT });
+    await rt.resume();
+    await rt.dispatch({
+      kind: 'play-music',
+      trackId: 5,
+      loop: { start: 0, end: null, reason: 'whole-file' },
+      once: true,
+    });
+
+    const src = ctx.sources[0]!;
+    expect(src.loop).toBe(false);
+    // Die Marken bleiben — sie sind Diagnosedaten, keine Schaltlogik. Genau
+    // dieselbe Quelle ohne `once` schleift (Test darüber), das ist die Kontrolle.
+    expect(src.loopStart).toBeCloseTo(3, 6);
+    expect(src.loopEnd).toBeCloseTo(10, 6);
+    expect(src.started).toEqual({ when: 0, offset: 0 });
+  });
+
+  it('pop-music holt einen Einmaltitel NICHT als Einmaltitel zurück — der Keller schleift immer', async () => {
+    const { rt, ctx } = runtimeWith({ 5: TAGGED_SHORT, 6: UNTAGGED });
+    await rt.resume();
+    await rt.dispatch({ kind: 'play-music', trackId: 5, loop: { start: 0, end: null, reason: 'whole-file' } });
+    await rt.dispatch({ kind: 'push-music' });
+    await rt.dispatch({
+      kind: 'play-music',
+      trackId: 6,
+      loop: { start: 0, end: null, reason: 'whole-file' },
+      once: true,
+    });
+    expect(ctx.sources[1]!.loop).toBe(false);
+
+    await rt.dispatch({ kind: 'pop-music' });
+    expect(ctx.sources[2]!.loop).toBe(true);
+    expect(rt.current?.trackId).toBe(5);
+  });
+
   it('der Plan wird aus der DEKODIERTEN Länge gerechnet, nicht aus dem Kommandofeld', async () => {
     const { rt } = runtimeWith({ 7: TAGGED });
     await rt.resume();

@@ -4,12 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
+    "@webmidgar/atlas": "*",
     "@webmidgar/convert": "*",
+    "@webmidgar/menu": "*",
+    "@webmidgar/render-battle": "*",
+    "@webmidgar/render-world": "*",
     "@webmidgar/fixture-gen": "*",
     "@webmidgar/formats-field": "*",
     "@webmidgar/formats-lgp": "*",
     "@webmidgar/io": "*",
     "@webmidgar/render-field": "*",
+    "@webmidgar/ui-battle-hud": "*",
+    "@webmidgar/ui-window": "*",
     "@webmidgar/walkmesh": "*",
     "three": "^0.185.1"
   }

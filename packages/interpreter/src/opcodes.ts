@@ -206,6 +206,22 @@ export const OP = {
   BGON: 0xe0,
   BGOFF: 0xe1,
   BGCLR: 0xe4,
+  /**
+   * Hintergrund-Zustand weiterschalten (`BGROL`) bzw. zurückschalten
+   * (`BGROL2`). Operanden: Bankpaar, param — dieselbe Form wie `BGCLR`.
+   *
+   * ✅ **Operandenlänge 2 belegt (2026-08-11)** — nicht über eine Quote,
+   * sondern über die Struktur EINER Spanne. Der Beleg steht ausführlich unten
+   * am Eintrag `0xE2` in `SKIP_OPERAND_LEN`; kurz:
+   * `hyou4` [2137, 2213) enthält fünf `0xE2`- und vier `0xE3`-Blöcke, die
+   * byteidentisch gebaut sind (`24 07 00 . eX 00 01`). `0xE3` steht bei uns
+   * seit jeher auf 2. Unter Länge 1 für `0xE2` zerfallen die fünf ersten
+   * Blöcke in `BGROL 00 / REQ 24 07 / RET`, die vier letzten bleiben
+   * `BGROL2(00,01) / WAIT(7)` — **dieselbe Konstruktion, zwei Lesarten in
+   * derselben Spanne**. Unter Länge 2 lesen beide gleich.
+   */
+  BGROL: 0xe2,
+  BGROL2: 0xe3,
 } as const;
 
 export type OpCategory =
@@ -310,6 +326,10 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.BGON]: 3,
   [OP.BGOFF]: 3,
   [OP.BGCLR]: 2,
+  // 0xE2 wandert 1 → 2 (Beleg: Strukturargument `hyou4`, s. u.), 0xE3 behält
+  // seine 2 und wechselt nur die Tabelle, weil beide jetzt ausgeführt werden.
+  [OP.BGROL]: 2,
+  [OP.BGROL2]: 2,
 };
 
 /**
@@ -335,6 +355,23 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
  * Skip-Pfad brauchbar, taugen aber nicht als Beleg für die Recordstruktur —
  * wer einen dieser Opcodes implementiert, muss seine Länge einzeln prüfen.
  *
+ * ⚠️ **Diese Tabelle ist KEIN Fixpunkt** (Korrektur 2026-08-11). Bis dahin
+ * stand in der Roadmap, ein erneuter Abstieg übernehme nichts mehr. Das
+ * stimmt nicht: Seit O9 sind vier Längen gewandert (0x16–0x19, 0x52,
+ * 0xA6/0xA7), und jede davon verschiebt den Instruktionsstrom und damit die
+ * Gütelandschaft aller übrigen Opcodes. Der Abstieg schlägt heute **acht**
+ * Änderungen vor und erreicht damit 99,9417 % statt 99,9230 %.
+ *
+ * **Übernommen wurde davon keine** — sieben scheitern am O9-Kriterium
+ * (mehrdeutiges Maximum oder Gleichstand), die achte (0x7f, 2 → 6) an einer
+ * neu gemessenen **Rauschschwelle**: An 68 eingefrorenen, unabhängig gedeckten
+ * Opcodes schlägt in 5 Fällen (7,4 %) eine nachweislich FALSCHE Länge die
+ * richtige — mit einem Vorsprung von median 1 und maximal 3 Spannen (`MUL`
+ * 0x89 um 2, `IFUWL` 0x19 um 3). Ein Vorsprung von einer Spanne, wie ihn 0x7f
+ * bietet, ist damit exakt das Rauschniveau dieser Gütefunktion. Wer die
+ * Tabelle künftig anfasst, muss diese Schwelle überbieten.
+ * Messanlage: `tools/realdata-scan/src/oplen-abstieg-nachlese.rdtest.ts`.
+ *
  * **S-DEADSKIP bereinigt (2026-08-11).** Bis dahin standen 17 Opcodes in
  * BEIDEN Tabellen (0x02, 0x03, 0x49, 0x4A, 0x60, 0x70, 0x71, 0xA0–0xA5, 0xA8,
  * 0xB3, 0xF0, 0xF1). Diese Einträge waren **unerreichbar**, weil `vm.ts`
@@ -344,84 +381,211 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
  * jemand nur eine der beiden Tabellen pflegt. `interpreter.test.ts` erzwingt
  * die Disjunktheit jetzt und prüft zugleich, dass beide Tabellen zusammen mit
  * KAWAI alle 256 Opcodes abdecken.
+ *
+ * ---
+ *
+ * 🟡 **Kostenfreies Referenzbündel (2026-08-11): 53 Längen auf den
+ * Referenzwert gesetzt.** Herkunft: Referenz (Makou-Längentafel), Status:
+ * Annahme.
+ *
+ * **Warum überhaupt.** Eine falsche Länge erzeugt nicht nur an ihrem eigenen
+ * Opcode Unsinn, sondern verschiebt den Instruktionsstrom aller nachfolgenden
+ * Bytes einer Spanne. So entstehen **Phantom-Fundstellen**: Bytes, die auf
+ * einer scheinbaren Instruktionsgrenze landen und wie ein Opcode aussehen.
+ * Genau daran ist die BGROL-Auswertung gescheitert (Lehrstück weiter unten).
+ * Wer Fundstellen zählt, zählt zuerst die Fehler seiner eigenen Längentabelle.
+ *
+ * **Das Kriterium.** Für jeden Opcode, an dem Ist- und Referenzwert
+ * auseinanderlaufen, wurde der Referenzwert **isoliert** auf die Ist-Tabelle
+ * gesetzt und der Spannen-Abschluss über alle 48.041 Spannen neu gemessen.
+ * Aufgenommen wurde, was den Abschluss **nicht verschlechtert**. Das trifft
+ * auf 53 von 85 Abweichungen zu; gemeinsam angewandt geht der Abschluss von
+ * **48.004/31/6** (geschlossen/Überlauf/unbekannt) auf **48.006/29/6** — zwei
+ * Spannen besser, zwei Überläufe weniger, kein neuer Abbruch. Für die beiden
+ * namentlich geprüften Einzelfälle 0x42 MPRA2 (0 → 5) und 0xCE MMBLK (0 → 1)
+ * ist die Wirkung isoliert wie gemeinsam **bitgleich** 48.004/31/6.
+ *
+ * ⚠️ **Kostenfreiheit ist KEIN Beleg für Richtigkeit.** Der Abschluss ist an
+ * seltenen Opcodes blind: Ein Opcode mit acht Vorkommen kann jede Länge
+ * tragen, ohne die Kennzahl zu bewegen. Übernommen wird hier also nicht
+ * „was gemessen richtig ist", sondern „was die Referenz sagt, ohne dass unsere
+ * Messung widerspricht". Der Gewinn ist die **gesenkte Phantomrate**, nicht
+ * neues Wissen. Alle 53 sind deshalb 🟡 und nicht 🟢; wer einen davon
+ * implementiert, muss seine Länge einzeln belegen — genau wie zuvor.
+ *
+ * **Was NICHT übernommen wurde** und warum:
+ *  - **30 Abweichungen verschlechtern den Abschluss** (0x04 PREQ −72, 0x05
+ *    PRQSW −14, 0x09 SPLIT −13, 0x20 MINIGAME −6, 0x31 IFKEYON −6, 0xFB MVCAM
+ *    −3, 0xFE CHMST −3, …). Sie bleiben auf dem Ist-Wert.
+ *  - **0x20 MINIGAME** zusätzlich wegen einer harten Schranke: In vier Spannen
+ *    steht der Opcode nur 6 Byte vor dem Spannenende; die Referenzlänge 10
+ *    passt dort nicht hinein.
+ *  - **0xDF MPPAL / 0xEF ADPAL2** halten die Abschlusszahl, tauschen aber
+ *    einen Abbruch gegen einen Überlauf (31/6 → 32/5). Das ist keine
+ *    schlechtere Zahl, aber eine Verschiebung — sie bleiben draußen, bis
+ *    jemand sie einzeln ansieht.
+ *
+ * Nachgerechnet wird das Bündel in
+ * `tools/realdata-scan/src/bgrol-belegkette.rdtest.ts`.
  */
 export const SKIP_OPERAND_LEN: Readonly<Record<number, number>> = {
   0x04: 3, 0x05: 1, 0x06: 2, 0x08: 1, 0x09: 0, 0x0a: 0,
-  0x0b: 0, 0x0c: 0, 0x0d: 0, 0x0e: 1, 0x0f: 0, 0x1a: 0, 0x1b: 0, 0x1c: 0,
-  // 🔴 **0x20 MINIGAME bleibt auf 0 — die Referenzlänge 10 ist WIDERLEGT.**
-  // Vorkommen: **134-mal in 78 Fields**. Die Referenz führt Gesamtlänge 11
-  // (⇒ Operand 10). Dagegen steht eine harte, statistikfreie Schranke: In vier
-  // Spannen (Field `ancnt1`) liegt der Opcode nur **6 Byte** vor dem
-  // Spannenende, in vier weiteren 8 Byte. Zehn Operandenbytes passen dort
-  // nicht hinein — die Länge kann höchstens 5 sein. Passend dazu verliert der
-  // Spannen-Abschluss auf der betroffenen Teilmenge (110/118 mit Länge 0 gegen
-  // 104/118 mit Länge 10), und die Grenzplausibilität bleibt für JEDE der 13
-  // geprüften Längen unter dem Kontrollniveau (Bestwert 0,14 ± 0,14 bei
-  // Länge 8; Instruktionsanfänge liegen bei 1,23).
+  0x0b: 0, 0x0c: 0, 0x0d: 0, 0x0e: 1, 0x0f: 0, 0x1a: 0, 0x1b: 2, 0x1c: 0,
+  // 🔴 **0x20 MINIGAME bleibt auf 0. Die Referenzlänge 10 ist widerlegt — aber
+  // zwei der früheren Begründungen dafür sind es inzwischen auch.**
   //
-  // Damit ist der Posten **nicht** stillschweigend zu übernehmen. Er bleibt
-  // ein offener Befund: Entweder ist 0x20 in diesem Bestand nicht durchgängig
-  // MINIGAME, oder die Instruktion ist variabel lang. Beides ist mit dem
-  // Field-Bytecode allein nicht zu entscheiden. **Wirkung heute:** Steht die
-  // Länge zu niedrig, führt die VM Operandenbytes als Instruktionen aus; steht
-  // sie zu hoch, überspringt sie echte. Solange keine der beiden Varianten
-  // belegt ist, bleibt der gemessen bessere Ist-Wert stehen.
-  0x1d: 4, 0x1e: 0, 0x1f: 0, 0x20: 0, 0x21: 0, 0x22: 1, 0x23: 4, 0x25: 8,
-  // 🔴 0x27 BGMOVIE: 36 Vorkommen in 13 Fields. Referenz 1, Ist 0. Der
-  // Spannen-Abschluss ist indifferent (18/18 für 0, 1 und 2), die
-  // Grenzplausibilität stellt die Referenz SCHLECHTER als den Ist-Wert
-  // (−1,56 gegen −0,43; Bestwert 0,27 ± 0,54 bei Länge 2, also Rauschen).
-  // Zusätzlich gilt die harte Schranke Länge ≤ 3 (kleinster Abstand zum
-  // Spannenende 4). Nicht übernommen.
-  0x26: 1, 0x27: 0, 0x29: 0, 0x2a: 1, 0x2b: 1, 0x2c: 0, 0x2d: 6, 0x2e: 1,
-  0x2f: 8, 0x30: 3, 0x31: 2, 0x32: 1, 0x33: 1, 0x34: 1, 0x35: 3, 0x36: 4,
-  0x37: 7, 0x38: 0, 0x39: 0, 0x3a: 4, 0x3b: 4, 0x3c: 0, 0x3d: 0, 0x3e: 0,
-  0x3f: 0, 0x41: 1, 0x42: 0, 0x43: 1, 0x44: 0, 0x45: 0, 0x46: 0, 0x47: 4,
-  0x4b: 0, 0x4c: 7, 0x4d: 1, 0x4e: 14, 0x4f: 10, 0x51: 3,
-  0x53: 1, 0x54: 1, 0x55: 1, 0x56: 3, 0x57: 8, 0x58: 4, 0x59: 2, 0x5a: 1,
-  0x5b: 3, 0x5c: 5, 0x5d: 0, 0x5e: 7, 0x5f: 1, 0x61: 10, 0x62: 4,
-  0x63: 5, 0x64: 5, 0x65: 0, 0x66: 8, 0x67: 0, 0x68: 8, 0x69: 6, 0x6a: 6,
-  0x6b: 8, 0x6c: 0, 0x6d: 3, 0x6e: 2, 0x6f: 9, 0x72: 1,
-  0x73: 3, 0x74: 3, 0x75: 7, 0x7e: 1, 0x7f: 2, 0x9a: 1, 0x9b: 0, 0x9c: 1,
-  0x9d: 1, 0x9e: 0, 0x9f: 0,
+  // *Was steht:* Die Referenz führt Gesamtlänge 11 (⇒ Operand 10). Der
+  // Spannen-Abschluss über alle Längen 0…12 lautet bestandsweit 48006, 48007,
+  // 48003, 48004, 48006, 48003, 48003, 48002, 47998, 47996, **48001**, 47998,
+  // 47994. Länge 10 liegt fünf Spannen unter dem Ist-Wert und damit über der
+  // gemessenen Rauschschwelle von 3 Spannen — sie ist verworfen. Das Maximum
+  // (48007 bei Länge 1) liegt eine Spanne über dem Ist-Wert, also **unter**
+  // der Schwelle: auch die Alternative ist nicht belegt.
+  //
+  // *Was gefallen ist — 1: die „harte Schranke".* Sie lautete: In vier Spannen
+  // steht der Opcode nur 6 Byte vor dem Spannenende, also passen zehn
+  // Operandenbytes physisch nicht. Der Byte-Kontext zeigt jedoch, dass
+  // **sieben der acht engsten Stellen** direkt hinter der Folge `31 00` liegen
+  // — das ist `IFKEYON` mit Tastenmaske `0x2000`, und das `0x20` ist deren
+  // hohes Byte, kein Opcode. Sichtbar wird es nur, weil unsere Tabelle 0x31
+  // mit Operandenlänge 2 führt statt der Referenzlänge 3. Setzt man 0x31 auf
+  // 3, verschwinden diese Stellen — dafür sinkt der Abschluss um 6 Spannen.
+  // Zwei Messungen, die sich widersprechen; keine schlägt die andere. Der
+  // engste Abstand beträgt dann noch 7 Byte, die Schranke lautet also
+  // ≤ 7 statt ≤ 5 — die Referenzlänge 10 bleibt in beiden Lesarten draußen.
+  //
+  // *Was gefallen ist — 2: „der Opcode kommt vor".* Hier stand, 118 verankerte
+  // Fundstellen in 79 Fields belegten, dass die Suchmenge für einen späteren
+  // Minispiel-Einstieg nicht leer sei. Beides trägt nicht mehr: Unter der
+  // korrigierten Längentabelle sind es nur noch **67 in 49 Fields** (die
+  // Hälfte waren Phantome der eigenen Tabelle), und die fehlende
+  // Negativkontrolle liefert das Urteil: Dekodiert man dieselben Spannen ab
+  // `spanStart + k` — ein nachweislich falsches Raster, in dem jede Fundstelle
+  // per Konstruktion ein Phantom ist —, meldet die verankerte Zählung
+  // **1318 / 652 / 717** Fundstellen für k = 1/2/3. Eine Zählung, die auf
+  // falschem Raster zehnmal so viel findet wie auf richtigem, belegt kein
+  // Vorkommen. Sie ist bestenfalls eine obere Schranke.
+  //
+  // **Wirkung heute:** Steht die Länge zu niedrig, führt die VM Operandenbytes
+  // als Instruktionen aus; steht sie zu hoch, überspringt sie echte. Solange
+  // keine Variante belegt ist, bleibt der gemessen beste Ist-Wert stehen.
+  // Messanlage: `tools/realdata-scan/src/minigame-laengenfrage.rdtest.ts`.
+  0x1d: 4, 0x1e: 0, 0x1f: 0, 0x20: 0, 0x21: 1, 0x22: 4, 0x23: 4, 0x25: 8,
+  // 🟡 0x27 BGMOVIE: 0 → 1 (Referenz). Gehört zum Korrekturbündel unten. Die
+  // frühere Ablehnung stützte sich auf die Grenzplausibilität, die die
+  // Referenz schlechter stellte als den Ist-Wert (−1,56 gegen −0,43) — deren
+  // Bestwert lag jedoch bei 0,27 ± 0,54 und damit selbst im Rauschen. Eine
+  // Gütefunktion, die an dieser Stelle nicht trennt, darf hier auch nicht
+  // ablehnen. Die harte Schranke Länge ≤ 3 ist mit 1 eingehalten.
+  0x26: 1, 0x27: 1, 0x29: 0, 0x2a: 1, 0x2b: 1, 0x2c: 0, 0x2d: 6, 0x2e: 1,
+  0x2f: 9, 0x30: 3, 0x31: 2, 0x32: 1, 0x33: 1, 0x34: 1, 0x35: 3, 0x36: 4,
+  0x37: 7, 0x38: 5, 0x39: 0, 0x3a: 5, 0x3b: 3, 0x3c: 0, 0x3d: 0, 0x3e: 0,
+  0x3f: 0, 0x41: 4, 0x42: 5, 0x43: 1, 0x44: 0, 0x45: 4, 0x46: 0, 0x47: 4,
+  0x4b: 1, 0x4c: 0, 0x4d: 1, 0x4e: 0, 0x4f: 4, 0x51: 5,
+  0x53: 1, 0x54: 1, 0x55: 2, 0x56: 6, 0x57: 6, 0x58: 4, 0x59: 4, 0x5a: 4,
+  0x5b: 3, 0x5c: 7, 0x5d: 0, 0x5e: 7, 0x5f: 0, 0x61: 1, 0x62: 4,
+  0x63: 5, 0x64: 5, 0x65: 0, 0x66: 8, 0x67: 0, 0x68: 8, 0x69: 1, 0x6a: 6,
+  0x6b: 8, 0x6c: 0, 0x6d: 3, 0x6e: 2, 0x6f: 9, 0x72: 2,
+  0x73: 3, 0x74: 3, 0x75: 7, 0x7e: 1, 0x7f: 2, 0x9a: 1, 0x9b: 4, 0x9c: 5,
+  0x9d: 6, 0x9e: 6, 0x9f: 0,
   0xa9: 5, 0xaa: 1, 0xab: 3, 0xac: 0,
   0xad: 5, 0xae: 2, 0xaf: 2, 0xb0: 4, 0xb1: 4, 0xb2: 3, 0xb4: 5,
-  0xb5: 3, 0xb6: 1, 0xb7: 2, 0xb8: 4, 0xb9: 3, 0xba: 2, 0xbb: 4, 0xbc: 4,
-  0xbd: 3, 0xbe: 3, 0xbf: 1, 0xc0: 9, 0xc1: 7, 0xc2: 14, 0xc3: 10, 0xc4: 0,
-  0xc5: 2, 0xc6: 2, 0xc7: 1, 0xc8: 1, 0xc9: 1, 0xca: 3, 0xcb: 2, 0xcc: 0,
-  0xcd: 2, 0xce: 0, 0xcf: 0, 0xd0: 13, 0xd1: 1, 0xd2: 1, 0xd3: 1, 0xd4: 0,
-  0xd5: 1, 0xd6: 1, 0xd7: 2, 0xd8: 2, 0xd9: 2, 0xda: 0, 0xdb: 2, 0xdc: 3,
-  // 0xe0/0xe1/0xe4 sind seit F22/BGON implementiert (IMPL_OPERAND_LEN).
+  0xb5: 5, 0xb6: 1, 0xb7: 3, 0xb8: 4, 0xb9: 3, 0xba: 2, 0xbb: 4, 0xbc: 4,
+  0xbd: 3, 0xbe: 0, 0xbf: 1, 0xc0: 10, 0xc1: 7, 0xc2: 14, 0xc3: 11, 0xc4: 0,
+  0xc5: 2, 0xc6: 2, 0xc7: 1, 0xc8: 1, 0xc9: 1, 0xca: 3, 0xcb: 2, 0xcc: 2,
+  0xcd: 2, 0xce: 1, 0xcf: 1, 0xd0: 12, 0xd1: 1, 0xd2: 1, 0xd3: 1, 0xd4: 9,
+  0xd5: 9, 0xd6: 3, 0xd7: 2, 0xd8: 2, 0xd9: 0, 0xda: 14, 0xdb: 1, 0xdc: 3,
+  // 0xe0…0xe4 (BGON, BGOFF, BGROL, BGROL2, BGCLR) sind vollständig
+  // implementiert und stehen in `IMPL_OPERAND_LEN`.
   //
-  // 🔴 **0xE2 BGROL / 0xE3 BGROL2 bleiben bewusst auf dem Skip-Pfad.** Die
-  // Referenz führt für beide Operandenlänge 2 (banks, param). Gemessen
-  // (2026-08-11, 702 Fields): 0xE2 kommt **13-mal in 6 Fields** vor, 0xE3
-  // **5-mal in 2 Fields**. Keine der drei Gütefunktionen belegt eine Länge:
-  // Der Spannen-Abschluss ist indifferent (9/9 bzw. 2/2 für jede geprüfte
-  // Länge), die Grenzplausibilität liefert bei n=9 einen Bestwert von
-  // 0,83 ± 0,68 — Rauschen —, und die Struktursonde widerlegt die
-  // Referenzaufteilung sogar: Das Parameterbyte an @+2 trifft nur in **11,1 %**
-  // (1/9) einen Parameter, den dasselbe Field per BGON/BGOFF schaltet, gegen
-  // ein Kontrollniveau von **22,2 %** bei den BGON-Parametern eines FREMDEN
-  // Fields. Die Variante @+1 trifft zu 11,1 %, davon 7 von 9 mit dem Wert 0
-  // (Nullwerte bestehen den Test trivial). Zum Vergleich das Niveau eines
-  // belegten Opcodes: BGON trifft an derselben Stelle **98,0 %** (1963/2003)
-  // gegen 46,7 % fremd.
+  // ═══════════════════════════════════════════════════════════════════════
+  // 📕 **Lehrstück: wie 0xE2 BGROL fälschlich für „nicht implementierbar"
+  // erklärt wurde (2026-08-11, am selben Tag widerlegt).**
   //
-  // Damit ist BGROL **nicht implementierbar**: Ohne belegte Operandenlage wäre
-  // jede Rotationssemantik geraten und würde die BGON-Maske derselben Gruppe
-  // beschädigen — schlimmer als der heutige Übersprung. Was fehlt, ist ein
-  // Bestand mit mehr Vorkommen, nicht eine weitere Auswertung dieses hier.
-  0xdd: 0, 0xde: 0, 0xdf: 0, 0xe2: 1, 0xe3: 2,
-  0xe5: 4, 0xe6: 4, 0xe7: 4, 0xe8: 4, 0xe9: 9, 0xea: 14, 0xeb: 1, 0xec: 3,
-  0xed: 3, 0xee: 0, 0xef: 0, 0xf2: 6, 0xf3: 3, 0xf4: 3,
-  // 🔴 0xFB MVCAM: 55 Vorkommen in 23 Fields. Referenz 1, Ist 0. Die Referenz
-  // schneidet auf der Grenzplausibilität zwar besser ab als der Ist-Wert
-  // (−0,46 gegen −1,42), bleibt aber weit unter dem Kontrollniveau echter
-  // Instruktionsanfänge (1,23) — kein Kandidat erreicht es (Bestwert −0,11 bei
-  // Länge 3). Der Spannen-Abschluss verschlechtert sich sogar (31/38 gegen
-  // 34/38). Nicht übernommen; harte Schranke Länge ≤ 3.
-  0xf5: 1, 0xf6: 1, 0xf7: 8, 0xf8: 1, 0xf9: 0, 0xfa: 2, 0xfb: 0, 0xfc: 1,
+  // Hier stand bis zur Gegenprobe ein langer Block, der BGROL für
+  // unentscheidbar erklärte. Die Kette ist erhalten, weil jedes Glied ein
+  // eigener, wiederholbarer Fehler ist:
+  //
+  //  1. **Zirkuläre Eichung.** Der erste Durchgang verglich das Byte an
+  //     BGROL@+2 mit der Menge der Parameter, die BGON im selben Field
+  //     schaltet (98,0 % „Treffer"). Diese Vergleichsmenge wird AUS BGON
+  //     gebaut — BGON trifft sie per Konstruktion zu ~100 %. Ein Maßstab, den
+  //     der Eichkörper definiert, misst nichts.
+  //  2. **Richtige Ersatzeichung, falsche Fundstellenmenge.** Der Wechsel auf
+  //     BGCLR (0xE4) als Eichkörper war methodisch zulässig. Nur waren von den
+  //     neun BGROL-„Fundstellen" **acht Phantome**: Sie entstanden, weil
+  //     falsche Längen an ganz anderen Opcodes (u. a. 0x42 MPRA2 und 0xCE
+  //     MMBLK) den Instruktionsstrom verschoben, bis irgendwo ein 0xE2-Byte
+  //     auf einer scheinbaren Instruktionsgrenze lag. Nach den kostenfreien
+  //     Längenkorrekturen (s. Bündel oben) fällt 0xE2 von **13 Vorkommen in
+  //     6 Fields auf 6 in 2 Fields**: fünf in `hyou4`, eine in `subin_2b`.
+  //     `blackbg4`, `del1`, `frcyo` und `junair2` verschwinden vollständig —
+  //     sie waren Phantome. 0xE3 fällt von 5 auf 4, alle in `hyou4`. Die
+  //     verbleibende `subin_2b`-Stelle trägt Bankbyte 0xFF und Parameter 190,
+  //     zu dem das Field keine Kachelgruppe hat; sie ist ihrerseits verdächtig.
+  //  3. **n=1 als „disjunkte Intervalle" verkauft.** Die BGCLR-Eichung wurde
+  //     auf 620 Vorkommen gerechnet, die BGROL-Zahl auf 8 — und beide Mengen
+  //     lagen auf verschiedenen Fields. Gepaart auf denselben Fields hatte die
+  //     Eichung n=1. Verglichen wurden also 273 fremde Fields gegen 5.
+  //  4. **Pseudoreplikation.** Vier der neun Stellen lagen in `frcyo` als
+  //     byteidentische Kopien derselben Sequenz. Sie sind eine Beobachtung,
+  //     nicht vier.
+  //  5. **Der Fehlschluss selbst.** Aus „meine Gütefunktionen trennen hier
+  //     nicht" wurde „die Frage ist nicht entscheidbar". Das ist die
+  //     eigentliche Lehre, und sie gilt über diesen Opcode hinaus:
+  //     **Wenn eine Gütefunktion blind ist, folgt daraus, mit einem anderen
+  //     Mittel zu entscheiden — nicht, dass es nichts zu entscheiden gibt.**
+  //
+  // Entschieden hat am Ende die **Struktur einer einzigen Spanne**, keine
+  // Quote: `hyou4` [2137, 2213) enthält
+  //
+  //     e4 00 01 · e0 00 01 00 · 00 · e1 00 01 01 · e0 00 01 00
+  //     dann NEUNMAL (24 07 00 · eX 00 01) — fünfmal eX = e2, viermal eX = e3
+  //     · 12 41 · 00
+  //
+  // Die neun Blöcke sind byteidentisch gebaut. 0xE3 stand bei uns schon immer
+  // auf Länge 2, also lesen sich die vier e3-Blöcke sauber als
+  // `BGROL2(00,01) / WAIT(7)`. Unter der alten Länge 1 für 0xE2 zerfallen die
+  // fünf e2-Blöcke dagegen in `BGROL 00 / REQ 24 07 / RET` — dieselbe
+  // Konstruktion, zwei Lesarten in EINER Spanne. Unter Länge 2 lesen beide
+  // gleich. Das ist statistikfrei und braucht keine Fundstellenmenge.
+  //
+  // Zwei unabhängige Stützen:
+  //  - Der Rumpf ab 2145 schließt mit `JMPB 0x41` bei 2210. Unter Länge 2 ist
+  //    das erste `RET` des Rumpfes die Marke bei 2212, also HINTER dem
+  //    Rücksprung — eine geschlossene Schleife aus fünf Vorwärts- und vier
+  //    Rückwärtsrollen, je durch `WAIT(7)` getrennt. Unter Länge 1 liegt das
+  //    erste `RET` bei 2161, mitten im ersten Durchlauf: die Schleife wäre gar
+  //    keine.
+  //  - `hyou4` trägt zu param 1 die Zustände 0, 1, 2, 4, 8, 16, 32 — eine
+  //    Sechsbild-Animation, genau das, was fünf Vorwärts- und vier
+  //    Rückwärtsrollen durchschalten.
+  //
+  // 🟡 Die Fundstelle in `subin_2b` bleibt ein offener Rest: Passt die Länge,
+  // müsste sie wie die übrigen Bankbyte 0x00 tragen. Sie ist als einzelne
+  // Stelle kein Gegenbeleg gegen die Spannenstruktur, aber sie ist auch nicht
+  // erklärt.
+  //
+  // Was `junonr2` beisteuert (`junonr2-bgfluss-probe.rdtest.ts`): Das Field
+  // schreibt die Rotation, die BGROL in einer Instruktion tut, von Hand als
+  // Paarfolge BGOFF(param, s) → BGON(param, s+1) über s = 0…7 aus. Das stützt
+  // die *Semantik* und sagt über die Operandenlänge nichts — diese Trennung
+  // war schon damals richtig und bleibt es.
+  // ═══════════════════════════════════════════════════════════════════════
+  0xdd: 0, 0xde: 0, 0xdf: 0,
+  0xe5: 4, 0xe6: 4, 0xe7: 4, 0xe8: 6, 0xe9: 9, 0xea: 9, 0xeb: 4, 0xec: 3,
+  0xed: 3, 0xee: 7, 0xef: 0, 0xf2: 6, 0xf3: 1, 0xf4: 1,
+  // 🔴 0xFB MVCAM: 55 roh / 38 verankert in 23 Fields. Referenz 1, Ist 0. Die
+  // Referenz schneidet auf der Grenzplausibilität zwar besser ab als der
+  // Ist-Wert (−0,46 gegen −1,42), bleibt aber weit unter dem Kontrollniveau
+  // echter Instruktionsanfänge (1,23) — kein Kandidat erreicht es (Bestwert
+  // −0,11 bei Länge 3). Der Spannen-Abschluss verschlechtert sich sogar
+  // (31/38 gegen 34/38). Nicht übernommen; harte Schranke Länge ≤ 3.
+  //
+  // Nachlese 2026-08-11, alle Längen 0…12: 34, 31, 35, 34, 31, 32, 34, 33, 30,
+  // 34, 30, 29, 28 von 38. Bester Wert bei Länge 2 — mit **einer** Spanne
+  // Vorsprung vor dem Ist-Wert und damit unter der Rauschschwelle (3 Spannen).
+  0xf5: 1, 0xf6: 1, 0xf7: 3, 0xf8: 1, 0xf9: 0, 0xfa: 2, 0xfb: 0, 0xfc: 1,
   0xfd: 0, 0xfe: 3, 0xff: 1,
 };
 

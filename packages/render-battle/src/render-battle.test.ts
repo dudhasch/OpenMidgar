@@ -139,11 +139,12 @@ describe('Aufstellung aus den Szenendaten', () => {
     expect(placed[1]!.scenePosition).toEqual([700, -0, 1400]);
     expect(placed[1]!.row).toBe(1);
     // Party-Ersatzpositionen (🔵): ebenfalls Bodenhöhe 0, gegenüber der
-    // Gegner-Mehrheitsseite (Battle-z +3200 → Szene-z −3200).
+    // Gegner-Mehrheitsseite. K3 hat die Tiefe von 3200 (gesetzt) auf die
+    // gemessene Spiegelung des Gegner-Medians −1700 gebracht, s. placeParty.
     const partyPos = placeParty(2);
     expect(partyPos.length).toBe(2);
     expect(partyPos[0]![1]).toBe(-0);
-    expect(partyPos[0]![2]).toBe(-3200);
+    expect(partyPos[0]![2]).toBe(-1700);
     // Gegner und Party liegen auf GEGENÜBERLIEGENDEN Seiten der Tiefenachse.
     expect(Math.sign(placed[0]!.scenePosition[2])).not.toBe(Math.sign(partyPos[0]![2]));
   });

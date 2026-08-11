@@ -49,7 +49,23 @@ export const CHAR = {
   statsCount: 6,
   name: 16,
   nameLen: 12,
-  /** 🟡 Ausrüstungskennungen — Wertebereiche passen, einzeln belegt sind sie nicht. */
+  /**
+   * Ausrüstungskennungen — **Indizes in die jeweilige Kernel-Recordtabelle**,
+   * nicht Inventarkennungen. 0xFF heißt „nichts ausgerüstet".
+   *
+   * 🟢 **Die Waffe (0x1C) ist über eine Kreuzprobe belegt** (F24-B, V2): Für
+   * jeden der 49 spielbaren Charakterrecords der echten Spielstände ist in der
+   * `equipableBy`-Maske des so bestimmten Waffenrecords das Bit der eigenen
+   * Figurenkennung gesetzt — 49/49. Kontrollniveau ist dieselbe Prüfung mit
+   * der Kennung der nächsten Figur: **0/49**. Die Probe ist trennscharf, weil
+   * **keine** der 128 Waffen die Vollmaske trägt (0/128).
+   *
+   * 🟡 Rüstung (0x1D) und Accessoire (0x1E) sind nur über den Wertebereich
+   * gestützt. Dieselbe Kreuzprobe kann sie nicht trennen: 30 der 32 Rüstungen
+   * tragen die Vollmaske, also trifft dort auch die verschobene Zuordnung
+   * 49/49. Das ist ein Befund über die Daten, kein Messfehler — und der Grund,
+   * warum hier 🟡 und nicht 🟢 steht.
+   */
   weapon: 28,
   armor: 29,
   accessory: 30,
@@ -65,11 +81,67 @@ export const CHAR = {
   mpBasis: 50,
   hpMax: 56,
   mpMax: 58,
-  /** 16 Materiaplätze à 4 Byte (Kennung + 3 Byte Erfahrung). 🟡 Aufteilung. */
+  /**
+   * 16 Materiaplätze à 4 Byte (Kennung + 3 Byte Erfahrung).
+   *
+   * 🟢 F24-B belegt, welche Plätze wohin gehören: Plätze 0…7 sitzen in der
+   * **Waffe**, 8…15 in der **Rüstung**. Über 141 belegte Plätze der echten
+   * Spielstände liegt kein einziger jenseits der Platzzahl, die das jeweils
+   * ausgerüstete Stück in `KERNEL.BIN` mitbringt (141/141). Kontrollniveau ist
+   * dieselbe Rechnung mit vertauschtem Waffen-/Rüstungsbezug: 120/141 (85,1 %).
+   */
   materia: 64,
   materiaSlots: 16,
   materiaEntryLen: 4,
+  /** Materiaplätze 0…7 gehören zur Waffe, 8…15 zur Rüstung (🟢, siehe oben). */
+  materiaWeaponSlots: 8,
+  /**
+   * 🟢 Limitstufe 1…4. Belegt: 63/63 benutzte Charakterrecords liegen im
+   * Bereich, die vier Nachbarspalten 0x0C/0x0D/0x0F/0x10 dagegen **0/63**.
+   */
+  limitLevel: 14,
+  /** 🟡 Limitbalken; 0xFF soll „bereit" heißen — der Wertebereich stützt das nicht allein. */
+  limitBar: 15,
+  /** 🟡 Statusflagge (0x00 normal). Im Bestand durchgehend 0 — nicht unterscheidbar. */
+  statusFlag: 31,
+  /**
+   * 🟢 Kampfreihe. Die Fremdquelle nennt hier zwei sich widersprechende
+   * Lesarten (0/1 gegen 0xFE/0xFF); die Messung entscheidet: Im Bestand kommen
+   * ausschließlich **0xFE und 0xFF** vor, also gilt die zweite.
+   */
+  row: 32,
+  /** 🟡 Fortschritt zur nächsten Stufe, 0…255. */
+  tnl: 33,
+  /**
+   * 🟢 Gelernte Limits als u16-Bitmaske. Die Maske ist **löchrig** — belegt
+   * sind nur die Bits {0,1,3,4,6,7,9} —, und genau das ist der Beleg: 63/63
+   * Records halten das Muster ein, die Nachbarspalten 0x20/0x21/0x23/0x24
+   * dagegen 0/0/45/49 von 63.
+   */
+  limitsLearned: 34,
+  /** 🟡 Zahl der Kämpfe, in denen die Figur mitgewirkt hat. */
+  kills: 36,
+  /**
+   * 🟢 Erfahrungspunkte (u32). Belegt über die Rangkonkordanz mit der Stufe:
+   * **1,000** über alle Charakterpaare mit verschiedener Stufe; Kontrollniveau
+   * ist dieselbe Rechnung mit rotierter Erfahrungsreihe (0,595).
+   */
+  exp: 60,
+  /** 🟡 Erfahrung bis zur nächsten Stufe (u32). */
+  expToNext: 128,
 } as const;
+
+/** Reihenwerte des Kampfsystems — 🟢 gemessen, siehe `CHAR.row`. */
+export const ROW_FRONT = 0xff;
+export const ROW_BACK = 0xfe;
+
+/**
+ * Bitpositionen der gelernten Limits (`CHAR.limitsLearned`). Die Lücken sind
+ * echt: Sieben Limitzeilen liegen in einem 16-Bit-Feld auf den Bits
+ * {0,1,3,4,6,7,9}. 🟢 Über die Lückentreue belegt (63/63 gegen 0/63 der
+ * Nachbarspalten).
+ */
+export const LIMIT_BITS: readonly number[] = [0, 1, 3, 4, 6, 7, 9];
 
 /** Partyaufstellung: drei Figurenkennungen, unmittelbar hinter dem Recordarray. */
 export const PARTY_OFFSET = CHARACTER_RECORD_BASE + CHARACTER_RECORD_COUNT * CHARACTER_RECORD_LEN;
@@ -86,6 +158,81 @@ export const PLAYTIME_OFFSET = 36;
 /** Zweitfassung in der Savemap; muss mit der ersten übereinstimmen. */
 export const GIL_OFFSET_SAVEMAP = 2940;
 export const PLAYTIME_OFFSET_SAVEMAP = 2944;
+
+/**
+ * 🟢 **Ortsname — der Befund, der die geratene Ortsanzeige ablöst (F24-B).**
+ *
+ * Auch der Ortsname steht zweimal im Slot: im Vorschaublock (0x0028, 32 Byte)
+ * und in der Savemap selbst (0x0F0C, 24 Byte), beide in FF7-Textkodierung mit
+ * Terminator 0xFF.
+ *
+ * **Messung** (Probe `menu-views-probe.rdtest.ts`, V1, alle 8 belegten Slots
+ * der Installation): Ein Sweep über **jeden** der 4340 Offsets sucht Stellen,
+ * an denen in allen Slots ein terminiertes, druckbares Namensfeld von
+ * mindestens vier Zeichen steht (ein komplett leeres Feld ist erlaubt und
+ * heißt „kein Ort eingetragen") und das über die Slots mindestens drei
+ * verschiedene Werte annimmt. Nach Abzug der Schatten — ein Treffer bei
+ * `at+1` ist dieselbe Zeichenkette ohne ihr erstes Zeichen — bleiben **genau
+ * zwei** eigenständige Fundstellen übrig, und das sind diese beiden.
+ *
+ * **Kontrollniveau:** derselbe Sweep auf byteweise verwürfelten Slots findet
+ * **0** Fundstellen. Die beiden Ablagen stimmen überein, wo beide gefüllt sind
+ * (7/7); die achte ist ein Notspeicherstand, dessen Savemap-Feld leer ist,
+ * während der Vorschaublock „Emergency Save" trägt — genau der Grund, den
+ * Vorschaublock als Ersatzquelle zu führen und nicht zu verwerfen.
+ */
+export const LOCATION_NAME_OFFSET = 0x0f0c;
+export const LOCATION_NAME_LEN = 24;
+export const PREVIEW_LOCATION_OFFSET = 0x28;
+export const PREVIEW_LOCATION_LEN = 32;
+
+/** 🟡 Karten- und Ortskennung. Wertebereiche passen; die Zuordnung zu einer Tabelle ist offen. */
+export const MAP_ID_OFFSET = 0x0b94;
+export const LOCATION_ID_OFFSET = 0x0b96;
+
+/**
+ * Materiavorrat der Gruppe — 200 Einträge à 4 Byte, gleiche Aufteilung wie im
+ * Charakterrecord. 🟡 Im Bestand ist der Vorrat nahezu leer (6 belegte
+ * Einträge über alle Slots), die Lage ist damit **nicht** gegen Nachbarn
+ * abgegrenzt: Bei durchgehend 0xFF trifft jeder Versatz gleich gut.
+ */
+export const PARTY_MATERIA_OFFSET = 0x077c;
+export const PARTY_MATERIA_ENTRIES = 200;
+
+/**
+ * Menüsteuerung und Einstellungen. 🟡 Sämtlich unbelegt in dem Sinn, dass die
+ * Bitbedeutungen nicht gemessen sind; gelesen werden sie **roh**, damit die
+ * Konfigurationsansicht zeigen kann, was dasteht, statt es zu erfinden.
+ */
+export const MENU_VISIBLE_OFFSET = 0x0bc0;
+export const MENU_LOCKED_OFFSET = 0x0bc2;
+export const PHS_ALLOWED_OFFSET = 0x10a4;
+export const PHS_VISIBLE_OFFSET = 0x10a6;
+export const OPTIONS_OFFSET = 0x10da;
+export const BATTLE_SPEED_OFFSET = 0x10d8;
+export const BATTLE_MSG_SPEED_OFFSET = 0x10d9;
+export const FIELD_MSG_SPEED_OFFSET = 0x10ec;
+export const DISC_OFFSET = 0x0ea4;
+
+/**
+ * Reihenfolge der Menüeinträge, auf die sich `menuVisible`/`menuLocked`
+ * beziehen. 🟡 Aus `docs/fremdquellen/ff7tk.md` §2.5 übernommene
+ * Tatsachenangabe; an den Realdaten **nicht** nachgemessen — dafür müsste man
+ * ein Spiel mit gesperrten Menüpunkten aufzeichnen.
+ */
+export const MENU_ITEM_ORDER = [
+  'item',
+  'magic',
+  'materia',
+  'equip',
+  'status',
+  'formation',
+  'limit',
+  'config',
+  'phs',
+  'save',
+] as const;
+export type MenuItemKey = (typeof MENU_ITEM_ORDER)[number];
 
 /** Leerer Platz — sowohl im Inventar als auch bei Figurenkennungen. */
 export const EMPTY_SLOT = 0xff;
@@ -113,8 +260,39 @@ export interface CharacterRecord {
   armor: number;
   accessory: number;
   materia: MateriaSlot[];
+  /** 🟢 Limitstufe 1…4. */
+  limitLevel: number;
+  /** 🟡 Limitbalken 0…255. */
+  limitBar: number;
+  /** 🟢 Bitmaske der gelernten Limits; siehe {@link LIMIT_BITS}. */
+  limitsLearned: number;
+  /** 🟢 Kampfreihe: {@link ROW_FRONT} oder {@link ROW_BACK}. */
+  row: number;
+  /** 🟡 Statusflagge, roh. */
+  statusFlag: number;
+  /** 🟡 Fortschritt zur nächsten Stufe 0…255. */
+  tnl: number;
+  /** 🟡 Zahl der bestrittenen Kämpfe. */
+  kills: number;
+  /** 🟢 Erfahrungspunkte. */
+  exp: number;
+  /** 🟡 Erfahrung bis zur nächsten Stufe. */
+  expToNext: number;
   /** false, wenn der Record nie beschrieben wurde (kein Name, kein HP-Maximum). */
   used: boolean;
+}
+
+/** Menüsteuerung und Einstellungen — durchweg 🟡 und deshalb roh geführt. */
+export interface SavemapSettings {
+  menuVisible: number;
+  menuLocked: number;
+  phsAllowed: number;
+  phsVisible: number;
+  options: number;
+  battleSpeed: number;
+  battleMessageSpeed: number;
+  fieldMessageSpeed: number;
+  disc: number;
 }
 
 export interface InventoryEntry {
@@ -129,9 +307,33 @@ export interface Savemap {
   /** Drei Plätze; `null` steht für einen unbesetzten Platz (Sentinel 0xFF). */
   party: Array<number | null>;
   inventory: InventoryEntry[];
+  /** Materiavorrat der Gruppe (nicht ausgerüstet). 🟡 Lage nicht abgegrenzt. */
+  partyMateria: MateriaSlot[];
   gil: number;
   /** Spielzeit. 🟡 Einheit Sekunden — plausibel, nicht bewiesen. */
   playtimeSeconds: number;
+  /**
+   * 🟢 Ortsname aus der Savemap (0x0F0C). Leerstring heißt „kein Ort
+   * eingetragen" — das kommt vor und wird **nicht** durch die Vorschaufassung
+   * ersetzt, ohne dass es sichtbar wird (siehe {@link Savemap.locationSource}).
+   */
+  locationName: string;
+  /** 🟢 Ortsname aus dem Vorschaublock (0x0028). */
+  previewLocationName: string;
+  /**
+   * Welche der beiden Ablagen den angezeigten Namen liefert. `'savemap'` ist
+   * der Normalfall; `'preview'` heißt, dass die Savemap-Fassung leer war;
+   * `'keiner'` heißt, dass beide leer sind.
+   */
+  locationSource: 'savemap' | 'preview' | 'keiner';
+  /** Stimmen beide Ablagen überein, wo beide gefüllt sind? */
+  locationConsistent: boolean;
+  /** 🟡 Kartenkennung. */
+  mapId: number;
+  /** 🟡 Ortskennung. */
+  locationId: number;
+  /** 🟡 Menüsteuerung und Einstellungen, roh. */
+  settings: SavemapSettings;
   /**
    * Stimmen die beiden Ablagen von Gil und Spielzeit überein? Sie tun es im
    * Bestand immer; eine Abweichung heißt, dass der Slot anders aufgebaut ist
@@ -168,6 +370,8 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
     materia.push({ id: u8(at), ap: u8(at + 1) | (u8(at + 2) << 8) | (u8(at + 3) << 16) });
   }
 
+  const u32 = (o: number): number => (base + o + 4 <= slot.length ? view.getUint32(base + o, true) : 0);
+
   const name = readName(view, slot, base + CHAR.name);
   const hpMax = u16(CHAR.hpMax);
   return {
@@ -184,8 +388,40 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
     armor: u8(CHAR.armor),
     accessory: u8(CHAR.accessory),
     materia,
+    limitLevel: u8(CHAR.limitLevel),
+    limitBar: u8(CHAR.limitBar),
+    limitsLearned: u16(CHAR.limitsLearned),
+    row: u8(CHAR.row),
+    statusFlag: u8(CHAR.statusFlag),
+    tnl: u8(CHAR.tnl),
+    kills: u16(CHAR.kills),
+    exp: u32(CHAR.exp),
+    expToNext: u32(CHAR.expToNext),
     used: name.length > 0 && hpMax > 0,
   };
+}
+
+/**
+ * Liest ein FF7-kodiertes Namensfeld fester Länge. Ein Feld aus lauter
+ * Füllzeichen ergibt den Leerstring — das ist die Aussage „nichts eingetragen"
+ * und wird bewusst nicht zu `null` verallgemeinert.
+ */
+function readTextField(slot: Uint8Array, at: number, len: number): string {
+  if (at + len > slot.length) return '';
+  return decodeFfText(slot, NAME_TABLE, at, len).text.trim();
+}
+
+/** Liest den Materiavorrat der Gruppe (🟡, siehe {@link PARTY_MATERIA_OFFSET}). */
+export function readPartyMateria(slot: Uint8Array): MateriaSlot[] {
+  const out: MateriaSlot[] = [];
+  for (let i = 0; i < PARTY_MATERIA_ENTRIES; i++) {
+    const at = PARTY_MATERIA_OFFSET + i * CHAR.materiaEntryLen;
+    if (at + CHAR.materiaEntryLen > slot.length) break;
+    const id = slot[at]!;
+    if (id === EMPTY_SLOT) continue;
+    out.push({ id, ap: slot[at + 1]! | (slot[at + 2]! << 8) | (slot[at + 3]! << 16) });
+  }
+  return out;
 }
 
 /**
@@ -233,13 +469,40 @@ export function readSavemap(slot: Uint8Array): Savemap | null {
     view.getUint32(GIL_OFFSET_SAVEMAP, true) === gil &&
     view.getUint32(PLAYTIME_OFFSET_SAVEMAP, true) === playtimeSeconds;
 
+  const locationName = readTextField(slot, LOCATION_NAME_OFFSET, LOCATION_NAME_LEN);
+  const previewLocationName = readTextField(slot, PREVIEW_LOCATION_OFFSET, PREVIEW_LOCATION_LEN);
+  const locationSource: Savemap['locationSource'] =
+    locationName.length > 0 ? 'savemap' : previewLocationName.length > 0 ? 'preview' : 'keiner';
+  const locationConsistent =
+    locationName.length === 0 || previewLocationName.length === 0 || locationName === previewLocationName;
+
+  const settings: SavemapSettings = {
+    menuVisible: view.getUint16(MENU_VISIBLE_OFFSET, true),
+    menuLocked: view.getUint16(MENU_LOCKED_OFFSET, true),
+    phsAllowed: view.getUint16(PHS_ALLOWED_OFFSET, true),
+    phsVisible: view.getUint16(PHS_VISIBLE_OFFSET, true),
+    options: view.getUint16(OPTIONS_OFFSET, true),
+    battleSpeed: slot[BATTLE_SPEED_OFFSET] ?? 0,
+    battleMessageSpeed: slot[BATTLE_MSG_SPEED_OFFSET] ?? 0,
+    fieldMessageSpeed: slot[FIELD_MSG_SPEED_OFFSET] ?? 0,
+    disc: slot[DISC_OFFSET] ?? 0,
+  };
+
   return {
     schemaVersion: 1,
     characters,
     party,
     inventory: readInventory(slot),
+    partyMateria: readPartyMateria(slot),
     gil,
     playtimeSeconds,
+    locationName,
+    previewLocationName,
+    locationSource,
+    locationConsistent,
+    mapId: view.getUint16(MAP_ID_OFFSET, true),
+    locationId: view.getUint16(LOCATION_ID_OFFSET, true),
+    settings,
     duplicatesConsistent,
   };
 }

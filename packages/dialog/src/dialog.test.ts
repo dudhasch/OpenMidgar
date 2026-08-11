@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { layoutText, measureText, type GlyphMetrics } from './layout.js';
+import { EXE_DEFAULTS, spacingTableFrom } from '@webmidgar/formats-kernel';
+import {
+  dialogMetrics,
+  glyphMetricsFrom,
+  layoutFfText,
+  layoutText,
+  measureText,
+  type GlyphMetrics,
+} from './layout.js';
 import { DialogSession, type DialogInput, type DialogRequest } from './session.js';
 
 /**
@@ -253,5 +261,109 @@ describe('DialogSession — Determinismus', () => {
     // Sanity-Check: Die Sequenz löst tatsächlich auf, statt trivial leer zu sein.
     expect(resultsA[4]!.resolved).toEqual({ requestId: 77, choice: 0 });
     expect(resultsA[5]!.resolved).toBeNull();
+  });
+});
+
+/**
+ * Welle 2: der Originalpfad. FF7 bricht nicht um — die Zeilen stehen im Text,
+ * und das Fenster wird danach bemessen. Diese Tests sichern genau den
+ * Unterschied zum alten, umbrechenden Verhalten ab.
+ */
+
+/** Testmetrik mit klar von Hand nachrechenbaren Breiten. */
+function testSpacing() {
+  const raw = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) raw[i] = 5;
+  raw[0x2f] = 9; // 'O'
+  raw[0x01] = 4; // '!'
+  return spacingTableFrom(Uint8Array.from(raw), { rawGlyphBytes: raw });
+}
+
+describe('layoutFfText — kein Autowrap', () => {
+  it('lässt eine überlange Zeile stehen und macht das Fenster breit', () => {
+    const spacing = testSpacing();
+    const lang = 'O'.repeat(60);
+    const layout = layoutFfText(lang, spacing);
+    expect(layout.pages).toHaveLength(1);
+    // Entscheidend: EINE Zeile, nicht mehrere — hier hätte das alte
+    // layoutText umgebrochen.
+    expect(layout.pages[0]!.lines).toEqual([lang]);
+    expect(layout.width).toBe(EXE_DEFAULTS.padding + 60 * 9);
+    expect(layout.lines).toBe(1);
+  });
+
+  it('übernimmt Zeilen und Seiten unverändert aus dem Text', () => {
+    const layout = layoutFfText('OO\nO\fOOO', testSpacing());
+    expect(layout.pages.map((p) => p.lines)).toEqual([['OO', 'O'], ['OOO']]);
+    // Fensterbreite folgt der längsten Zeile über alle Seiten hinweg.
+    expect(layout.width).toBe(EXE_DEFAULTS.padding + 3 * 9);
+    expect(layout.lines).toBe(2);
+  });
+
+  it('deckelt die Zeilenzahl bei 13 wie das Original', () => {
+    const viele = Array.from({ length: 20 }, () => 'O').join('\n');
+    expect(layoutFfText(viele, testSpacing()).lines).toBe(13);
+  });
+});
+
+describe('dialogMetrics — der Rückfall ist laut', () => {
+  it('liefert ohne WINDOW.BIN die Ersatzmetrik MIT Diagnose', () => {
+    const r = dialogMetrics(null);
+    expect(r.measured).toBe(false);
+    expect(r.diagnostic).toMatch(/WINDOW\.BIN/);
+    expect(r.spacing.widths[0x2f]).toBe(8);
+  });
+
+  it('meldet auch eine unbrauchbar kurze Breitentabelle, statt sie zu benutzen', () => {
+    const r = dialogMetrics({ glyphWidths: new Uint8Array(0), rawGlyphBytes: new Uint8Array(0) });
+    expect(r.measured).toBe(false);
+    expect(r.diagnostic).toMatch(/256/);
+  });
+
+  it('liefert mit echter Tabelle die gemessene Metrik und keine Diagnose', () => {
+    const raw = Uint8Array.from({ length: 256 }, () => 7);
+    const r = dialogMetrics({ glyphWidths: raw, rawGlyphBytes: raw });
+    expect(r.measured).toBe(true);
+    expect(r.diagnostic).toBeNull();
+    expect(r.spacing.widths[0x2f]).toBe(7);
+  });
+});
+
+describe('glyphMetricsFrom — Brücke zur Zeichenmetrik', () => {
+  it('bildet das ASCII-Fenster über den Versatz 0x20 ab', () => {
+    const spacing = testSpacing();
+    const glyphs = glyphMetricsFrom(spacing);
+    expect(glyphs.widths['O']).toBe(9); // Byte 0x2F
+    expect(glyphs.widths['!']).toBe(4); // Byte 0x01
+    expect(measureText('OO!', glyphs)).toBe(9 + 9 + 4);
+  });
+});
+
+describe('DialogSession — FF7-Modus', () => {
+  it('bricht mit ffSpacing nicht um und liefert die Fenstergröße mit', () => {
+    const session = new DialogSession({
+      width: 100, // absichtlich viel zu schmal: im FF7-Modus irrelevant
+      ffSpacing: testSpacing(),
+      charsPerTick: 0,
+    });
+    session.open({ requestId: 1, text: 'OOOOOOOOOO\nOO' });
+    expect(session.state!.pages[0]!.lines).toEqual(['OOOOOOOOOO', 'OO']);
+    expect(session.state!.window).toEqual({
+      width: EXE_DEFAULTS.padding + 10 * 9,
+      height: 2 * EXE_DEFAULTS.rowStep + EXE_DEFAULTS.rowBase,
+      lines: 2,
+    });
+  });
+
+  it('bricht ohne ffSpacing weiterhin um — der Ersatzweg bleibt erhalten', () => {
+    const session = new DialogSession({
+      width: 100,
+      glyphs: { widths: {}, defaultWidth: 10, lineHeight: 16 },
+      window: { padding: [0, 0, 0, 0], linesPerPage: 10 },
+      charsPerTick: 0,
+    });
+    session.open({ requestId: 1, text: 'aaaaaaaaaa aaaaaaaaaa' });
+    expect(session.state!.pages[0]!.lines).toEqual(['aaaaaaaaaa', 'aaaaaaaaaa']);
+    expect(session.state!.window).toBeNull();
   });
 });

@@ -9,20 +9,37 @@ import {
 } from '@webmidgar/formats-field';
 import {
   indexKernelSections,
+  inventoryDescriptionLookup,
   inventoryNameLookup,
+  listNameLookup,
   parseKernelContainer,
+  readMateriaRecords,
+  resolveKernelDataSections,
   resolveKernelNameLists,
+  parseWindowBin,
   type InventoryNameLookup,
+  type MateriaRecord,
+  type WindowBin,
 } from '@webmidgar/formats-kernel';
+import { dialogMetrics, type DialogMetricsResult } from '@webmidgar/dialog';
 import { parseSceneBin, type SceneContainer } from '@webmidgar/formats-battle';
+import { parseTex, texToRgba } from '@webmidgar/formats-model';
 import {
   parseFieldTbl,
+  parseWorldAnimatedTextures,
   parseWorldMap,
   parseWorldEv,
+  parseWorldTextureNames,
   type FieldTable,
+  type WorldAnimatedTexture,
   type WorldTerrain,
   type WorldEv,
 } from '@webmidgar/formats-world';
+import {
+  buildWorldTextureSet,
+  type StaticTextureImage,
+  type WorldTextureSet,
+} from '@webmidgar/render-world';
 import { parseOriginalSave, readSavemap, type Savemap } from '@webmidgar/formats-save';
 import { openHttpSource, fetchRawFile } from './http-source';
 
@@ -73,14 +90,49 @@ export interface GameData {
    * stammen — eine einlistige Auswahl traf früher die Zauberliste.
    */
   itemName: InventoryNameLookup;
+  /**
+   * Beschreibungstext zu einer Inventarkennung (F24-B). Gleiche
+   * Bereichskodierung wie `itemName` — beide kommen aus derselben Auflösung.
+   */
+  itemDescription: InventoryNameLookup;
+  /** Materianamen (Kennung = Listenindex). */
+  materiaName: InventoryNameLookup;
+  /** Zaubernamen (Kennung = Listenindex). */
+  magicName: InventoryNameLookup;
+  /** Materia-Recordtabelle aus KERNEL.BIN — Stufe und (🔴) Zauberzuordnung. */
+  materiaRecords: readonly MateriaRecord[];
   /** Warum die Namenszuordnung (nicht) ging — sonst verdeckt sie sich selbst. */
   kernelHinweis: string;
   kernelSections: Uint8Array[] | null;
+  /**
+   * Textmetrik aus `WINDOW.BIN` (Welle 2). `measured: false` heißt: die Datei
+   * fehlte, es gilt die Ersatzmetrik — und `diagnostic` sagt warum. Ein
+   * stiller Rückfall ist hier ausdrücklich nicht vorgesehen.
+   */
+  textMetrik: DialogMetricsResult;
+  /** Rohbefund der `WINDOW.BIN` — null, wenn die Datei fehlt. */
+  windowBin: WindowBin | null;
+  windowHinweis: string;
+  /**
+   * F11b/F25: Texturtabelle **und** Atlas der Weltkarte in EINEM Objekt
+   * (`buildWorldTextureSet`). `null` heißt: `ff7.exe` war nicht erreichbar oder
+   * trug kein auffindbares Zeigerfeld — dann bleibt die Weltkarte bei der
+   * Klassenfarben-Diagnose, statt eine Zuordnung zu erfinden.
+   */
+  worldTextures: WorldTextureSet | null;
+  /** Warum die Welttexturen (nicht) verfügbar sind — gehört in den Bootlog. */
+  worldTexturHinweis: string;
   readFieldEntry(name: string): Promise<Uint8Array | null>;
   readCharEntry(name: string): Promise<Uint8Array | null>;
   readBattleEntry(name: string): Promise<Uint8Array | null>;
   /** Alle Einträge eines battle.lgp-Präfixes (erfüllt `BattleEntrySource`). */
   listBattleEntries(prefix: string): string[];
+  /**
+   * Alle 2-Zeichen-Präfixe von battle.lgp, sortiert. K5 schneidet daraus über
+   * den Namensbereich `og`…`rr` selbst das Bühnenband heraus — deshalb wird
+   * hier NICHT vorgefiltert.
+   */
+  listBattlePrefixes(): string[];
   loadFieldBundle(name: string): Promise<{ bundle: FieldBundle | null; codes: string[] }>;
   fieldNameByMaplist(index: number): string | null;
 }
@@ -151,6 +203,10 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   // kernel: Inventarnamen (Menü) + Rohsektionen (Growth etc. für später).
   // F18: Die Rollenbestimmung löst alle vier Bereiche auf, nicht eine Liste.
   let itemName: InventoryNameLookup = () => null;
+  let itemDescription: InventoryNameLookup = () => null;
+  let materiaName: InventoryNameLookup = () => null;
+  let magicName: InventoryNameLookup = () => null;
+  let materiaRecords: readonly MateriaRecord[] = [];
   let kernelHinweis = 'ohne KERNEL.BIN — Inventarnamen bleiben leer';
   let kernelSections: Uint8Array[] | null = null;
   const kernelBytes = await fetchRawFile('data/kernel/KERNEL.BIN');
@@ -160,6 +216,16 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
       kernelSections = container.sections.map((s: { data: Uint8Array }) => s.data);
       const listen = resolveKernelNameLists(indexKernelSections(container));
       itemName = inventoryNameLookup(listen);
+      // F24-B: Beschreibungen und die beiden Zusatzlisten kommen aus DERSELBEN
+      // Auflösung — eine zweite Zuordnungslogik wäre genau der Fehler von F18.
+      itemDescription = inventoryDescriptionLookup(listen);
+      materiaName = listNameLookup(listen.materia);
+      magicName = listNameLookup(listen.magic);
+      try {
+        materiaRecords = readMateriaRecords(container, resolveKernelDataSections(container));
+      } catch {
+        materiaRecords = []; // Datensektionen nicht auflösbar ⇒ Materiaansicht sagt es selbst
+      }
       // Der Grund MUSS sichtbar sein: eine stillschweigend leere Zuordnung hat
       // F18 so lange verdeckt (das Menü zeigte einfach Zaubernamen).
       kernelHinweis =
@@ -171,6 +237,18 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     }
     status(kernelHinweis);
   }
+
+  // WINDOW.BIN: Glyphenbreiten für die Fenstermetrik (Welle 2). Ohne sie
+  // bemisst der Dialog seine Fenster mit einer erfundenen Breite — genau das
+  // war bis Welle 1 der Zustand, und es fiel nicht auf, weil niemand es sagte.
+  let windowBin: WindowBin | null = null;
+  const windowBytes = await fetchRawFile('data/kernel/WINDOW.BIN');
+  if (windowBytes) windowBin = await parseWindowBin(windowBytes, 'WINDOW.BIN');
+  const textMetrik = dialogMetrics(windowBin);
+  const windowHinweis = textMetrik.measured
+    ? `Glyphenbreiten aus WINDOW.BIN (Polsterung ${textMetrik.spacing.padding} px, Namensplatzhalter ${textMetrik.spacing.widths[0xea]} px)`
+    : (textMetrik.diagnostic ?? 'Textmetrik unbekannt');
+  status(windowHinweis);
 
   // scene.bin: alle Kampfszenen (lazy wäre möglich, aber 256 Szenen sind klein).
   let scenes: SceneContainer | null = null;
@@ -226,6 +304,72 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
       : `Weltscript ${worldChoice.evName} nicht gefunden — Weltkarte fährt ohne VM`,
   );
 
+  /**
+   * F11b + F25 — Welttexturen.
+   *
+   * Vier Quellen, ein Aufruf: die Zeigertabelle aus der Spiel-EXE (die
+   * Zuordnung `textureId` → Dateiname), die `.tex`-Bilder aus `world_us.lgp`,
+   * die animierten Texturen aus `wm.ta` und die UV-Spannweiten des Terrains.
+   * Fehlt EINE davon, wird nichts geraten — dann bleibt die Weltkarte bei der
+   * Klassenfarben-Diagnose und sagt im Bootlog, warum.
+   */
+  let worldTextures: WorldTextureSet | null = null;
+  let worldTexturHinweis = 'Weltkarten-Texturen nicht verfügbar — Klassenfarben-Diagnose';
+  if (terrain) {
+    const exeBytes = (await fetchRawFile('ff7.exe')) ?? (await fetchRawFile('ff7_en.exe'));
+    const nameTable = exeBytes ? parseWorldTextureNames(exeBytes) : null;
+    if (!exeBytes) {
+      worldTexturHinweis =
+        'ff7.exe nicht erreichbar (ff7data-Freigabe/Installation) — Weltkarte ohne Texturen';
+    } else if (!nameTable) {
+      worldTexturHinweis = 'ff7.exe gelesen, aber kein Texturzeigerfeld gefunden — Weltkarte ohne Texturen';
+    } else {
+      // Bilder und Animationstabelle liegen im selben Archiv wie das Terrain-
+      // Zubehör; genommen wird das erste, das `wm.ta` führt.
+      const staticImages = new Map<string, StaticTextureImage>();
+      let animated: WorldAnimatedTexture[] = [];
+      let texturArchiv: string | null = null;
+      for (const archiv of worldArchives) {
+        const eintraege = entryMap(index, archiv);
+        if (!eintraege.has('wm.ta')) continue;
+        texturArchiv = archiv;
+        const taBytes = await readFrom(index, eintraege, 'wm.ta');
+        if (taBytes) animated = parseWorldAnimatedTextures(taBytes).textures;
+        for (const [name] of eintraege) {
+          if (!name.endsWith('.tex')) continue;
+          const bytes = await readFrom(index, eintraege, name);
+          if (!bytes) continue;
+          const tex = parseTex(bytes, `${archiv}/${name}`).value;
+          if (!tex) continue;
+          staticImages.set(name.slice(0, -4), {
+            name: name.slice(0, -4),
+            width: tex.width,
+            height: tex.height,
+            rgba: texToRgba(tex),
+          });
+        }
+        break;
+      }
+      if (staticImages.size === 0) {
+        worldTexturHinweis = 'keine .tex-Einträge in world_*.lgp gefunden — Weltkarte ohne Texturen';
+      } else {
+        worldTextures = buildWorldTextureSet({
+          terrain,
+          nameTable,
+          base: nameTable.bases.wm0,
+          staticImages,
+          animated,
+        });
+        const r = worldTextures.report;
+        worldTexturHinweis =
+          `Welttexturen aus ${texturArchiv}: ${r.named}/${r.usedIds} IDs benannt, ` +
+          `${r.animatedIds} animiert (🟡 Ersatzpalette, ${Math.round(r.substitutePaletteTriangleShare * 1000) / 10} % der Dreiecke), ` +
+          `${r.atlasPages} Atlasseite(n), ${r.misfits.length} Fehlpassungen`;
+      }
+    }
+  }
+  status(worldTexturHinweis);
+
   // Musikindex (S37/O2): Zeilenindex 0-basiert, musicId der Scripts 1-basiert.
   let musicNames: string[] = [];
   const idxBytes = await fetchRawFile('data/music/music.idx');
@@ -261,12 +405,22 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     savemap,
     musicNames,
     itemName,
+    itemDescription,
+    materiaName,
+    magicName,
+    materiaRecords,
     kernelHinweis,
     kernelSections,
+    textMetrik,
+    windowBin,
+    windowHinweis,
+    worldTextures,
+    worldTexturHinweis,
     readFieldEntry: (name) => readFrom(index, flevel, name),
     readCharEntry: (name) => readFrom(index, char, name),
     readBattleEntry: (name) => readFrom(index, battle, name),
     listBattleEntries: (prefix) => battlePraefixe.get(prefix.toLowerCase()) ?? [],
+    listBattlePrefixes: () => [...battlePraefixe.keys()].sort(),
     loadFieldBundle: async (name) => {
       const bytes = await readFrom(index, flevel, name);
       if (!bytes) return { bundle: null, codes: ['E-GAME-ENTRY-FEHLT'] };

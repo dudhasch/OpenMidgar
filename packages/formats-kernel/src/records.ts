@@ -367,6 +367,47 @@ export function inventoryNameLookup(lists: InventoryNameLists): InventoryNameLoo
   };
 }
 
+/**
+ * Nachschlagefunktion für **Beschreibungen** über alle vier Inventarbereiche
+ * (F24-B, Teil 4).
+ *
+ * Bis hierher hat `resolveKernelNameLists` die Beschreibungslisten zwar
+ * bestimmt, aber niemand hat sie abgefragt — das Menü warf sie weg. Der Aufbau
+ * ist absichtlich derselbe wie bei {@link inventoryNameLookup}: dieselbe
+ * Bereichskodierung, dieselbe `null`-Regel für „nicht auflösbar". Zwei
+ * verschiedene Zuordnungslogiken für Name und Beschreibung wären die
+ * zuverlässigste Art, F18 ein zweites Mal zu bauen.
+ */
+export function inventoryDescriptionLookup(lists: {
+  descriptions: Pick<Record<KernelNameRole, KernelTextList | null>, 'items' | 'weapons' | 'armor' | 'accessories'>;
+}): InventoryNameLookup {
+  const quelle: Record<InventoryCategory, KernelTextList | null> = {
+    item: lists.descriptions.items,
+    weapon: lists.descriptions.weapons,
+    armor: lists.descriptions.armor,
+    accessory: lists.descriptions.accessories,
+  };
+  return (id: number): string | null => {
+    const bereich = inventoryCategory(id);
+    if (!bereich) return null;
+    const text = quelle[bereich.category]?.strings[bereich.index]?.trim();
+    return text && text.length > 0 ? text : null;
+  };
+}
+
+/**
+ * Nachschlagefunktion über **eine** Liste — für Materia, Zauber, Befehle und
+ * Schlüsselgegenstände, die keine Bereichskodierung haben. Bewusst getrennt
+ * von {@link inventoryNameLookup} benannt, damit an der Aufrufstelle sichtbar
+ * bleibt, welche Sorte Kennung gemeint ist.
+ */
+export function listNameLookup(list: KernelTextList | null): InventoryNameLookup {
+  return (id: number): string | null => {
+    const text = list?.strings[id]?.trim();
+    return text && text.length > 0 ? text : null;
+  };
+}
+
 // --- Altlast: einlistige Auswahl (F18-Vorzustand) ----------------------------
 
 export interface ItemTextLists {

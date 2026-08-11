@@ -5,3 +5,4 @@ export * from './rewards.js';
 export * from './mode.js';
 export * from './starter.js';
 export * from './party.js';
+export * from './rate.js';

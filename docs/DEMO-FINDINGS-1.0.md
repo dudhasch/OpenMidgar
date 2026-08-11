@@ -18,7 +18,7 @@ bewertet und mit Fix-Status geführt. Konvention: F-Nummern sind stabil.
 | F09-B | Audio/Field | **Der MUSIC-Operand ist kein Titel, sondern ein field-lokaler Index in die AKAO-Offsettabelle von Sektion 1.** Die Demo las ihn direkt als `music.idx`-Zeile. Gemessen über 702 Fields/1243 Vorkommen: „Operand < nAkao des eigenen Fields" 98,95 % (Kontrollen 71,92 % Nachbarfield, 49,88 % Byte-davor); an `akaoOffsets[v]` steht in 1228/1230 = 99,84 % das Magic `AKAO` (Kontrollen Versatz +4 und Zufallsoffset je 0,00 %); `u16@+4` liegt 1230/1230 im Band 1…98 (Kontrolle „u16 zwei Byte weiter" 14,63 %). Gegenhypothese Kujata (`u8@+50`) 31,06 % — fällt durch. Die 2 Magic-Fehlschläge sind exakt die belegten `KAO…`-Blöcke (`junair2`, `junone7`, `sininb1`, `sininb2`), mit Versatzausgleich lösen 1230/1230 auf | Kette `MUSIC v → akaoOffsets[v] → AKAO-Kopf → musicId → music.idx[musicId−1] → OGG` | ✅ Parser + Demo verdrahtet; Endprüfung 1217/1243 = 97,91 % vorhandene OGG gegen 548/1243 = 44,09 % der Altregel |
 | F09-E | Audio | `readOggLoopTags`/`planLoop` waren vollständig getestet und wurden **nirgends aufgerufen**: Die Demo setzte `audioEl.loop = true` und wiederholte die ganze Datei — jeder Titel mit Intro spielte sein Intro erneut. Ein `HTMLAudioElement` kann das prinzipiell nicht anders; `loopStart`/`loopEnd` gibt es nur am `AudioBufferSourceNode` | 87 % der Titel tragen `LOOPSTART`, kein einziger `LOOPLENGTH` | ✅ verdrahtet; in der Demo gemessen: plan.reason = tagged-start-to-end, loopStart 0,028 s, loopEnd 144,305 s (dun2) |
 | F10 | Weltkarte | Demo-Startposition (Rastermitte) liegt auf Wasser (Klasse 3) — zu Fuß bewegungsunfähig; erst Fahrzeugwechsel (Highwind) macht die Karte befahrbar | Startplatzierung | 🔧 Landstart suchen |
-| F11 | Weltkarte | Terrain rendert als Klassenfarben-Diagnose; Weltkarten-Texturen sind nicht erschlossen | Bekannte S28-Lücke | 🟡 offen |
+| F11 | Weltkarte | Terrain rendert als Klassenfarben-Diagnose; Weltkarten-Texturen sind nicht erschlossen | Bekannte S28-Lücke | ✅ **F11a+F11b gelöst und in der Demo verdrahtet** (Welle 2): `buildBlockGroup` zeichnet über `buildTexturedMeshGeometry` mit Tabelle+Atlas, Darstellungsart `textured` ist Vorgabe. 🟡 Ozeanfarbe bleibt Ersatzpalette (66,55 % der WM0-Dreiecke) — s. F11b/F25 unten |
 | F12 | Menü | Party-Ansicht zeigt „MP 122/116" (aktuell > Maximum) — Verdacht Feldvertauschung mp/mpMax in Savemap-Lesung oder Anzeige | Datenlesung prüfen | 🔜 messen |
 | F13 | Kampf | Aufstellung falsch: `placeFormation`/`placeParty` deuten Slot-Koordinaten über die FIELD-Konvention (ff7ToScene) — Gegner unter dem Boden (y −1700/−2000), Party schwebt (+3200). Gegnermodelle selbst laden korrekt („aq" 3 Teile, „ar" 6 Teile) | 🟡-Deutung widerlegt durch Sichtbefund | 🔧 Subagent misst Konvention |
 | F14 | Field/Encounter | Zufallskämpfe feuern in Stadt-Fields (md1stin: Encounter 302/303 alle ~100 bewegte Takte) — im Original hat der Bahnhofsvorplatz keine Zufallskämpfe. Encounter-Aktivierungs-Gating (Sektion-7-Flag bzw. Script) fehlt | Spielbarkeit | 🔜 Gating messen (nach Talk-Agent) |
@@ -45,9 +45,9 @@ vermutet.
 | F21 | Field/Modelle | **„Lila Sprites" statt Figuren** — und die Magenta-Hypothese war FALSCH. Gemessen (Diagnosehaken `onMissing` in der Modellkette, acht Fields): 0 fehlende `.hrc/.rsd/.p/.tex`, 0 Texturslot-Überläufe, 0 Ersatzkapseln, 0 Materialien mit `0xff00ff`. Die „lila Sprites" sind **texturierte NPCs, die flach am Boden liegen** — ihre Kleidung ist rot/violett. Ursache: Der Demo wies eine Animation nur zu, wenn ein Script eine setzte; sonst lief die Figur in der **Bindpose**, und die ist keine Standhaltung, sondern die unposierte Bone-Kette (`boneRotSumme = 0` gemessen). Auch der Spieler lief ohne jede Animation | Kernfehler — Sichtqualität | ✅ behoben: NPCs und Spieler bekommen die Ruheanimation (Index 0, 🟡 Konventionshypothese); Sichtnachweis `.shots/nach_f21c_lauf.jpg` |
 | F22 | Field/Hintergrund | **„Verschwommene Blöcke" überall dort, wo animierte Tiles gehören** (Flammen in md8_1, Flipper in mds7pb_1, Gondelbahn in bigwheel, 20 weitere Fields). Ursache belegt: `buildBackgroundMesh` kennt weder Animationsparameter noch Zustandsbits — es zeichnet **alle Zustände einer Animationsgruppe gleichzeitig übereinander**. Das Ergebnis ist genau die beschriebene Unschärfe, und bewegte Elemente fehlen als Bewegung komplett | Kernfehler — systematisch, größter Einzelposten | ✅ behoben: `param` (u8@28) und `state` (u8@29) im Parser belegt und ausgewertet; je Parameter ist genau ein Zustand sichtbar. 🟡 Welcher, schaltet die Demo reihum weiter — im Original entscheiden das die Parameter-Opcodes des Field-Scripts (offen) |
 | F23 | Field/Hintergrund | **Schwarze Flächen statt Rauch, Wasser, Feuer** (ujunon1 Schornstein, uutai1 Fluss, nrthmk, gonjun1, cosin1). Ursache belegt: der Tile-Shader in `background.ts` kennt nur „undurchsichtig oder verworfen" (`discard` bei a<0.5, `outColor.a = 1.0`, `depthWrite` immer an). Die FF7-Mischmodi (Mittelwert / additiv / subtraktiv / 25 % additiv) fehlen vollständig — additiv gemischte Effekttiles werden dadurch als deckende dunkle Blöcke gezeichnet | Kernfehler — Sichtqualität | ✅ behoben: `blending` (u8@30) und `typeTrans` (u8@32) im Parser belegt; getrennte Zeichenstapel je Mischart mit additivem bzw. gemitteltem Blending und `depthWrite: false`, deckend zuerst. Sichtnachweis: Schornsteinrauch in `ujunon1` und der Fluss in `uutai1` erscheinen statt schwarzer Blöcke |
-| F24 | Menü | Menü-UI **durchgängig als katastrophal bewertet** (10/10): Rahmen, Schrift, Anordnung entsprechen nicht dem Original — die Demo zeigt eine Diagnosetabelle, kein FF7-Menü. Zusätzlich inhaltlich: Materia werden unter „Gegenstände" gelistet, Itemnamen teils falsch (`?307`, `?260`, s. F18) | Ausbaustufe + Datenlesung | 🟡 UI weiter offen (Nachfolger von F07); **Datenlesung behoben, s. F18/F24-A** |
-| F25 | Weltkarte | Weltkarte **durchgängig katastrophal** (13/13): „KOMPLETT FALSCHE FARBEN — 3D-Modell an sich plausibel". Das Terrain rendert weiterhin die Klassenfarben-Diagnose (F11). Ausdrücklicher Referenzwunsch des Projektinhabers: **an FF7-Landscaper orientieren**. Nebenbefund: bei „3× Tab" ist kein Fahrzeugmodell erkennbar | Bekannte Lücke, jetzt priorisiert | 🟡 offen (verschärft F11) |
-| F26 | Kampf | 19/27 katastrophal. Bestätigt und zusammengefasst: **keine Kampfbühne** (schwarzer Hintergrund), **Party wird nicht gerendert** (nur Quader bzw. gar nichts), **Gegnermodelle erscheinen verzögert** (die ersten Takte zeigen Farbflächen) **und sind viel zu klein**, Blickrichtung der Gegner vermutlich gespiegelt, **HUD nicht im Originalstil** (Diagnosekasten statt FF7-Kampfmenü) | Sammelbefund über F05/F19 hinaus | 🟡 offen |
+| F24 | Menü | Menü-UI **durchgängig als katastrophal bewertet** (10/10): Rahmen, Schrift, Anordnung entsprechen nicht dem Original — die Demo zeigt eine Diagnosetabelle, kein FF7-Menü. Zusätzlich inhaltlich: Materia werden unter „Gegenstände" gelistet, Itemnamen teils falsch (`?307`, `?260`, s. F18) | Ausbaustufe + Datenlesung | 🟡 **F24-B umgesetzt (Welle 2), Aufteilung aber unbelegt.** Die `<table>`-Diagnose in Monospace ist ersatzlos weg; das Menü läuft über `MenuSession.screen()` → `HudBox[]` → `paintBoxes` → `applyWindowSkin`, also durch **dieselbe** Fensterschale wie Dialog und Kampf-HUD. Sechs neue Ansichten (Ausrüstung, Materia, Zauber, Limit, PHS, Konfiguration), Gegenstandsbeschreibungen im Fußfenster, Ortsanzeige aus der Savemap statt vom Wirt geraten. 🔴 **Die Hauptmenü-Aufteilung ist NICHT belegt** — unter den 18 Referenzbildern ist keine Menüaufnahme, und makoureactor dokumentiert nur die FIELD-Fenstergeometrie (320×224), nicht das Menü. Die Zahlen liegen deshalb vollständig in **einem** austauschbaren Objekt `FF7_MAIN_MENU_LAYOUT`; ob die Kommandospalte im Original links oder rechts steht, ist offen. **Datenlesung behoben, s. F18/F24-A** |
+| F25 | Weltkarte | Weltkarte **durchgängig katastrophal** (13/13): „KOMPLETT FALSCHE FARBEN — 3D-Modell an sich plausibel". Das Terrain rendert weiterhin die Klassenfarben-Diagnose (F11). Ausdrücklicher Referenzwunsch des Projektinhabers: **an FF7-Landscaper orientieren**. Nebenbefund: bei „3× Tab" ist kein Fahrzeugmodell erkennbar | Bekannte Lücke, jetzt priorisiert | ✅ **gelöst** — Texturzuordnung gemessen (F11b, WM0 282/282 gegen Kontrolle 0,6028), Atlas gebaut, Sichtnachweis vorhanden; **in der Demo verdrahtet (Welle 2)**: Atlasseite einmalig als `DataTexture` (`flipY=false`, Mipmaps, Anisotropie), Trennung nach `geo.atlasPages`, Dreiecke ohne Atlaszelle (255) fallen auf Klassenfarben zurück; drei Darstellungsarten `textured`/`terrain`/`region`. 🟡 Ozeanfarbe über Ersatzpalette, 🔜 Fahrzeugmodell (F34) |
+| F26 | Kampf | 19/27 katastrophal. Bestätigt und zusammengefasst: **keine Kampfbühne** (schwarzer Hintergrund), **Party wird nicht gerendert** (nur Quader bzw. gar nichts), **Gegnermodelle erscheinen verzögert** (die ersten Takte zeigen Farbflächen) **und sind viel zu klein**, Blickrichtung der Gegner vermutlich gespiegelt, **HUD nicht im Originalstil** (Diagnosekasten statt FF7-Kampfmenü) | Sammelbefund über F05/F19 hinaus | 🟡 **drei von vier Teilen behoben (Welle 2), die Kamera nicht.** ✅ HUD im Originalstil (K6, s. u.) · ✅ echte Bühne statt schwarzer Ersatzscheibe: `stagePrefixForLocation(formation.location)` → `loadBattleStage` → `buildBattleStage`, 1000/1000 Formationen lösen auf · ✅ Party als echte Battle-Modelle statt blauer Quader (K4-Zuordnung, s. u.) · 🔴 **Die Kampfkamera ist falsch kalibriert und ist damit der größte verbleibende Sichtmangel**: bei Encounter 8 (Bühne `pk`) füllt eine Ziegelwand das ganze Bild, bei Encounter 300 (Bühne `op`) sind alle Figuren sichtbar, aber winzig. Bühne, Party und Gegner sind dabei nachweislich geladen (`gameDebug.kampfBuehne`/`battleModelle`) — es ist kein Ladefehler, sondern der 🟡 unkalibrierte Öffnungswinkel bzw. der 12-B-Kamerasatz, der Position und Ziel trägt, aber keinen Zoom. 🔴 Zusätzlich stehen alle Figuren in der **Bindpose** (Arme senkrecht nach oben), weil das Animationsformat der Battle-Modelle (`da`-Dateien, 872 Stück) ungedeutet ist |
 
 | F27 | Field/Modelle | **Die Gehanimation legt die Figur flach.** Beim Umschalten des Spielers auf Animationsindex 1 (aaaa.hrc, 8316 B ≈ Bewegungszyklus) kippt Cloud um; mit Index 0 steht er. Die Frames der `.a` tragen eine Wurzelrotation, die sich mit der Wurzelrahmen-Korrektur (`ROOT_FRAME_FIX_DEG`) und der von uns gesetzten Blickrichtung beißt. Der Umschalter ist deshalb bewusst nicht aktiv — die Figuren stehen beim Gehen | Sichtqualität — blockiert die Laufanimation | 🔜 Wurzelrotations-Semantik der `.a`-Frames gegen die selbst gesetzte Blickrichtung messen |
 
@@ -75,8 +75,8 @@ Figurengröße) und Menü (6/6).
 | F30 | Field/Hintergrund | **Schwarze Blockränder um animierte Kacheln** („block pixel für animationen sichtbar", 9× in Runde 2). Unser Tile-Shader kennt nur `discard` bei `alpha < 0.5`; Kujata dagegen führt je Palettenfarbe ein `noRender`-Merkmal und setzt es für **schwarze Pixel**, sowohl im Palettenpfad als auch bei Direktfarbe (`if (!usePalette && paletteItem.isBlack)`). Ohne diese Regel bleibt das Schwarz der Effektkacheln deckend und rahmt jede animierte Kachel sichtbar ein | Kernfehler — Sichtqualität | 🔜 Schwarzregel je Palettenfarbe umsetzen; Wechselwirkung mit F23 beachten (bei additiver Mischung ist Schwarz ohnehin neutral, bei deckenden Kacheln nicht) |
 | F31 | Field/Hintergrund | **Verwürfelte Kachelblöcke (F16) haben eine benannte Ursache.** Kujata wählt die Quellkoordinaten nach der Regel `if (tile.layerID > 0 && tile.textureId2 > 0 && tile.depth !== 0)` → dann `srcX2`/`srcY2` **mit `textureId2`**, sonst `srcX`/`srcY` mit `textureId`. Unser Parser kennt `srcX2`/`srcY2`, aber **kein `textureId2`** — die zweite Quellkoordinate wird also gegen die falsche Texturseite gelesen. Ebenso relevant: `usePalette` gilt bei Kujata nur für `depth === 1` | Kernfehler — erklärt F16 | 🔜 `textureId2` (u8@36, in `md8_1` mit den Werten 0/15/16 belegt) parsen und die Auswahlregel übernehmen |
 | F32 | Field/Hintergrund | **Rückschritt durch F23:** In `sbwy4_6` liegt der Wasserhintergrund über den eigentlichen Texturen. Mein Zeichenpass sortiert nur nach „deckend vor gemischt" und ignoriert Layer und Tiefenschlüssel — eine gemischte Kachel aus Layer 1 landet dadurch über allem, was danach käme. Kujata teilt die Stapel nach **Layer-ID, Z-Index, param, state UND transType** auf; meine Aufteilung ließ Layer und Z weg | Von mir eingeschleppt | 🔧 Aufteilung um Layer-ID und Z-Index ergänzen, Reihenfolge Layer→Z→Mischart |
-| F33 | Kampf | **Party sind blaue Quader** (in Runde 2 zehnmal wörtlich benannt), Gegner zusätzlich „viel zu klein" — dieselbe Größenfrage wie F28, nur im Kampfraum. Ohne Party-Battle-Modelle und ohne Bühne ist die Kategorie nicht sinnvoll bewertbar; 15 von 25 Bildern katastrophal, kein einziges „gut" | Bekannte Lücke, jetzt quantifiziert | 🟡 **teilweise behoben (2026-08-11), s. K1/K2 unten.** Der Lader ist repariert — er rät keine Dateinamen mehr, sondern klassifiziert jeden Eintrag des Präfix-Namensraums über seine **Inhalts-Signatur**: **8979/8979** `.p`-Teile (Kontrolle alter Lader: **2321** = 25,8 %) und **787/787** TEX-Dateien (Kontrolle: **411**; davon Modellpräfixe **201** statt 35) über 11 119 Einträge / 481 Präfixe; kein Präfix ohne Skelett, keines mit 0 Teilen trotz Geometrie (vorher 36). Cloud (`rt`) liefert jetzt **33 Teile / 2 Texturen / 23 Bones** statt 3/0. 🔴 **Die Party bleibt trotzdem aus Quadern**: welcher Party-Platz welches Battle-Präfix trägt, ist im gesamten Baum **nirgends gemessen** — „rt = Cloud" ist eine Behauptung, für die übrigen Plätze existiert nicht einmal eine. Eine geratene Tabelle wäre ein Regel-3-Verstoß; was fehlt, ist eine Messung, nicht Code |
-| F34 | Weltkarte | Unverändert „Farbe falsch, 3D-Modelle gut". Referenzwunsch bleibt **ff7-landscaper**; aus dem README ließen sich keine Formatdetails ziehen, die Texturzuordnung steckt im Quellcode (`src/`, `src-tauri/`) und in `docs/map-state.md` | Bekannte Lücke | 🟡 offen (F11/F25) |
+| F33 | Kampf | **Party sind blaue Quader** (in Runde 2 zehnmal wörtlich benannt), Gegner zusätzlich „viel zu klein" — dieselbe Größenfrage wie F28, nur im Kampfraum. Ohne Party-Battle-Modelle und ohne Bühne ist die Kategorie nicht sinnvoll bewertbar; 15 von 25 Bildern katastrophal, kein einziges „gut" | Bekannte Lücke, jetzt quantifiziert | 🟡 **teilweise behoben (2026-08-11), s. K1/K2 unten.** Der Lader ist repariert — er rät keine Dateinamen mehr, sondern klassifiziert jeden Eintrag des Präfix-Namensraums über seine **Inhalts-Signatur**: **8979/8979** `.p`-Teile (Kontrolle alter Lader: **2321** = 25,8 %) und **787/787** TEX-Dateien (Kontrolle: **411**; davon Modellpräfixe **201** statt 35) über 11 119 Einträge / 481 Präfixe; kein Präfix ohne Skelett, keines mit 0 Teilen trotz Geometrie (vorher 36). Cloud (`rt`) liefert jetzt **33 Teile / 2 Texturen / 23 Bones** statt 3/0. 🔴 **Die Party bleibt trotzdem aus Quadern**: welcher Party-Platz welches Battle-Präfix trägt, ist im gesamten Baum **nirgends gemessen** — „rt = Cloud" ist eine Behauptung, für die übrigen Plätze existiert nicht einmal eine. Eine geratene Tabelle wäre ein Regel-3-Verstoß; was fehlt, ist eine Messung, nicht Code. **⇒ Diese Messung liegt seit Welle 2 vor (K4, s. u.), die Quader sind weg.** Die Party lädt jetzt über `savemap.party` → `partyModelPrefix` → `loadBattleModel`/`buildBattleActor`. Die Größenfrage ist mit Kontrolle beantwortet: **Faktor 1, kein Umrechnungsfaktor** (`BATTLE_MODEL_SCALE = 1`) — der Feldfaktor 4 aus F37 gilt im Kampf NICHT. Belegt über Bindpose-Höhen (Spieler Median 852, Gegner Median 1370) gegen einen Sweep 1/4/8/16: schon bei 4 füllt ein Party-Unterarm ein Drittel des Bildes. 🔴 Bindpose und Kamera bleiben offen, s. F26 |
+| F34 | Weltkarte | Unverändert „Farbe falsch, 3D-Modelle gut". Referenzwunsch bleibt **ff7-landscaper**; aus dem README ließen sich keine Formatdetails ziehen, die Texturzuordnung steckt im Quellcode (`src/`, `src-tauri/`) und in `docs/map-state.md` | Bekannte Lücke | ✅ Farbteil gelöst — **ohne** Fremdcode: die Zuordnung wurde aus der Spiel-EXE des Nutzers GEMESSEN, nicht aus ff7-landscaper übernommen; seit Welle 2 auch in der Demo sichtbar (s. F25). 🔜 **Der Nebenbefund „bei 3× Tab kein Fahrzeugmodell erkennbar" ist unangetastet** — das ist Weltmodell-Rendering, nicht Terrain, und wurde in Welle 2 nicht bearbeitet |
 | F35 | Field/Modelle | **Fehlende 3D-Objekte:** In `junonr2` fehlt die Gondel, in `bigwheel` fehlen Tür und Gondel in allen drei Animationsphasen. Das sind Script-gesteuerte Feldobjekte, keine Hintergrundkacheln — sie hängen an Opcodes, die die Demo noch nicht ausführt | Spielbarkeit/Sichtqualität | 🔜 messen, welche Opcodes diese Objekte sichtbar schalten |
 | F35-1 | Field/Hintergrund | **Teilbefund, vermessen (2026-08-11).** Die „Gondel" von `junonr2` ist **kein** 3D-Modell: Die Entitäten `door` (Index 0) und `lift` (Index 3) tragen `modelIndex = null` — es sind Hintergrundgruppen (Layer 1 param 16, Layer 2 param 17/18). Zwei Ursachen wurden geprüft: (a) **Bankbyte-Aufteilung ausgeschlossen** — alle **46** BG-Instruktionen von `junonr2` tragen Bankbyte 0, bei Literaloperanden ist `banks>>4`/`banks&0xf` wirkungslos. (b) **Anfangszustand eingeführt** (🔵): `berechneAnfangsBgStates` belegt je Parameter das niedrigste vorkommende Zustandsbit vor. Gemessen über 702 Fields: von 1256 animierten Kachelgruppen sind nach 300 Ticks **542 leer ohne** und **329 leer mit** Vorbelegung — **213 Gruppen mit 9682 Kacheln** werden wieder sichtbar. 🔴 **`junonr2` ist NICHT darunter**: Vorbelegung `{16:1, 17:1, 18:1}`, nach 300 Ticks ohne wie mit `{16:0, 17:0, 18:1}` — das Skript räumt die Parameter selbst wieder ab | Interpreter-seitig erledigt, Restursache liegt woanders | 🔜 **Zeichenseite/Kontrollfluss:** entweder erreicht der Wirt die Animationsunterroutine schon beim Field-Start (im Original läuft sie erst beim Benutzen des Lifts), oder die Zeichenregel muss bei leerer Maske auf den Anfangszustand zurückfallen statt alles auszublenden |
 
@@ -107,6 +107,103 @@ Abweichung 18,9/255, Ausreißer fast nur an den Figuren).
 | F41 | Field/Modelle | **Cloud fehlt ein Auge** (Nutzerbefund Runde 3). Vermutlich Aufkleber-/Alphaproblem der Gesichtstextur (`alphaTest`/Decal-Versatz oder gespiegelte UV des zweiten Auges) | Sichtqualität | 🔜 messen (Texel des Augen-Aufklebers gegen texToRgba prüfen) |
 | F42 | Field/Modelle | **„Sattere" Modelle im Original** (Nutzerbefund Runde 3, Punkt 1). Verdacht: (a) texturierte Flächen ignorieren bei uns die Vertexfarben (`MeshBasicMaterial` ohne `vertexColors` — das Original moduliert Textur × Vertexfarbe), (b) Sektion 3 trägt womöglich Lichtfarben je Modell, die wir nicht anwenden | Sichtqualität | 🔜 Makou-Reactor-Recherche (läuft) klärt (b); (a) ist ein Einzeiler-Experiment mit Sichtvergleich |
 | F43 | Interpreter | **Story-Fortschritt** (Nutzerbefund Runde 3, Punkt 2): Die Hauptfortschrittsvariable liegt in der Savemap bei Slot-Offset **0x0BA4** (u16 `mprogress`, ff7tk `FF7Save_Types.h`). Wie weit unsere Interpreter-Bänke sie den Field-Scripts bereitstellen (Entity-Sichtbarkeit, alternative Entries), ist ungemessen | Spielbarkeit | 🔜 messen; Makou-Reactor-Recherche (läuft) liefert die Opcode-Seite |
+
+## F11b + F25 — Weltkarten-Texturen: gelöst und gemessen (2026-08-11)
+
+### F11b — welche Texturdatei gehört zu welcher `textureId`?
+
+**Fundstelle (gemessen, nicht übernommen):** Die Zuordnung steht als
+**Zeigerfeld in der Spiel-EXE** (`ff7.exe`, Dateiversatz `0x5686E8`, VA
+`0x969CE8`; in `ff7_en.exe` identisch). Jeder Eintrag zeigt auf einen
+NUL-terminierten Namen `<name>.tim` in einem 4-Byte-ausgerichteten
+Zeichenkettenvorrat; der PC-Lader lädt daraus `<name>.tex` aus
+`world_us.lgp`. Gelesen wird die Tabelle von `parseWorldTextureNames`
+(`packages/formats-world/src/texture-names.ts`) — **die Fundstelle wird
+gesucht, nicht fest verdrahtet** (längster Lauf aufeinanderfolgender Zeiger
+auf `*.tim`-Namen).
+
+**Aufbau — drei hintereinandergelegte Tabellen, 402 Einträge:**
+
+| Karte | Basis | Länge | Belegte IDs |
+|---|---:|---:|---|
+| Overworld (WM0) | 0 | 390 | 0…281 (282 benutzt, 108 unbenutzt) |
+| Unterwasser (WM2) | 390 | 8 | 0…7 |
+| Great Glacier (WM3) | 398 | 4 | 0…3 |
+
+380 Einträge tragen einen Namen, **22 nicht** — deren Zeiger führen in einen
+uninitialisierten `.data`-Bereich (BSS). Das sind die **animierten Texturen
+aus `wm.ta`**; genau 22 ist auch die Eintragszahl dieser Datei. Zwei
+unabhängige Zählungen, dieselbe Zahl.
+
+**Gütefunktion mit Kontrolle** (`world-texmap-probe`, Realdaten): Passen die
+Dreiecks-UVs in das Fenster der zugeordneten Textur?
+
+| Karte | Treffer | Quote | Kontrolle (500 Verwürfelungen) Median / Max |
+|---|---|---:|---|
+| **WM0** | **282/282** | **1,0000** | **0,6028 / 0,6489** |
+| WM0, nur seltene Größen (≤ 8 Exemplare) | **20/20** | **1,0000** | **0,5500 / 0,7000** |
+| WM2 | 8/8 | 1,0000 | 0,8750 / 1,0000 (bei 8 IDs ohne Trennschärfe) |
+| WM3 | 4/4 | 1,0000 | 1,0000 / 1,0000 (bei 4 IDs ohne Trennschärfe) |
+
+Die **Zweitrechnung über seltene Größen** war nötig, weil 225 der 415
+Texturen 32×32 sind — „passt ins Fenster" ist bei einer 225-fach
+vorkommenden Größe billig. Bei den seltenen Größen (128×256 einmal, 32×128
+einmal, 128×16 einmal …) trifft die Zuordnung ebenfalls vollständig.
+
+**Gegengeprüfte Kandidatenordnungen** (dieselbe Gütefunktion, vor dem Fund
+der EXE-Tabelle gemessen, WM0): TOC-Reihenfolge des Archivs **0,5780** ·
+alphabetisch **0,5780** · physische Datenlage im LGP **0,6241** · nach Größe
+sortiert **0,4645** · bestes gleitendes Fenster über die physische Ordnung
+**0,7411** — gegen ein Verwürfelungsniveau von Median 0,5851 / Max 0,6241.
+**Keine** dieser naheliegenden Ordnungen ist die richtige; erst die
+EXE-Tabelle liefert 1,0000. Das ist der Beleg dafür, dass die Zuordnung
+gemessen und nicht geraten wurde.
+
+**Beifang, unabhängig bestätigt:** Der `cltr`-Quirk der Unterwasserkarte ist
+gemessen — **1992 von 2523** UV-Bytes der WM2-ID 0 liegen auf 254/255
+(„Außenbereich"), der Rest endet bei 120 und passt damit sauber in die
+128 px breite Textur. Ohne diese Ausnahme behauptet die Messung eine
+256 px breite Textur, die es nicht gibt.
+
+**`wm.ta` (animierte Texturen), Accounting geschlossen:** 22 Einträge,
+`stride == 528` in 22/22, `offset[i+1]−offset[i] == frames·stride` in 21/21,
+`12 + w16·h·2 == bnum` in **108/108** Halbbildern. 4 oder 8 Halbbilder je
+Textur, `speed ∈ {10, 15, 20, 25}`. **4 bpp, 32×32** — gegen die
+16-bpp-Lesart entschieden durch (a) die gemessene UV-Fenstergröße 32×32 in
+22/22 Fällen und (b) das VRAM-Raster `vramX ∈ {384…440}` Schrittweite 8,
+`vramY ∈ {256, 288, 320}` Schrittweite 32, das genau die Texturmaße trifft.
+
+**🔴 Offen geblieben:** Die **Farbtabelle der 22 animierten Texturen**.
+`wm.ta` enthält keine CLUT (das Byte-Accounting geht ohne Rest auf), und die
+EXE-Tabelle führt für sie keinen Namen. Diese 22 IDs tragen **66,55 % aller
+WM0-Dreiecke** (der Ozean) — sie werden daher mit einer ausdrücklich
+gekennzeichneten **🟡 Ersatzpalette** eingefärbt, die aus den Daten
+ABGELEITET ist: dunkelste und hellste Farbe der Palette der statischen
+Textur, die am häufigsten im selben Mesh vorkommt, dazwischen 16 Stufen
+linear. Der Ozeanton ist damit **kein Beleg**; Geometrie, UV-Rechnung und
+Atlas sind es.
+
+### F25 — texturiertes Terrain
+
+- **Gemeinsamer Packer:** Der Regal-Packer wurde aus
+  `render-field/tile-atlas.ts` in das neue Paket **`@webmidgar/atlas`**
+  herausgehoben und wird jetzt von Field UND Weltkarte benutzt (die
+  Kampfbühne kann denselben nehmen). Kein zweiter Packer.
+- **Atlas-Accounting WM0:** 282 benutzte IDs → 282 Bilder (260 statisch,
+  22 animiert), **1 Seite** 2048², Polsterung 4 px mit Edge-Bleed,
+  **0 abgewiesen**, **0 überlappende Paare** (Prüfung schließt die
+  Polsterung ein), Nutzfläche 886.784 px, Füllgrad 0,2114.
+- **Wiederholung in der UV-Rechnung**, nicht über `RepeatWrapping` — bei
+  Atlasnutzung liefe die Hardware in die Nachbarzelle
+  (`atlasUvForLocalPixel`, halbe Texelmitte gegen Randmittelung).
+- **Klassenfarben bleiben als umschaltbare Diagnose** erhalten.
+- **Sichtnachweis:** `world-texmap-probe` schreibt vier Standbilder
+  (Gesamtkarte und Nahausschnitt, je texturiert und Klassenfarben) plus die
+  Atlasseite. Farbvielfalt Gesamtkarte: texturiert **470**, Klassenfarben
+  **29** (mehr als 32 kann die 5-Bit-Diagnose nicht). Die texturierte
+  Gesamtansicht zeigt die FF7-Weltkarte wiedererkennbar: Ost- und
+  Westkontinent, Nordkrater mit Schnee, Wüste um die Goldene Untertasse,
+  Midgar.
 
 Offen aus Runde 2 bleiben: **F30** (Transparenzregel — Blockränder,
 Nutzerpunkt 3), **F31** (`textureId2` — verwürfelte Kacheln), **F32**
@@ -386,3 +483,166 @@ Implementierungstabelle. **Hätte** sich ein Digest bewegt, wäre das der Alarm
 gewesen (Offsettabelle im Laufzeitzustand bzw. beschädigte Längentabelle);
 dass sie stehen, ist die Aussage. Der Soak-Test meldet weiterhin
 `digestStabil: true`, `fehler: 0`.
+
+## Kampf-HUD und Ergebnisbildschirm (K6/N7/K7, 2026-08-11)
+
+**F26 (Teilbefund „HUD nicht im Originalstil") ist erledigt.** Der
+Diagnosekasten aus `<pre>`-Text ist weg; das HUD entsteht jetzt aus
+`@webmidgar/ui-battle-hud` — der Anordnung als Daten plus der gemeinsamen
+Fensterschale `@webmidgar/ui-window`. Die übrigen Teile von F26 (Bühne,
+Party-Modelle, Gegnergröße) bleiben offen und gehören einem anderen Bereich.
+
+**Die F40-Kanten wurden unabhängig nachgemessen**, nicht übernommen:
+Kantensuche über die Bordürenfarben in `apps/demo/.shots/ref/…223335_1.jpg`,
+`…223327_1.jpg`, `…223347_1.jpg`, `…223349_1.jpg` (alle 640×480, unskaliert).
+
+| Größe | F40-Katalog | Nachmessung 2026-08-11 | |
+|---|---|---|---|
+| linkes HUD-Fenster | `(1,333)–(270,442)` | Bordürenkanten x=0…273, y=332…443 | ✅ ±1 px |
+| rechtes HUD-Fenster | `(275,333)–(637,442)` | x=274…639, y=332…443 | ✅ ±1 px |
+| Kommandofenster | `(145,341)–(261,450)` | x=144…263, y=340…451 | ✅ ±1 px |
+| ATB füllend | `rgb(145,210,170)` | Kennzeile y=357 → `(140,213,170)` | ✅ |
+| ATB voll | `rgb(227,181,129)` | Kennzeile y=357 → `(228,181,129)` | ✅ |
+
+Die ±1-px-Abweichungen sind genau die Frage, ob die vom JPEG weichgezeichnete
+äußerste Bordürenspalte mitgezählt wird. Übernommen sind die F40-Werte.
+
+**Neu vermessen** (in F40 nicht katalogisiert): Meldungsfenster über der Bühne
+`(32,16)–(607,63)`; Balken BARRIER/LIMIT/TIME je 74×16 außen mit 64×10
+Innenfläche bei x=190/476/554, y=351; LIMIT-Kennfarbe `rgb(204,143,176)`,
+ungefüllt `rgb(89,89,89)`; Balkenprofil über 10 Zeilen mit Glanzlinie in
+Zeile 5–6; Ergebnisbildschirm als fünf lückenlose Bänder auf 640×480
+(68 / 52 / 3×120 px). **Der Farbumschlag grün→sandgelb bei vollem ATB ist
+damit doppelt belegt** — einmal aus F40, einmal aus dem direkten Vergleich
+`…223335` (grün, ATB läuft) gegen `…223327` (sandgelb, Kommandofenster offen).
+
+**Kontrollniveau der einzigen hergeleiteten Größe.** Die Kopfhöhe 13 px ist
+belegt: sie sagt die unabhängig abgelesene Balkenoberkante y=351 exakt vorher
+(12 ergäbe 350, 14 ergäbe 352). Der **Zeilenabstand 29 px** ist NICHT belegt —
+in jeder Referenzaufnahme steht Cloud allein in der Gruppe. Für 29 spricht
+allein, dass 87/3 ohne Rest aufgeht. Wer eine Aufnahme mit voller Gruppe hat,
+misst nach.
+
+**K7 — `BattleViewModel` ist angeschlossen.** Es war seit S32 gebaut, aber
+nirgends benutzt; Trefferzahlen und die Ersatzdarstellung erschienen NIE. Jetzt
+speist jedes Tick-Ergebnis die Projektion, und das HUD zeigt aufsteigende,
+verblassende Zahlen sowie die Effektabdeckung als Quote (gemessen im Lauf:
+`0/68` — die 0 % aus S32 sind jetzt sichtbar statt verschwiegen). Ein Rückkanal
+existiert weiterhin nicht.
+
+**Kampf-Bildrate — gemessen, dann geändert.** `packages/battle-runtime` kannte
+gar keine Rate; die Demo tickte den Kampf in der gemeinsamen 30-Hz-Schleife,
+also **doppelt so schnell wie das Original** (ffnx `ff7_limit_fps`: BATTLE 15,
+FIELD/WORLDMAP 30, MENU 60, CREDITS 39). Die Demo taktet ihn jetzt über
+`isBattleTickDue` auf 15 Hz; Eingaben der übersprungenen Wirtstakte werden
+gepuffert. **Kein engineCompat-Schritt:** Die `BattleSession` hat keine
+Wanduhr, ihr Zustand hängt nur an der Zahl der Takte und den Eingaben — belegt
+in `packages/battle-runtime/src/rate.test.ts` (200 Takte, Digest
+`738934749e950317`; Kontrollen: ein Takt mehr und ein anderer Seed ergeben
+andere Digests). Die drei R9-Replay-Vektoren sind reine Field-Läufe und
+bleiben unberührt. Die befürchtete Folge „alle Wartewerte um Faktor 2 falsch"
+trifft NICHT zu: Wartewerte aus Originaldaten gibt es in der Kampflaufzeit
+noch keine.
+
+## Abnahme der Welle 2 — Gesamtlauf (2026-08-11)
+
+Alle Suiten wurden nach dem Zusammenführen der fünf Wellen-2-Aufträge
+(Glyphenmetrik/Fensterschale, Menü-Optik, Kampf-Modelle/Bühne, Kampf-HUD,
+Weltkarten-Texturen) und der Demo-Verdrahtung vollständig gefahren.
+
+| Lauf | Ergebnis |
+|---|---|
+| `npm test` | **69 Dateien / 835 Tests, 835 grün, 0 Fehler, 0 übersprungen** (Welle 1: 60/686) |
+| `npx tsc -b --force` | **grün** (Exit 0, erzwungener Neubau ohne Inkrementcache) |
+| `npx vitest run --config vitest.realdata.config.ts` | **97 Dateien, 261 Tests — 175 grün, 0 Fehler**, 86 übersprungen; in einem Lauf durchgefahren (60 s). Die Übersprungenen sind durchweg die `describe.skipIf(available)`-Gegenstücke „Realdaten nicht verfügbar", also bauartbedingt und kein Ausfall |
+| `npx vite build --config apps/demo/vite.config.ts` | **grün, alle 17 Seiten gebaut** |
+
+**Kein Fehlschlag, also auch keine nachgezogene Erwartung.** Anders als bei der
+Welle-1-Abnahme gab es diesmal nichts zu reparieren: weder eine bewusste
+Semantikänderung mit nachgezogener Erwartung (A) noch fehlerhaften neuen Code (B).
+
+**Der Produktionsbuild ist bewusst mitgefahren**, weil er etwas prüft, das weder
+`npm test` noch `tsc` sehen: die **Vite-Aliasauflösung**. Genau dort lag in dieser
+Welle ein realer Blocker — `@webmidgar/atlas` war in `vitest.config.ts` registriert,
+in `apps/demo/vite.config.ts` aber nicht, wodurch `game.html` mit
+„Failed to resolve import" **gar nicht ladbar** war, während beide anderen Läufe
+grün blieben. Der Eintrag ist ergänzt; alle Wellen-2-Pakete
+(`ui-window`, `ui-battle-hud`, `atlas`, `menu`, `render-battle`, `render-world`,
+`formats-kernel`) stehen in `apps/demo/package.json`.
+
+### Digest-Gegenprobe — bestanden
+
+Die drei Replay-Vektoren sind **bytegleich zu HEAD**, geprüft an der Arbeitsdatei,
+nicht am Index:
+
+| Vektor | Digest |
+|---|---|
+| `diagonal` | `264718afa7d478d5` |
+| `gleiten` | `430f8b8a0770156f` |
+| `skript` | `dfdfd745ed5452e0` |
+
+Der Soak-Test (500 Field-Wechsel) meldet `digestStabil: true`, `fehler: 0`,
+Heap-Abweichung 1,46 % gegen die Steady-Baseline, 500 Erwerbe / 500 Freigaben /
+**0 Fehlfreigaben**.
+
+`tools/nfr-run/src/replay-vektoren.ts` ist gegenüber HEAD verändert — aber
+**ausschließlich um einen Kommentarblock** (+24 Zeilen, keine gelöschte Zeile).
+Er dokumentiert eine *Nicht*-Fortschreibung: `BGROL`/`BGROL2` wanderten vom Skip-
+auf den Ausführungspfad, ohne die Digests zu bewegen, weil keiner der drei
+Vektoren einen BG-Opcode enthält. Das ist das erwartete Ergebnis — hätten sich
+die Digests bewegt, hätte eine Längenänderung Opcodes berührt, die in den
+Fixtures gar nicht vorkommen.
+
+**Damit ist die tragende Aussage der Welle belegt:** Menü und Kampf-HUD sind
+Overlays **ohne Zustandswirkung**. Sie lesen die Savemap, schreiben nichts,
+ticken den Interpreter nicht und erzeugen keinen `HostRequest`. Verankert ist
+das zusätzlich in `packages/menu/src/menu-runtime.test.ts` („lässt den
+Replay-Digest unberührt, egal wie ausgiebig es bedient wird") — inklusive der
+eingebauten Gegenprobe, dass das Menü im Vergleichslauf tatsächlich bedient
+wurde. Eine Quote ohne Kontrollniveau wäre hier wertlos gewesen.
+
+### Was in dieser Welle belegt wurde (mit Kontrollniveau)
+
+| Größe | Gemessen | Kontrolle | |
+|---|---|---|---|
+| Glyphenbreiten-Regel `(b & 0x1F) + (b >> 5)` | Fenstervorhersage **38,90 %** exakt über 9417 echte WINDOW-Opcodes | additiv **38,90 %** gegen nicht-additiv **21,80 %**; Polsterungs-Sweep 19 px → 0,38 %, **20 px → 38,90 %**, 21 px → 6,99 % | ✅ |
+| Glyphenbreite gegen Tintenbreite | **194/212** Glyphen exakt `Breite = Tinte + 1` | zweite, unabhängige Achse direkt aus dem Fontblatt gemessen | ✅ |
+| WINDOW.BIN Accounting | **13317 B** = 10065+3076+156 komprimiert + 2 Nullbytes, byteexakt | Fallstrick belegt: das Längenfeld des TIM-Blocks in Sektion 1 nennt 16140 B, nur die Masse (32256 B) füllt die Sektion byteexakt | ✅ |
+| Battle-Präfix → Figur (K4) | 21 Präfixe zugeordnet über **drei unabhängige Achsen** (Sichtbefund je Standbild, Kennzahlen/Byte-Identität, Charakterreihenfolge aus kernel.bin Sektion 3) | **Die naheliegende Regel „Index = 460 + charakterId" FÄLLT**: beste Verschiebung trifft **5 von 9**. Ursache gemessen: Barret belegt vier, Vincent drei aufeinanderfolgende Präfixe. Das Kontrollniveau 5/9 steht als Test im Code | ✅ |
+| Bühne → `location` (K5) | Regel „Präfix = Band[location]" löst **1000/1000** Formationen auf, 89/90 Präfixe erreicht, Bereich exakt 0…89 | **Ehrlich: Vollständigkeit trennt NICHT** — jede Bijektion löst zu 100 % auf. Zwei Inhaltsmaße versucht und **beide gescheitert**: Gegner im Bühnengrundriss (Regel 98,05 %, +1 sogar 99,09 %, verwürfelt 97,85 %) und Rangkorrelation Bühnenradius↔Kameraabstand (Regel −0,066, verwürfelt −0,157…+0,068 = reines Rauschen). Getragen wird die Regel von Bereichsausschöpfung, Häufigkeitsprobe (die drei geometrielosen Bühnen sind zugleich die drei seltensten `location`-Werte) und Sichtvergleich | 🟡 |
+| Kampf-Modellmaßstab (K3) | **Faktor 1**, kein Umrechnungsfaktor | Sweep 1/4/8/16 durch die Szenenkamera: schon bei 4 füllt ein Party-Unterarm ein Drittel des Bildes. Der Feldfaktor 4 (F37) gilt im Kampf NICHT | ✅ |
+| Weltkarten-Texturtabelle (F11b) | Zeigerfeld in `ff7.exe` @ Dateiversatz `0x5686E8` (VA `0x969CE8`), **402 Einträge** = 390 Overworld + 8 Unterwasser + 4 Gletscher; **380/380 Namen lösen in `world_us.lgp` auf, 0 Fehlverweise** | vier Kandidatenordnungen mit derselben Gütefunktion **widerlegt**; die 22 namenlosen Einträge zeigen in BSS — und genau **22** ist unabhängig auch die Eintragszahl von `wm.ta` (zwei Quellen, dieselbe Zahl) | ✅ |
+| Fensterschale, alte gegen neue Optik | **457/457** berechnete CSS-Eigenschaften identisch, identisches Kastenmaß | als Unit-Test verankert; ersetzt den nicht möglichen Screenshot-Vergleich | ✅ |
+
+### Was NICHT belegt ist — die drei tragenden Vorbehalte
+
+1. 🔴 **Die Hauptmenü-Aufteilung.** Unter den 18 Referenzbildern
+   (`apps/demo/.shots/ref/`) ist **keine Menüaufnahme** — gesichtet wurden
+   Sternenhimmel, sechs Field-Szenen, drei Kampfszenen, ein Dialogfenster, drei
+   Kampfabschluss-Bildschirme. `docs/fremdquellen/makoureactor.md` dokumentiert
+   ebenfalls keine Menüaufteilung; Abschnitt 19.7 beschreibt die Fenstergeometrie
+   des **FIELD**-Skripts (Fläche 320×224), also eine andere Fläche und einen
+   anderen Bildschirm. Alle Zahlen liegen deshalb in **einem** austauschbaren
+   Objekt `FF7_MAIN_MENU_LAYOUT`. Wer eine Menüaufnahme beschafft, korrigiert
+   Zahlen, keinen Code. Ob die Kommandospalte im Original links oder rechts
+   steht, ist damit ausdrücklich **nicht** entschieden.
+2. 🔴 **Die Kampfkamera** (s. F26) — der größte verbleibende Sichtmangel.
+3. 🔴 **Der Text kommt weiterhin aus einer Systemschrift**, nicht aus dem
+   Fontblatt in WINDOW.BIN Sektion 1. Der Parser liefert die Textur inzwischen
+   (256×252, 4 bpp, Palette), benutzt wird sie noch nicht. Die Metrik stimmt
+   damit **rechnerisch**, die tatsächlich gezeichneten Pixelbreiten sind aber die
+   der Systemschrift. Solange das so ist, bleibt auch offen, welche Breite beim
+   **Zeichnen** für die 12–15 Zeichen gilt, bei denen die additive Regel und die
+   Namensplatzhalter-Rechnung auseinanderlaufen — die Fenstermessung entscheidet
+   sich klar für additiv, die Platzhalterbreite 117 px = 9 × 13 rechnet
+   nachweislich mit dem Maximum der **unteren 5 Bit**.
+
+### Weiterhin ohne Pixelvergleich
+
+Zum dritten Mal in Folge festgehalten, weil es sich nicht von selbst erledigt:
+**`apps/demo/.shots/ref/` existiert im Arbeitsbaum nicht** — die 18
+Referenzbilder liegen nur in einem Worktree unter `.claude/worktrees/`. Einen
+automatisierten Bild-gegen-Bild-Vergleich der neuen Optik gibt es deshalb nicht.
+Ersetzt ist er durch DOM-Kantenmessungen im Browser, den 457/457-Eigenschafts-
+vergleich und Struktur-/Geometrietests. Wer den Pixelvergleich will, muss die
+Referenzbilder zuerst in den Arbeitsbaum holen.

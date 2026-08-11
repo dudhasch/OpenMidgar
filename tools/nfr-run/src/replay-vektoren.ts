@@ -288,6 +288,30 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * XYI/XYZ) und in den beiden Realdatenproben `oplen-bundle-probe` /
  * `oplen-struktur-probe`.
  */
+/**
+ * **Nicht-Fortschreibung 2026-08-11 (BGROL/BGROL2 + Referenzbündel).** Der
+ * Schritt war als engineCompat-Schritt geplant, weil `BGROL` (0xE2) und
+ * `BGROL2` (0xE3) vom Skip- auf den Ausführungspfad gewandert sind (0xE2
+ * zugleich von Operandenlänge 1 auf 2) und weil 53 Skip-Längen auf den
+ * Referenzwert gesetzt wurden. Die drei Digests stehen trotzdem still.
+ *
+ * **Das ist das erwartete Ergebnis, kein Ausbleiben eines Ergebnisses.** Die
+ * Vektoren sind aus `ScriptAssembler`-Skripten gebaut (Bewegung, Kollision,
+ * Zielführung); keines davon enthält einen BG-Opcode oder einen der 53
+ * korrigierten Opcodes. Wären die Digests gewandert, wäre genau das der
+ * Alarm gewesen: Dann hätte eine Längenänderung Opcodes berührt, die in den
+ * Fixtures gar nicht vorkommen — also die Tabelle woanders beschädigt.
+ *
+ * **Wo die Wirkung stattdessen sichtbar gemacht ist.** Die Rotationssemantik
+ * bewegt `bgStates` und ist damit Teil des Zustandsbaums; belegt wird sie in
+ * `packages/interpreter/src/interpreter.test.ts` (Abschnitt „BGROL / BGROL2"),
+ * einschließlich der Abnahme an der `hyou4`-Spanne. Die Wirkung auf echte
+ * Field-Daten misst `tools/realdata-scan/src/bgrol-belegkette.rdtest.ts`.
+ *
+ * ⚠️ Wer hier einen Vektor ergänzen will, der BG-Opcodes wirklich ausführt,
+ * bewegt damit bewusst die Digest-Menge — dann gehört ein eigener Eintrag an
+ * diese Stelle.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
   diagonal: '264718afa7d478d5',
   gleiten: '430f8b8a0770156f',

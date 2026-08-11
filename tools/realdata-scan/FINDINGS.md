@@ -1018,8 +1018,8 @@ Schranke** für die Länge, ganz ohne Statistik.
 | `MINIGAME` 0x20 | 134 (78) | 0 → 10 | alle Längen unter Kontrollniveau | — | ❌ **widerlegt**, Schranke ≤ 5 |
 | `BGMOVIE` 0x27 | 36 (13) | 0 → 1 | ref (−1,56) schlechter als ist (−0,43) | — | ❌ nicht belegt |
 | `MVCAM` 0xFB | 55 (23) | 0 → 1 | Bestwert −0,11, unter Kontrollniveau | — | ❌ nicht belegt |
-| `BGROL` 0xE2 | 13 (6) | 1 → 2 | 0,83 ± 0,68 bei n=9 — Rauschen | 11,1 % gegen 22,2 % Kontrolle | ❌ **unterbietet die Kontrolle** |
-| `BGROL2` 0xE3 | 5 (2) | 2 = 2 | n=2 | n=2 | ❌ nicht messbar |
+| `BGROL` 0xE2 | 13 (6) | 1 → 2 | 0,83 ± 0,68 bei n=9 — Rauschen | 11,1 % gegen 22,2 % Kontrolle | ~~❌ unterbietet die Kontrolle~~ → ✅ **Runde 4: übernommen** |
+| `BGROL2` 0xE3 | 5 (2) | 2 = 2 | n=2 | n=2 | ~~❌ nicht messbar~~ → ✅ **Runde 4: implementiert** |
 
 **Zur XYZ-Ambiguität.** Die Grenzplausibilität bevorzugt Länge 4 (2,34) knapp
 vor 8 (1,76) — sie allein hätte in die Irre geführt. Entschieden hat die
@@ -1039,6 +1039,12 @@ Fields, gegen 46,7 % bei einem fremden Field. `BGROL` erreicht 11,1 % gegen
 11,1 %, davon 7 von 9 mit dem Wert 0 (Nullwerte bestehen den Test trivial).
 Nicht implementierbar ohne einen Bestand mit mehr Vorkommen.
 
+> ⛔ **ZURÜCKGENOMMEN (Runde 4, 2026-08-11).** Der BGON-Vergleich ist
+> zirkulär — die Vergleichsmenge wird aus BGON gebaut. Die neun BGROL-Stellen
+> waren zu 8/9 Phantome der eigenen Längentabelle. `BGROL` steht seit Runde 4
+> auf Länge **2** und ist implementiert; entschieden hat die Struktur einer
+> einzigen Spanne, nicht eine Quote. Siehe „Runde 4 — BGROL entschieden".
+
 ### O7 geschlossen
 
 Wortzugriffe mit Bankadresse 0xFF: **1** Fundstelle im gesamten Bestand
@@ -1055,3 +1061,654 @@ werden wieder sichtbar. 🔴 `junonr2` gehört **nicht** dazu: Vorbelegung
 `{16:1, 17:1, 18:1}`, danach ohne wie mit Vorbelegung `{16:0, 17:0, 18:1}`. Die
 Bankbyte-Aufteilung ist als Ursache ausgeschlossen (alle 46 BG-Instruktionen
 des Fields tragen Bankbyte 0, korpusweit 97,3 % bei BGON und 96,8 % bei BGOFF).
+
+---
+
+## Nachlese Welle 1 — vier Restposten, keine Längenänderung (2026-08-11)
+
+Vier Posten, die Welle 1 ausdrücklich offen gelassen hat, mit je einer
+**zweiten, unabhängigen** Messung nachgefasst. Ergebnis: **keine einzige
+Operandenlänge geändert** — dafür zwei Messanlagen als untauglich entlarvt und
+eine Fehlmessung der Vorrunde korrigiert. Proben (Stand Runde 4):
+`bgrol-belegkette.rdtest.ts`, `minigame-laengenfrage.rdtest.ts`,
+`oplen-abstieg-nachlese.rdtest.ts`, `junonr2-bgfluss-probe.rdtest.ts`.
+
+### Posten 1 — BGROL: der Maßstab war falsch — und das Urteil auch
+
+> ⛔ **Dieser Abschnitt ist zurückgenommen** (Runde 4, 2026-08-11) und bleibt
+> nur als Fehlerprotokoll stehen. Die Überschrift lautete ursprünglich „die
+> Vorrunde hatte den falschen Maßstab, **das Urteil hält trotzdem**" — genau
+> das stimmte nicht. Was unten steht, ist methodisch sauber bis auf einen
+> Punkt: Die Fundstellenmenge, auf der gerechnet wurde, war zu 8/9 Phantom.
+> Die Auflösung steht in „Runde 4 — BGROL entschieden".
+
+**Der Fehler.** Welle 1 stellte `BGROL`@+2 (11,1 %) gegen `BGON`@+2 (98,0 %).
+Dieser Vergleich trägt nicht: Die Vergleichsmenge „Parameter, die dasselbe Field
+schaltet" wurde **aus BGON selbst gebaut**. BGON trifft sie per Konstruktion —
+das ist eine Tautologie, keine Messung, und als Maßstab wertlos.
+
+**Der ehrliche Maßstab ist `BGCLR` (0xE4):** gleiche Familie, gleiche
+Operandenform `banks, param`, gleiche Länge 2 — und **nicht** Teil der
+Vergleichsmenge, wenn man diese nur aus BGON/BGOFF baut.
+
+| Opcode | Länge | `param`@+2 trifft eigenes Field | Kontrolle fremdes Field | 95-%-Intervall |
+|---|---|---|---|---|
+| `BGCLR` 0xE4 (**Eichung**) | 2 belegt | **98,1 %** (608/620) | 61,9 % (384/620) | [96,6 %, 98,9 %] |
+| `BGON` 0xE0 (tautologisch) | 3 belegt | 99,1 % (1981/2000) | 64,8 % | [98,5 %, 99,4 %] |
+| `BGOFF` 0xE1 (tautologisch) | 3 belegt | 98,6 % (1501/1523) | 62,0 % | [97,8 %, 99,0 %] |
+| `BGROL` 0xE2 | 1 ist / 2 ref | **12,5 %** (1/8) | 25,0 % (2/8) | [2,2 %, **47,1 %**] |
+| `BGROL2` 0xE3 | 2 | 50,0 % (1/2) | 50,0 % (1/2) | [9,5 %, 90,5 %] |
+
+**Das Urteil hält — und steht jetzt auf einer sauberen Zahl.** Die
+95-%-Intervalle von `BGCLR` und `BGROL` sind **disjunkt** (47,1 % < 96,6 %).
+Trotz n = 8 ist damit belegt: Das Byte an @+2 verhält sich bei BGROL **nicht**
+wie ein Parameterbyte derselben Familie. Die Referenzform `banks, param` ist an
+den Daten nicht haltbar, und ohne belegte Operandenlage wäre jede
+Rotationssemantik geraten. Die Bankbyte-Signatur zeigt in dieselbe Richtung:
+`BGCLR` trägt an @+1 zu **99,4 %** (621/625) eine 0, `BGROL` nur zu 77,8 %
+(7/9) — Intervalle knapp disjunkt.
+
+**Die Nachfolgerprobe ist untauglich, und das ist der eigentliche Fund.**
+Vorschlag (b) des Auftrags war, die Gültigkeitsquote der Folgeinstruktion zu
+messen. Umgesetzt (Quote „Byte an `pos+1+L` gehört zu den 50 Opcodes, die 90 %
+aller echten Instruktionsanfänge abdecken") und **an zwei bekannten Längen
+geeicht — dort fällt sie durch**:
+
+| Eichung | wahre Länge | Quote bei wahrer Länge | beste Quote | bei Länge |
+|---|---|---|---|---|
+| `BGCLR` 0xE4 | 2 | 83,2 % | **99,7 %** | 0 |
+| `BGON` 0xE0 | 3 | 98,6 % | **99,0 %** | 0 |
+
+Die Probe zeigt bei **beiden** belegten Opcodes auf die falsche Länge.
+Kontrollniveaus: echte Instruktionsanfänge 90,2 %, Operandenbytes 60,9 %,
+zufällige Position in einer Spanne **83,3 %** — das Rauschband liegt so dicht am
+Signal, dass nichts aufzulösen ist. Grund: BG-Opcodes stehen in Ketten, und
+ihre Parameterbytes sind kleine Zahlen, die mit häufigen Opcodes kollidieren.
+**Eine an bekannten Fällen durchgefallene Messanlage darf auf unbekannte nicht
+angewendet werden** — die BGROL-Zahlen dieser Probe sind deshalb nicht
+ausgewertet, nur protokolliert.
+
+**Folge:** `0xE2`/`0xE3` bleiben auf dem Skip-Pfad, Längen unverändert (1 bzw.
+2). Der Spannen-Abschluss ist auf beiden blind (9/9 bzw. 2/2 für **jede**
+Länge 0…6). 🔴 Was fehlt, ist ein Bestand mit mehr Vorkommen.
+
+> ⛔ **Zurückgenommen.** Was fehlte, war kein anderer Bestand, sondern ein
+> anderes Mittel. Der letzte Satz oben ist der eigentliche Fehlschluss: Aus
+> „meine Gütefunktion ist blind" folgt „mit einem anderen Mittel entscheiden",
+> nicht „unentscheidbar".
+
+### Posten 2 — MINIGAME / BGMOVIE / MVCAM: sie kommen vor, entscheidbar sind sie nicht
+
+> ⛔ **Die Überschrift ist zur Hälfte zurückgenommen** (Runde 4). „Sie kommen
+> vor" ist mit der verankerten Zählung **nicht** belegt: Ein nachweislich
+> falsches Raster (Dekodierstart bei `spanStart + k`) liefert für 0x20
+> **1318 / 652 / 717** verankerte Fundstellen bei k = 1/2/3 — zehnmal so viel
+> wie das richtige Raster mit 67. Die Zählung trennt keine Phantome ab.
+> Details unter „Runde 4 — die Minigame-Zahlen".
+
+Die Sorge „vielleicht kommt 0x20 gar nicht vor" ist ausgeräumt — die Suchmenge
+für einen späteren Minispiel-Einstieg ist **nicht leer**:
+
+| Opcode | roh (Fields) | **verankert** (Fields) | harte Schranke | ist / ref |
+|---|---|---|---|---|
+| `MINIGAME` 0x20 | 134 (79) | **118 (79)** | ≤ 5 | 0 / 10 |
+| `BGMOVIE` 0x27 | 36 (13) | **18 (13)** | ≤ 3 | 0 / 1 |
+| `MVCAM` 0xFB | 55 (23) | **38 (23)** | ≤ 3 | 0 / 1 |
+
+*Verankert* = erste Fundstelle je Spanne; nur sie ist von der geprüften Länge
+unabhängig. Die harte Schranke ist der kleinste Abstand zum Spannenende minus 1
+— **statistikfrei** und für `MINIGAME` unverändert vernichtend: die Referenz 10
+passt in vier Spannen physisch nicht hinein.
+
+Spannen-Abschluss über **alle** Längen 0…12 auf der betroffenen Teilmenge (jede
+Länge ist Kontrolle für jede andere):
+
+- `0x20`: 110, **112**, 107, 110, **112**, 110, 108, 105, 102, 100, 104(ref), 86,
+  84 von 118. Maximum **zweifach** (Längen 1 und 4), Vorsprung gegen Ist nur
+  2 Spannen. → **unentscheidbar**.
+- `0x27`: **18/18 für die Längen 0, 1 und 2** — die Gütefunktion ist vollständig
+  indifferent. → **unentscheidbar**.
+- `0xfb`: 34, 31(ref), **35**, 34, 31, 32, 34, 33, 30, 34, 30, 29, 28 von 38.
+  Maximum bei 2, Vorsprung gegen Ist **eine einzige Spanne**. Bemerkenswert: die
+  Referenz 1 ist mit 31/38 **schlechter als der Ist-Wert**. → **unentscheidbar**.
+
+Alle drei bleiben auf ihrem Ist-Wert. 🔴 **Der unbefriedigende Zustand bleibt
+und ist hier ausdrücklich benannt:** Länge 0 heißt, die VM führt Operandenbytes
+als Instruktionen aus. Belegt ist aber weder 0 noch die Referenz — eine
+geratene Länge wäre nicht besser, nur unauffälliger.
+
+### Posten 3 — der Längentabellen-„Fixpunkt" gilt nicht mehr, aber es ändert sich nichts
+
+Der Koordinatenabstieg (implementierte Opcodes eingefroren, wie in O9) hebt den
+Spannen-Abschluss von **99,9230 %** (48.004/48.041) auf **99,9417 %**
+(48.013/48.041) und macht **acht** Vorschläge. Jeder einzeln, isoliert auf die
+Ist-Tabelle gesetzt und auf seiner betroffenen Teilmenge gemessen:
+
+| Vorschlag | verankert | ist → neu | Maximum | Vorsprung | Urteil |
+|---|---|---|---|---|---|
+| `0x0d` 0 → 3 | 35 (24) | 34 → 35 von 35 | 2-fach (3/6) | 1 | ❌ mehrdeutig |
+| `0x1d` 4 → 3 | 32 (26) | 31 → 28 von 32 | 3-fach (1/4/5) | −3 | ❌ schlechter |
+| `0x20` 0 → 1 | 118 (79) | 110 → 112 von 118 | 2-fach (1/4) | 2 | ❌ mehrdeutig |
+| `0x3a` 4 → 0 | 65 (39) | 63 → 64 von 65 | 3-fach (0/1/2) | 1 | ❌ mehrdeutig |
+| `0x41` 1 → 4 | 23 (16) | 21 → 21 von 23 | 3-fach (0/1/4) | 0 | ❌ Gleichstand |
+| `0x7f` 2 → 6 | 50 (42) | 49 → 50 von 50 | **eindeutig** | **1** | ❌ unter Rauschschwelle |
+| `0xb7` 2 → 3 | 67 (36) | 67 → 67 von 67 | 7-fach | 0 | ❌ Gleichstand |
+| `0xef` 0 → 5 | 19 (15) | 18 → 19 von 19 | 2-fach (5/7) | 1 | ❌ mehrdeutig |
+
+**Sieben scheitern schon am O9-Kriterium. Der achte scheitert an einer neuen
+Kontrolle — und die ist der Ertrag dieses Postens.**
+
+`0x7f RDMSD` besteht das O9-Kriterium formal: 50/50 gegen ist 49/50, beide
+Nachbarn schlechter (5→49, 7→48), Maximum über alle 17 Längen eindeutig. Der
+Vorsprung beträgt jedoch **eine einzige Spanne von 50** — und ohne zu wissen,
+was eine Spanne wert ist, ist das keine Zahl, sondern eine Ziffer.
+
+**Auflösungskalibrierung.** Dieselbe Auswertung über alle **68** eingefrorenen
+Opcodes mit n ≥ 10, deren Länge unabhängig gedeckt ist. Wie oft schlägt dort
+eine **falsche** Länge die richtige?
+
+| Kennzahl | Wert |
+|---|---|
+| geprüfte eingefrorene Opcodes | 68 |
+| davon von einer falschen Länge **geschlagen** | **5 (7,4 %)** |
+| davon nur gleichauf (mehrdeutiges Maximum) | 11 |
+| Vorsprünge der falschen Längen | min 1, **median 1**, max **3** |
+
+Im Klartext: `MUL` (0x89) — der Opcode, an dem O9 die Überanpassung
+diagnostizierte — wird von den Längen 0/1 um **2 Spannen** geschlagen, `IFUWL`
+(0x19) sogar um **3**. Beide sind nachweislich falsch. Ein Vorsprung von einer
+Spanne ist damit **exakt das Rauschniveau dieser Gütefunktion**.
+
+Daraus die **Rauschschwelle** als stehende Regel der Probe: Ein Vorschlag muss
+mehr Vorsprung bieten als der größte, den eine falsche Länge an einem gedeckten
+Opcode erreicht (**3 Spannen**). `0x7f` bietet 1 — verworfen. Dass die Referenz
+für `0x7f` mit 2 unabhängig unseren Ist-Wert bestätigt, kommt hinzu.
+
+**Bilanz: 0 von 8 übernommen, kein `engineCompat`-Schritt, Tabelle unverändert
+bei 99,9230 %.** Die Fixpunkt-Aussage der Roadmap („ein erneuter Lauf übernimmt
+nichts mehr") war in ihrer Begründung falsch — der Abstieg schlägt sehr wohl
+etwas vor — und blieb nur im Ergebnis zufällig richtig. Sie ist in
+`docs/ROADMAP-OFFENE-POSTEN.md` korrigiert.
+
+### Posten 4 — junonr2: der BG-Bereich wird ausschließlich über Slot 0 betreten
+
+Ermittlung mit `Timeline` und `stepGate` über 300 Ticks. Der Bereich
+**[1688, 2293)** gehört vier modelllosen Entitäten — `door` (0), `smoke0` (1),
+`smoke1` (2), `lift` (3) — mit zusammen 11 Entry-Points.
+
+| Frage | Messwert |
+|---|---|
+| Kontextstarts in 300 Ticks | **6013** |
+| davon aus einem REQ | **0** |
+| REQ/REQSW/REQEW insgesamt ausgeführt | **0** |
+| abgewiesene Requests | 0 |
+| Zwangs-Yields (Budget) | 0 |
+| Faults | 0 |
+| Spannen des Fields | 174, davon **151 nie betreten** |
+
+**Der Bereich wird ausschließlich über Slot 0 betreten** — Init + Main-Schleife,
+gestartet von `FieldRuntime.start()` mit Priorität 7. Von den 11 Entry-Points
+laufen genau vier (die Slot-0-Einstiege 1688, 1729, 1825, 1939); die sieben
+Ereignis-Slots — darunter `lift/slot1` mit 150 Byte, der eigentlichen
+Fahrstuhlsequenz — werden **nie** angefordert. Am Instruktionsstrom entlang
+gelesen (nicht byteweise — eine byteweise Suche liefert hier über 30
+Phantom-REQs aus Operandenbytes) zeigt sich der Grund: Die REQs auf Entity 3
+stehen in `produce/slot0` (ip 2400, 2435) und in den Talk-Slots von `cloud`,
+`tifa`, `cid`, `hyde` — also selbst hinter Spieler-Interaktion.
+
+**Zur Verdrängungsregel: sie wird in junonr2 nie ausgelöst.** 0 von 6013
+Kontextstarts stammen aus einem Request; ohne Requests gibt es keine
+konkurrierenden Prioritäten. Die Frage „passt die Reihenfolge zu unserer
+Verdrängungsregel" ist an diesem Field **nicht beantwortbar** — das ist der
+Befund, nicht ein Hinweis auf einen Scheduler-Fehler.
+
+**Was die Masken wirklich tun.** Nicht „Maske bleibt 0", sondern:
+
+- Tick 1: `door` löscht per **BGCLR param 16**, `smoke0` per **BGCLR param 17**,
+  `smoke1` per **BGCLR param 18** — die Skripte räumen ihre eigene Vorbelegung
+  selbst ab. 16 und 17 werden danach von keiner erreichbaren Instruktion gesetzt.
+- Ab Tick 2 fährt `smoke1`/Slot 0 eine Animation als Paarfolge
+  `BGOFF(18, s)` → `BGON(18, s+1)` über s = 0…7 mit Periode **33 Ticks**:
+  `{18:1} → {18:2} → {18:4} → … → {18:128} → {18:0} → {18:1} → …`
+  Der Endwert `{16:0, 17:0, 18:1}` nach 300 Ticks ist damit ein **Schnappschuss
+  eines laufenden Zyklus**, kein eingefrorener Zustand.
+
+Nebenbei ist die BGROL-**Semantik** damit unabhängig bestätigt: Was BGROL in
+einer Instruktion täte, schreibt dieses Field von Hand als BGOFF/BGON-Paarfolge
+aus. Über die **Operandenlänge** sagt das nichts.
+
+🟡 **Nebenbefund am Main-Loop-Modell.** Innerhalb eines Zyklus liegen
+`BGOFF(18,s)` und `BGON(18,s+1)` im **selben** Tick; nur am Umlauf (Tick 34
+BGOFF s=7, Tick 35 BGON s=0) klafft **ein Tick mit Maske 0**. Ursache ist unsere
+Regel „eine Main-Iteration je Tick-Grenze" (`runtime.ts`, `activateContext`):
+Zwischen Ende und Neubeginn einer Iteration liegt zwangsläufig eine Tick-Grenze.
+Ob das Original dort ebenfalls ein Bild lang leer zeigt, ist **nicht gemessen**.
+
+**Kontrolle — Sonderfall oder Muster?** Dieselbe Auswertung über alle Fields:
+
+| Kennzahl | Wert |
+|---|---|
+| Fields mit animierten Gruppen | 508 |
+| Fields mit ≥ 1 nach 300 Ticks leerer Gruppe | 179 |
+| Kachelgruppen gesamt | 1256 |
+| davon nach 300 Ticks leer | 329 |
+| leer **und vom Skript nie angefasst** | **0** |
+| leer, **obwohl** das Skript den Parameter geschaltet hat | **329** |
+
+**Alle 329 leeren Gruppen sind vom Skript selbst geleert worden**, keine einzige
+durch Nichtbeachtung. `junonr2` ist das Muster, nicht die Ausnahme — eine leere
+Maske ist ein regulärer Skriptzustand. Wie sie gezeichnet wird, ist damit eine
+Render-Entscheidung und keine Interpreter-Frage.
+
+---
+
+## Welle 2 · Glyphenmetrik aus `WINDOW.BIN`
+
+Probe: `tools/realdata-scan/src/glyph-metrik-probe.rdtest.ts`.
+
+### Was die Datei enthält (Accounting geht byteexakt auf)
+
+`data/kernel/WINDOW.BIN` (13 317 B) besteht aus drei Sektionen mit demselben
+6-Byte-Kopf wie `KERNEL.BIN` (u16 komprimiert, u16 entpackt, u16 Typ) und je
+einem gzip-Strom; dahinter genau **2 Nullbytes** — dieselbe Trailer-Regel wie
+bei `KERNEL.BIN`.
+
+| Sektion | komprimiert | entpackt | Inhalt |
+|---|---|---|---|
+| 0 | 10 065 | 33 312 | TIM, 256×256 @ 4 bpp — Fenster-/Menügrafik |
+| 1 | 3 076 | 32 800 | TIM, 256×252 @ 4 bpp — Fontblatt |
+| 2 | 156 | 1 302 | Breitentabelle; die ersten 256 B sind die Zeichenbreiten |
+
+⚠️ **Fallstrick im TIM von Sektion 1:** Das Längenfeld des Bildblocks nennt
+16 140 B, die Maße (64 u16 × 252) verlangen 32 256 B. Nur mit den **Maßen**
+füllt der Block die Sektion byteexakt aus (544 + 32 256 = 32 800). Wer dem
+Längenfeld glaubt, liest das halbe Fontblatt. In Sektion 0 stimmen beide.
+
+Das Fontblatt ist ein Raster aus **12×12-Zellen, 21 Zellen je Zeile**;
+Zeichencode = Zeile × 21 + Spalte.
+
+### Die Dekodierregel ist belegt, nicht geglaubt
+
+`Breite = (b & 0x1F) + (b >> 5)`.
+
+Erste, **von der Tabelle unabhängige** Gegenprobe: Tintenbreite jeder Glyphe
+direkt aus dem Fontblatt gemessen. Für **194 von 212** belegten Glyphen der
+deutschen Fassung gilt exakt `Breite = Tintenbreite + 1` (`i`/`l`/`I` = 3,
+`O` = 9, `M`/`W`/`m`/`w` = 11). Die 12–15 Einträge mit gesetzten oberen Bits
+(`"` `(` `)` `,` `.` `1` `:` und einige Akzentgroßbuchstaben) folgen dieser
+Faustregel nicht.
+
+Zweite Gegenprobe (entscheidend, weil sie die Auslegung trennt): Vorhersage
+der Fensterbreite gegen die deklarierte `w` von **9 417** `WINDOW`-Opcodes
+aus **702** Fields.
+
+| Metrik | exakt getroffen | zu breit (Verletzung) |
+|---|---|---|
+| **`WINDOW.BIN`, additive Regel** | **38,90 %** | **3,41 %** |
+| nur untere 5 Bit | 21,80 % | 3,12 % |
+| Tabelle verwürfelt (Kontrolle) | 7,32 % | 85,96 % |
+| konstante Mittelwertbreite (Kontrolle) | 8,31 % | 83,23 % |
+| alte Ersatzmetrik 8 px (Kontrolle) | 0,21 % | 85,94 % |
+
+Die scharfe Vorhersage der Aufgabe — *keine Zeile eines Originaldialogs darf
+breiter sein als ihr Fenster* — trennt um **Faktor 25**: 3,41 % gegen 83–86 %.
+Die additive Regel schlägt die Konkurrenzauslegung „nur untere 5 Bit" bei den
+exakten Treffern um Faktor 1,8.
+
+### Zwei Konstanten MESSEN statt annehmen
+
+Die Fremdbeschreibung nennt Polsterung 0x10 = 16 als Standard. **Das ist für
+diese Installation falsch.** Sweep über dieselben 9 417 Fenster:
+
+| Polsterung | 17 | 18 | 19 | **20** | 21 | 22 | 23 |
+|---|---|---|---|---|---|---|---|
+| exakt | 0,39 % | 0,38 % | 0,38 % | **38,90 %** | 6,99 % | 3,48 % | 4,88 % |
+
+Faktor 100 gegen den Nachbarwert — das ist eine Ablesung, keine Anpassung.
+🟢 **Polsterung = 20 px.**
+
+Namensplatzhalter (0xEA–0xF5), Sweep über 4 830 Dialoge mit Platzhalter:
+116 px → 21,4 %, **117 px → 44,7 %**, 118 px → 24,4 %.
+🟢 **Namensbreite = 117 px** — und sie ist keine Konstante, sondern fällt aus
+den Daten: 117 = 9 × 13, und **13 ist die größte Zeichenbreite der Tabelle**,
+in der deutschen wie der englischen Fassung am selben Zeichen 0xC4.
+
+🔴 **Offen (bewusst).** Die Namensbemessung rechnet mit dem Maximum der
+*unteren 5 Bit*; unter der additiven Regel läge das Maximum bei 14 (de) bzw.
+15 (en) und die Herleitung ginge nicht auf. Für die wenigen Einträge mit
+gesetzten oberen Bits ist damit nicht abschließend geklärt, welche Breite das
+Original beim Zeichnen benutzt. Für die Fenstermessung gewinnt die additive
+Regel deutlich; für die Namensbreite die untere Hälfte.
+
+Rest der Residuen bei gemessener Metrik: 38,9 % genau 0 px, 14,5 % bei +4 px,
+4,4 % bei +40 px. Diese Fenster sind vermutlich von Hand größer gesetzt
+worden (das Skriptformat erlaubt es) — belegt ist das nicht.
+
+---
+
+## F24-B — Menüansichten, Ausrüstung, Materia, Limit und die Ortsanzeige
+
+Probe: `tools/realdata-scan/src/menu-views-probe.rdtest.ts` (V1–V6), Datenbestand
+die fünf `save*.ff7` der Nutzerinstallation (8 belegte, davon 7 dicht
+beschriebene Slots, 63 benutzte Charakterrecords) und deren `KERNEL.BIN`.
+
+### V1 🟢 Der Ortsname steht an genau zwei Stellen — und wird nicht mehr geraten
+
+Sweep über **jeden** der 4340 Offsets eines Slots. Gesucht: Stellen, an denen in
+allen belegten Slots ein terminiertes, druckbares Namensfeld von mindestens vier
+Zeichen steht (ein komplett leeres Feld gilt als „kein Ort eingetragen") und das
+über die Slots mindestens drei verschiedene Werte annimmt.
+
+| | eigenständige Fundstellen |
+|---|---|
+| echte Slots | **2** — `0x0028` (Vorschaublock, 32 B) und `0x0F0C` (Savemap, 24 B) |
+| **Kontrolle: byteweise verwürfelte Slots** | **0** |
+
+Je Fundstelle finden sich zusätzlich drei Treffer bei `at+1…at+3`; das sind keine
+Alternativen, sondern dieselbe Zeichenkette ohne ihre ersten Zeichen, und der
+Schattenfilter (Vorgänger ist ebenfalls Treffer) entfernt sie.
+
+Wo beide Ablagen gefüllt sind, tragen sie denselben Text: **7/7**. Der achte Slot
+ist ein Notspeicherstand — Savemap-Feld leer, Vorschaublock gefüllt. Genau
+deshalb ist der Vorschaublock zweite Quelle und nicht bloß eine Gegenprobe.
+
+`@webmidgar/menu` liest in dieser Rangfolge und macht jeden Rückfall in der
+Ansicht sichtbar; der vom Wirt gemeldete Feldname ist nur noch letzter Ausweg.
+
+### V2 🟢 Waffe @0x1C — belegt über eine Kreuzprobe zwischen zwei Dateien
+
+`equipableBy` des Waffenrecords ist eine Bitmaske über die neun Figuren. Wenn
+0x1C die Waffe ist, muss für jede Figur das Bit ihrer eigenen Kennung gesetzt
+sein.
+
+| | Treffer |
+|---|---|
+| Waffe 0x1C, eigene Figurenkennung | **49/49 = 100 %** |
+| **Kontrolle: Kennung der nächsten Figur** | **0/49 = 0 %** |
+| Kontrolle: Accessoirespalte 0x1E als Waffe gelesen | 2/4 = 50 % |
+
+Die Probe ist trennscharf, weil **keine** der 128 Waffen die Vollmaske trägt
+(0/128). Ausgewertet werden nur Records mit `id ≤ 8`; die Slots enthalten auch
+Sonderfassungen mit den Kennungen 9 und 10, für die es in der Maske kein Bit gibt.
+
+🟡 **Rüstung 0x1D und Accessoire 0x1E bleiben ungestützt.** Dieselbe Kreuzprobe
+liefert für die Rüstung 49/49 — aber auch die verschobene Zuordnung liefert
+49/49, weil **30 der 32 Rüstungen** die Vollmaske tragen. Das ist ein Befund über
+die Daten, kein Messfehler, und der Grund für 🟡 statt 🟢.
+
+### V3 🟢 Materiaplätze: 0…7 in der Waffe, 8…15 in der Rüstung
+
+Kein belegter Platz darf jenseits der Platzzahl liegen, die das ausgerüstete
+Stück laut `KERNEL.BIN` mitbringt.
+
+| | Treffer |
+|---|---|
+| Zuordnung Waffe/Rüstung | **141/141 = 100 %** |
+| **Kontrolle: Waffe und Rüstung vertauscht** | 120/141 = 85,1 % |
+
+### V4 🔴 Materia-Attributbytes 0x0E…0x13 — geordnet, aber ungedeutet
+
+Hypothese: Dort stehen die gewährten Zauberindizes, hinten mit 0xFF aufgefüllt.
+
+| 6-Byte-Fenster | Records mit Inhalt | davon streng steigend |
+|---|---|---|
+| **0x0E…0x13** | 79 | **45** |
+| Kontrolle 0x08…0x0D | 88 | **0** |
+| Kontrolle 0x02…0x07 | 63 | **0** |
+
+Dass dort eine geordnete Indexfolge liegt, ist damit belegt — dass *jeder*
+Eintrag ein Zauberindex ist, nicht. Der Versuch, die steigenden Records über den
+Typnibble zu isolieren, ist **gescheitert**: Auch die größte Gruppe (24 Records)
+steigt nur in 17 von 19 Fällen. `buildMagicView` leitet die Zauberliste daraus
+ab, nennt zu jedem Zauber die Quellmateria und markiert die Ansicht 🔴.
+
+### V5 🟢 Limitstufe, Limitmaske, Kampfreihe, Erfahrung
+
+| Feld | echt | Kontrollniveau |
+|---|---|---|
+| Limitstufe u8 @0x0E in 1…4 | **63/63** | Nachbarn 0x0C/0x0D/0x0F/0x10: **0/63** je |
+| Limitmaske u16 @0x22 nur Bits {0,1,3,4,6,7,9} | **63/63** | 0x20: 0, 0x21: 0, 0x23: 45, 0x24: 49 |
+| Erfahrung u32 @0x3C, Rangkonkordanz mit der Stufe | **1,000** | rotierte Erfahrungsreihe: 0,595 |
+
+Die **Lücken** der Limitmaske sind das eigentliche Beweismittel: Eine beliebige
+Zahlenspalte trifft ein derart löchriges Muster nicht.
+
+🟢 **Nebenbefund, der eine Fremdquellen-Widersprüchlichkeit auflöst.** ff7tk
+dokumentiert die Kampfreihe @0x20 an einer Stelle als 0/1, an einer anderen als
+0xFE/0xFF. Im Bestand kommen **ausschließlich 0xFE und 0xFF** vor — die zweite
+Lesart gilt.
+
+### V6 🟡/🟢 Materia-AP: Sättigungswert belegt, Faktor nicht entscheidbar
+
+| Faktor | Überläufe (AP > höchste Schwelle) | Materia über Stufe 1 |
+|---|---|---|
+| 1 | **13** | 49 |
+| 10 | 0 | 33 |
+| 100 | 0 | 0 |
+
+🟢 **`0xFFFFFF` ist ein Sättigungswert, keine AP-Zahl.** Er kommt exakt **63-mal**
+vor — und exakt so viele „Überläufe" erzeugte die Rechnung, bevor er ausgenommen
+wurde. Er bedeutet „gemeistert".
+
+🟡 **Der Faktor bleibt offen.** Faktor 1 ist widerlegt; 10 und 100 sind beide
+überlaufsfrei, und der Bestand kann sie nicht trennen, weil die Stände zu früh im
+Spiel liegen — ohne Sättigungswert erreicht keine getragene Materia auch nur die
+Stufe-2-Schwelle des größeren Faktors. Das Menü rechnet mit 100 und markiert die
+Stufe in der Ansicht als 🟡.
+
+### 🟢 Fenstergeometrie aus den Referenzbildern (640×480)
+
+Pixelabtastung der drei Kampfabschluss-Bildschirme
+(`apps/demo/.shots/ref/20260810223347_1.jpg`, `…349`, `…351`) — Vollbild-
+Fensterstapel in derselben Optik wie das Menü:
+
+- Fenster sitzen **bündig am Bildrand**: linke Rahmenkante x = 0, obere y = 0,
+  rechte endet bei x = 637, untere bei y = 479. **Kein** 8-px-Außenrand.
+- Zwischen gestapelten Fenstern liegen **2 px**.
+- Bordüre dreilagig, 5–6 px: 2 px mittelgrau (≈ 120,124,125), 2 px hellgrau
+  (≈ 198,196,197), 1–2 px dunkel (≈ 49,48,53) — deckungsgleich mit
+  `FF7_WINDOW_SKIN` (2/2/1). Die Schale wird deshalb benutzt, nicht nachgebaut.
+
+⚠️ **Offener Nebenbefund für `@webmidgar/ui-window`:** An der Oberkante liegen die
+Lagen von außen nach innen mittelgrau → hellgrau → dunkel, an der Unterkante in
+derselben Reihenfolge **von oben nach unten** (innen mittelgrau, außen dunkel).
+Die Schale zeichnet beide Kanten gespiegelt. 2-px-Unterschied an der Unterkante;
+hier nicht geändert, weil die Schale einem anderen Auftrag gehört.
+
+🔴 **Es gibt keine Menüaufnahme.** Die 18 Referenzbilder zeigen Sternenhimmel,
+sechs Field-Szenen, drei Kampfszenen, ein Dialogfenster und drei
+Kampfabschlüsse — **kein Hauptmenü**. Die Aufteilung des Hauptmenüs
+(`FF7_MAIN_MENU_LAYOUT` in `packages/menu/src/layout.ts`) ist deshalb
+durchgehend 🟡 und steht bewusst in **einem** austauschbaren Objekt.
+
+---
+
+## Runde 4 — BGROL entschieden, zwei Zählweisen kassiert (2026-08-11)
+
+Proben: `bgrol-belegkette.rdtest.ts`, `minigame-laengenfrage.rdtest.ts`,
+`oplen-abstieg-nachlese.rdtest.ts`. Diese drei ersetzen **fünfzehn**
+Wegwerfsonden desselben Tages; die alten sind gelöscht.
+
+### Das kostenfreie Referenzbündel — 53 Längen
+
+Eine falsche Operandenlänge verschiebt den Instruktionsstrom aller
+nachfolgenden Bytes einer Spanne und erzeugt damit **Phantom-Fundstellen**:
+Bytes, die auf einer scheinbaren Instruktionsgrenze landen. Wer Fundstellen
+zählt, zählt zuerst die Fehler seiner eigenen Längentabelle.
+
+Für jede der 85 Abweichungen zwischen unserer Tabelle und der Referenz wurde
+der Referenzwert **isoliert** gesetzt und der Spannen-Abschluss über alle
+48.041 Spannen neu gemessen. Übernommen wurde, was ihn **nicht
+verschlechtert** — 53 Stück:
+
+| Kennzahl | vorher | nachher |
+|---|---|---|
+| geschlossene Spannen | 48.004 | **48.006** |
+| Überläufe | 31 | **29** |
+| Abbrüche (Länge unbekannt) | 6 | 6 |
+
+Die beiden namentlich geprüften Einzelfälle **0x42 MPRA2 (0 → 5)** und
+**0xCE MMBLK (0 → 1)** lassen den Abschluss isoliert wie gemeinsam
+**bitgleich** bei 48.004/31/6 — sie kosten nichts.
+
+⚠️ **Kostenfreiheit ist kein Beleg für Richtigkeit.** Der Abschluss ist an
+seltenen Opcodes blind. Übernommen wird nicht „was gemessen richtig ist",
+sondern „was die Referenz sagt, ohne dass unsere Messung widerspricht". Der
+Ertrag ist die gesenkte Phantomrate, nicht neues Wissen — alle 53 stehen
+deshalb 🟡, Herkunft Referenz.
+
+Draußen bleiben 30 Abweichungen, die den Abschluss verschlechtern (0x04 PREQ
+−72, 0x05 PRQSW −14, 0x09 SPLIT −13, 0x20 MINIGAME −6, 0x31 IFKEYON −6,
+0xFB MVCAM −3, 0xFE CHMST −3, …), sowie 0xDF MPPAL und 0xEF ADPAL2, die einen
+Abbruch gegen einen Überlauf tauschen.
+
+### Was das mit der Phantomrate macht
+
+| Opcode | vor dem Bündel | nach dem Bündel |
+|---|---|---|
+| `BGROL` 0xE2 | 13 in 6 Fields | **6 in 2 Fields** |
+| `BGROL2` 0xE3 | 5 in 2 Fields | **4 in 1 Field** |
+| `MINIGAME` 0x20 (verankert) | 118 in 79 Fields | **67 in 49 Fields** |
+
+`blackbg4`, `del1`, `frcyo` und `junair2` verschwinden vollständig aus der
+BGROL-Menge. Auf genau diesen Phantomen hatte die Vorrunde ihre
+Wilson-Intervalle gerechnet.
+
+### BGROL 0xE2: Länge 2, belegt durch die Struktur einer einzigen Spanne
+
+`hyou4`, Spanne [2137, 2213):
+
+```
+e4 00 01 · e0 00 01 00 · 00 · e1 00 01 01 · e0 00 01 00
+dann NEUNMAL (24 07 00 · eX 00 01) — fünfmal eX = e2, viermal eX = e3
+· 12 41 · 00
+```
+
+Die neun Blöcke sind **byteidentisch gebaut**. `0xE3` stand bei uns immer auf
+Länge 2, also lasen die vier e3-Blöcke sauber als `BGROL2(00,01) / WAIT(7)`.
+Unter der alten Länge 1 zerfielen die fünf e2-Blöcke dagegen in
+`BGROL 00 / REQ 24 07 / RET` — **dieselbe Konstruktion, zwei Lesarten in einer
+Spanne**. Unter Länge 2 lesen beide gleich. Das ist statistikfrei; es braucht
+keine Fundstellenmenge und keine Quote.
+
+Zwei unabhängige Stützen:
+
+- **Der Schleifenrumpf schließt nur unter Länge 2.** Ab 2145 läuft der Rumpf
+  auf `JMPB 0x41` bei 2210. Unter Länge 2 ist das erste `RET` des Rumpfes die
+  Marke bei **2212** — hinter dem Rücksprung, also ein geschlossener Zyklus.
+  Unter Länge 1 liegt das erste `RET` bei **2161**, mitten im ersten Durchlauf:
+  die Schleife wäre gar keine.
+- **Die Kacheldaten passen.** `hyou4` trägt zu param 1 die Zustände
+  0, 1, 2, 4, 8, 16, 32 — eine Sechsbild-Animation, genau das, was fünf
+  Vorwärts- und vier Rückwärtsrollen durchschalten.
+
+🟡 Offener Rest: Die einzige verbleibende Fundstelle außerhalb `hyou4` liegt in
+`subin_2b@2017` und trägt Bankbyte **0xFF** und Parameter **190**, zu dem das
+Field keine Kachelgruppe hat. Sie widerlegt die Spannenstruktur nicht, ist aber
+auch nicht erklärt.
+
+### Die Semantik — und die Grenze der Daten
+
+`BGON` setzt Bit `1 << state`, `BGOFF` löscht es, `BGCLR` räumt die Gruppe.
+`BGROL` schaltet weiter, `BGROL2` zurück. Was „weiterschalten" heißt, geben die
+Daten **nicht** her:
+
+- **(a)** die Maske um ein Bit rotieren, oder
+- **(b)** auf den nächsten Zustand springen, der im Hintergrund tatsächlich
+  vorkommt (Lücken überspringen).
+
+Entscheidbar wäre das nur an einem Field mit Zustandslücke, das BGROL benutzt.
+Korpusweit haben **195 von 1256** Kachelgruppen in **109 Fields** eine Bitlücke
+oder beginnen nicht bei Bit 0 — aber **keine davon liegt in einem Field, das
+BGROL benutzt**: `hyou4`/param 1 ist mit den Bits 0…5 lückenlos. Gewählt ist
+(a) als die einfachere Regel, ausdrücklich als 🟡-Annahme mit benannter
+Alternative.
+
+🟢 **Die Rotationsbreite ist dagegen gemessen: 8 Bit.** Der Zustandsoperand von
+BGON/BGOFF nimmt über **9684** Literalvorkommen genau die Werte 0…7 an und nie
+mehr; die Kachelzustände sind die acht Zweierpotenzen 1…128 (plus 0 für
+statische Kacheln, plus 19 Streuwerte aus 121.868 — 0,016 %).
+
+### Nebenbefund: das `RET` bei 2144 ist echt, der Code dahinter ist tot
+
+In beiden Lesarten steht bei 2144 ein `RET` unmittelbar hinter
+`BGON(00,01,00)` — die ganze nachfolgende Animationsschleife wäre damit
+unerreichbar. Drei Hypothesen, gemessen:
+
+- **(a) BGON hat in Wahrheit 4 Operandenbytes** — widerlegt. Bei Länge 4
+  frisst `BGOFF` das folgende `e0` als vierten Operanden, und bei 2150 steht
+  wieder ein `RET`. Die Referenz führt 0xE0 mit Operandenlänge 3, und diese
+  Länge ist über F22 unabhängig belegt.
+- **(b) 0x00 ist dort etwas anderes als RET** — kein Anhalt.
+- **(c) Die Spanne enthält toten Code** — ✅ **belegt.** Die Entität `nami`
+  besitzt 32 Skript-Slots, und **alle 32 zeigen auf 2137**. Es gibt keinen
+  Eintrittspunkt bei 2145; die Spanne ist ein einziges Skript, dessen
+  erreichbarer Teil nach drei Instruktionen endet.
+
+Und das ist kein Sonderfall: Über alle 48.041 Spannen enthalten **12.849
+(26,7 %)** Instruktionen, die vom Spannenanfang aus nicht erreichbar sind —
+**121.330 von 372.814 Instruktionen (32,5 %)**. Toter Code ist in diesem
+Bytecode die Regel, nicht die Ausnahme. Der Rollblock in `hyou4` ist damit eine
+**stillgelegte** Animationsschleife: als Bytefolge vollständig, als Programm nie
+ausgeführt. Für die Längenfrage ändert das nichts — die Konstruktion trägt ihre
+Struktur unabhängig davon, ob sie läuft.
+
+### 🔴 Neuer belegter Defekt: Rückwärtssprünge liegen um ein Byte daneben
+
+Beim Nachrechnen des `JMPB 0x41` in `hyou4` gefunden. `vm.ts` berechnet das
+Sprungziel als `ip + 1 − offset` (vom Operandenbyte aus). Gemessen über alle im
+Instruktionsstrom erreichten Rücksprünge:
+
+| Sprung | heutige Rechnung `ip + 1 − off` | Alternative `ip − off` |
+|---|---|---|
+| `JMPB` 0x12 | **39 / 5286 (0,7 %)** | **5266 / 5286 (99,6 %)** |
+| `JMPBL` 0x13 | **0 / 97** | **97 / 97** |
+
+Gezählt ist „Ziel liegt auf einer Instruktionsgrenze". Die Messanlage ist an
+den **Vorwärts**sprüngen geeicht und besteht dort: `JMPF` trifft mit der
+heutigen Rechnung `ip + 1 + off` **7809/7876 (99,1 %)**, die um eins
+verschobene nur 974/7876. Vorwärts stimmt also, rückwärts ist es um genau ein
+Byte daneben.
+
+**Nicht behoben** — bewusst: Der Fixture-Assembler
+(`tools/fixture-gen/src/script-assembler.ts`) erzeugt Rücksprünge mit derselben
+Konvention. Beide Seiten sind konsistent falsch, alle Fixtures laufen; eine
+einseitige Korrektur zerreißt jede Fixture-Schleife. Die Korrektur gehört in
+einem Zug mit dem Assembler gemacht. Als Posten in
+`docs/ROADMAP-OFFENE-POSTEN.md` geführt.
+
+### Die Minigame-Zahlen
+
+Zwei Begründungen aus Posten 2 sind gefallen:
+
+1. **„Der Opcode kommt vor" ist nicht belegt.** Unter der korrigierten Tabelle
+   sind es 67 verankerte Fundstellen in 49 Fields statt 118 in 79. Die fehlende
+   Negativkontrolle liefert das Urteil: Dekodiert man dieselben Spannen ab
+   `spanStart + k` — ein nachweislich falsches Raster —, meldet die verankerte
+   Zählung **1318 / 652 / 717** Fundstellen für k = 1/2/3. Eine Zählung, die
+   auf falschem Raster zehnmal so viel findet wie auf richtigem, ist kein
+   Beleg für Vorkommen, sondern bestenfalls eine obere Schranke.
+2. **Die „harte Schranke ≤ 5" beruht auf einem Tabellenfehler.** Sieben der
+   acht engsten Fundstellen stehen direkt hinter der Folge `31 00` — das ist
+   `IFKEYON` mit Tastenmaske `0x2000`, und das `0x20` ist deren hohes Byte.
+   Sichtbar wird es nur, weil unsere Tabelle 0x31 mit Operandenlänge 2 führt
+   statt der Referenzlänge 3. Setzt man 0x31 auf 3, verschwinden diese Stellen
+   — dafür sinkt der Abschluss um 6 Spannen. Zwei Messungen, die sich
+   widersprechen; keine schlägt die andere.
+
+Was **steht**: Der engste Abstand beträgt auch nach der 0x31-Korrektur noch 7
+Byte. Die Referenzlänge 10 passt in beiden Lesarten nicht, und der
+Spannen-Abschluss bestätigt es (Länge 10: 48.001 gegen 48.006 — fünf Spannen
+unter dem Ist-Wert, über der Rauschschwelle von 3). Das Maximum liegt bei
+Länge 1 mit 48.007, also **eine** Spanne über dem Ist-Wert und damit unter der
+Schwelle: auch die Alternative bleibt unbelegt. 0x20 bleibt auf 0.
+
+### Die Lehre in einem Satz
+
+**Wenn eine Gütefunktion blind ist, folgt daraus, mit einem anderen Mittel zu
+entscheiden — nicht, dass es nichts zu entscheiden gibt.**
+
+Die vollständige Fehlkette, die zu „BGROL ist nicht implementierbar" führte,
+steht als Lehrstück im Quelltext bei `SKIP_OPERAND_LEN` in
+`packages/interpreter/src/opcodes.ts`: zirkuläre Eichung, Phantom-Fundstellen,
+n=1 als disjunkte Intervalle, Pseudoreplikation, Fehlschluss.

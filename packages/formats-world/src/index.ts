@@ -24,6 +24,19 @@ export {
 } from './types.js';
 export { parseWorldMesh, parseWorldBlock, parseWorldMap, type ParseBlockResult } from './parse.js';
 export {
+  parseWorldTextureNames,
+  WORLD_UNDERWATER_TEXTURES,
+  WORLD_GLACIER_TEXTURES,
+  type WorldTextureNameTable,
+} from './texture-names.js';
+export {
+  parseWorldAnimatedTextures,
+  WORLD_ANIM_BITS_PER_PIXEL,
+  type WorldAnimatedSet,
+  type WorldAnimatedTexture,
+  type WorldAnimatedFrame,
+} from './wm-ta.js';
+export {
   parseFieldTbl,
   fieldTblEntry,
   fieldTblEntryForOpcode,

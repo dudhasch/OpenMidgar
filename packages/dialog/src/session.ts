@@ -1,4 +1,5 @@
-import { layoutText, type LayoutOptions, type TextPage } from './layout.js';
+import type { FfSpacing } from '@webmidgar/formats-kernel';
+import { layoutFfText, layoutText, type LayoutOptions, type TextPage } from './layout.js';
 
 /**
  * Dialogablauf (S15) als reines Zustandsmodell.
@@ -31,6 +32,11 @@ export interface DialogWindowState {
   selection: number | null;
   choiceRange: { firstLine: number; lastLine: number } | null;
   done: boolean;
+  /**
+   * Fenstergröße nach der Originalregel (nur im FF7-Modus, sonst null).
+   * Der Text bestimmt das Fenster, nicht umgekehrt — siehe `layout.ts`.
+   */
+  window: { width: number; height: number; lines: number } | null;
 }
 
 export interface DialogInput {
@@ -45,6 +51,12 @@ export const NEUTRAL_DIALOG_INPUT: DialogInput = { confirm: false, cancel: false
 export interface DialogOptions extends LayoutOptions {
   /** Sichtbar werdende Zeichen je Takt; 0 = Text sofort vollständig. */
   charsPerTick?: number | undefined;
+  /**
+   * Ist die echte FF7-Metrik gesetzt, wird **nicht umgebrochen**: Zeilen und
+   * Seiten kommen aus dem Text, und das Fenster wird danach bemessen. Ohne
+   * sie bleibt es beim umbrechenden Ersatzweg (siehe `layout.ts`).
+   */
+  ffSpacing?: FfSpacing | undefined;
 }
 
 export interface DialogStepResult {
@@ -69,8 +81,16 @@ export class DialogSession {
   }
 
   open(request: DialogRequest): void {
-    const laid = layoutText(request.text, this.opts);
-    const pages = laid.pages.length > 0 ? laid.pages : [{ lines: [''] }];
+    let pages: TextPage[];
+    let window: { width: number; height: number; lines: number } | null = null;
+    if (this.opts.ffSpacing) {
+      const laid = layoutFfText(request.text, this.opts.ffSpacing);
+      pages = laid.pages;
+      window = { width: laid.width, height: laid.height, lines: laid.lines };
+    } else {
+      pages = layoutText(request.text, this.opts).pages;
+    }
+    if (pages.length === 0) pages = [{ lines: [''] }];
     this.state = {
       requestId: request.requestId,
       pages,
@@ -80,6 +100,7 @@ export class DialogSession {
       selection: request.choice ? request.choice.firstLine : null,
       choiceRange: request.choice ?? null,
       done: false,
+      window,
     };
   }
 

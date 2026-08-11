@@ -13,6 +13,19 @@ import type { Plugin } from 'vite';
 
 const SUBTREES = ['data', 'save'];
 
+/**
+ * Zusätzlich freigegebene EINZELDATEIEN der Wurzel.
+ *
+ * 🔵 Grund (F11b): Die Zuordnung `textureId` → Texturdatei der Weltkarte steht
+ * als Zeigerfeld in der Spiel-EXE (`ff7.exe`, Dateiversatz 0x5686E8) — nicht in
+ * `data/`. Ohne diese eine Datei bleibt die Weltkarte bei der
+ * Klassenfarben-Diagnose. Bewusst eine NAMENSLISTE und kein Unterbaum: der
+ * Rest der Installation (Mod-Backups, DLLs, Spielstände außerhalb `save/`)
+ * bleibt unerreichbar. Der Produktionspfad braucht das nicht — dort wählt der
+ * Nutzer ohnehin das Spielverzeichnis.
+ */
+const ROOT_FILES = ['ff7.exe', 'ff7_en.exe'];
+
 interface ManifestEntry {
   path: string; // relativ zur Wurzel, '/'-Trenner
   size: number;
@@ -36,6 +49,10 @@ function collectFiles(root: string): ManifestEntry[] {
     const abs = join(root, sub);
     if (existsSync(abs)) walk(abs, sub);
   }
+  // ROOT_FILES stehen BEWUSST NICHT im Manifest: das Manifest speist den
+  // IndexService, der jede Datei darin auf LGP-Signaturen absucht. Eine 8-MB-
+  // EXE dort einzureihen kostet Bootzeit und bringt nichts — sie wird über
+  // `fetchRawFile` direkt geholt, genau wie KERNEL.BIN und WM0.MAP.
   return out;
 }
 
@@ -94,7 +111,10 @@ export function ff7DataPlugin(configDir: string): Plugin {
         // Pfad-Härtung: nur die freigegebenen Unterbäume, keine Ausbrüche.
         const abs = resolve(root, rel);
         const inSubtree = SUBTREES.some((s) => abs.startsWith(resolve(root, s) + sep) || abs === resolve(root, s));
-        if (!inSubtree || !abs.startsWith(resolve(root) + sep) || !existsSync(abs) || !statSync(abs).isFile()) {
+        // Die Wurzeldateien werden über den EXAKTEN Namen freigegeben, nicht
+        // über ein Präfix — sonst wäre jede Datei mit demselben Anfang mit drin.
+        const isRootFile = ROOT_FILES.some((n) => abs === resolve(root, n));
+        if ((!inSubtree && !isRootFile) || !abs.startsWith(resolve(root) + sep) || !existsSync(abs) || !statSync(abs).isFile()) {
           res.statusCode = 404;
           res.end('nicht gefunden');
           return;

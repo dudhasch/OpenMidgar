@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { IndexService } from '@webmidgar/io';
 import type { AnimationFrame } from '@webmidgar/formats-model';
@@ -74,9 +75,14 @@ const REAL_DIR =
   process.env['WEBMIDGAR_REAL_DIR'] ??
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
-const OUT =
-  process.env['WEBMIDGAR_O4_OUT'] ??
-  'C:\\Users\\timur\\AppData\\Local\\Temp\\claude\\C--ff7-web\\fd681983-390c-49be-a638-0c5e01c06ddc\\scratchpad\\o4-formular.html';
+/**
+ * 🔵 Ausgabeort der Tafel: Temp-Verzeichnis des Systems, überschreibbar per
+ * Umgebungsvariable. Hier stand vorher der Scratchpad-Pfad EINER längst
+ * beendeten Sitzung — er existiert auf keinem anderen Rechner und in keiner
+ * späteren Sitzung. Ein Diagnosewerkzeug darf nicht davon abhängen, wo es
+ * zufällig zuerst gelaufen ist.
+ */
+const OUT = process.env['WEBMIDGAR_O4_OUT'] ?? join(tmpdir(), 'webmidgar-sheets', 'o4-formular.html');
 
 const available = existsSync(REAL_DIR);
 

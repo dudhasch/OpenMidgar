@@ -10,6 +10,10 @@ export type KernelDiagnosticCode =
   | `E-KRN-SEC${number}` // Sektion n quarantänisiert
   | 'E-KRN-GZIP' // gzip-Strom einer Sektion defekt
   | 'E-KRN-RECORD' // Record-Accounting einer Datensektion geht nicht auf
+  | 'E-WIN-ACCOUNT' // WINDOW.BIN: Sektionslängen füllen die Datei nicht byteexakt
+  | 'E-WIN-SECTIONS' // WINDOW.BIN: unerwartete Sektionsanzahl
+  | 'E-WIN-WIDTHS' // WINDOW.BIN: Breitensektion zu kurz für 256 Einträge
+  | 'W-WIN-TIM' // WINDOW.BIN: TIM-Block einer Bildsektion unplausibel
   | 'W-KRN-TEXT'; // Textsektion enthält unbekannte Codepunkte
 
 export type KernelSeverity = 'fatal' | 'error' | 'warning';
@@ -23,7 +27,7 @@ export interface KernelDiagnostic {
 }
 
 export function kernelSeverity(code: KernelDiagnosticCode): KernelSeverity {
-  if (code === 'E-KRN-HDR' || code === 'E-KRN-ACCOUNT') return 'fatal';
+  if (code === 'E-KRN-HDR' || code === 'E-KRN-ACCOUNT' || code === 'E-WIN-ACCOUNT') return 'fatal';
   return code.startsWith('E-') ? 'error' : 'warning';
 }
 

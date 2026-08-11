@@ -230,7 +230,10 @@ export class MusicRuntime {
           return;
         }
         const fadeIn = cmd.kind === 'play-music' ? (cmd.fadeInTicks ?? 0) : 0;
-        await this.startTrack(trackId, fadeIn);
+        // Ein zurückgeholter Titel (`pop-music`) schleift immer — nur ein
+        // ausdrückliches `play-music` kann ein Einmaltitel sein.
+        const once = cmd.kind === 'play-music' && cmd.once === true;
+        await this.startTrack(trackId, fadeIn, once);
         return;
       }
       case 'stop-music':
@@ -249,7 +252,7 @@ export class MusicRuntime {
     }
   }
 
-  private async startTrack(trackId: number, fadeInTicks: number): Promise<void> {
+  private async startTrack(trackId: number, fadeInTicks: number, once = false): Promise<void> {
     const myGeneration = ++this.generation;
     let track = this.cache.get(trackId) ?? null;
     if (!track) {
@@ -275,8 +278,10 @@ export class MusicRuntime {
     const source = this.ctx.createBufferSource();
     source.buffer = track.buffer;
     // Der springende Punkt: Wiedergabe beginnt bei 0 (Intro spielt einmal),
-    // die Schleife greift erst am Marker.
-    source.loop = true;
+    // die Schleife greift erst am Marker. Bei einem Einmaltitel entfällt sie
+    // ganz — die Marken bleiben trotzdem gesetzt, damit `current` sie für
+    // Diagnosen ausweist.
+    source.loop = !once;
     source.loopStart = track.loopStartSeconds;
     source.loopEnd = track.loopEndSeconds;
     source.connect(gain);

@@ -1,6 +1,7 @@
 import { ff7ToScene } from '@webmidgar/convert';
 import type { WorldGrid, WorldMesh } from '@webmidgar/formats-world';
 import { blockIndexToCell, meshOrigin, type BlockCell } from './layout.js';
+import { atlasUvForLocalPixel, type WorldTextureAtlas } from './texture-atlas.js';
 import { resolveTriangleUv, type WorldTextureTable } from './uv.js';
 
 /**
@@ -97,10 +98,12 @@ export function buildMeshGeometry(
  * die indizierte Form ist kleiner und trägt das Picking über den Dreiecks-
  * index, die nicht-indizierte ist die einzige, die texturieren kann.
  *
- * `table` liefert die Texturmetadaten aus F11b. Fehlt sie (heute der
- * Regelfall), bleiben die UVs die ROHEN, seiten-absoluten Bytes durch 255
- * geteilt — sichtbar falsch, aber ohne stille Erfindung. `uvResolved` sagt je
- * Dreieck, ob eine echte Umrechnung stattgefunden hat.
+ * `table` liefert die Texturmetadaten aus F11b, `atlas` (F25) legt die UVs
+ * zusätzlich in die Atlaszelle. Fehlt die Tabelle, bleiben die UVs die ROHEN,
+ * seiten-absoluten Bytes durch 255 geteilt — sichtbar falsch, aber ohne
+ * stille Erfindung. `uvResolved` sagt je Dreieck, ob eine echte Umrechnung
+ * stattgefunden hat; `atlasPages` sagt, aus welcher Atlasseite das Dreieck
+ * liest (255 = keine — der Aufrufer muss dann nach Seite trennen).
  */
 export interface TexturedMeshGeometry {
   /** xyz je Ecke (triCount · 3 Vertices), Szenenkoordinaten. */
@@ -112,7 +115,15 @@ export interface TexturedMeshGeometry {
   walkClasses: Uint8Array;
   /** 1 = UV über die Texturtabelle aufgelöst, 0 = Rohbytes durchgereicht. */
   uvResolved: Uint8Array;
+  /** Atlasseite je Dreieck; 255 = keine Atlaszelle vorhanden. */
+  atlasPages: Uint8Array;
   triCount: number;
+}
+
+export interface TexturedGeometryOptions {
+  table?: WorldTextureTable;
+  atlas?: WorldTextureAtlas;
+  cellOverride?: BlockCell;
 }
 
 export function buildTexturedMeshGeometry(
@@ -120,13 +131,16 @@ export function buildTexturedMeshGeometry(
   blockIndex: number,
   meshIndex: number,
   grid: WorldGrid,
-  table: WorldTextureTable = [],
-  cellOverride?: BlockCell,
+  optionen: TexturedGeometryOptions = {},
 ): TexturedMeshGeometry {
+  const table: WorldTextureTable = optionen.table ?? [];
+  const atlas = optionen.atlas;
+  const cellOverride = optionen.cellOverride;
   const basis = buildMeshGeometry(mesh, blockIndex, meshIndex, grid, cellOverride);
   const positions = new Float32Array(mesh.triCount * 9);
   const uvs = new Float32Array(mesh.triCount * 6);
   const uvResolved = new Uint8Array(mesh.triCount);
+  const atlasPages = new Uint8Array(mesh.triCount).fill(255);
   for (let i = 0; i < mesh.triCount; i++) {
     for (let ecke = 0; ecke < 3; ecke++) {
       const v = basis.indices[i * 3 + ecke]!;
@@ -135,13 +149,29 @@ export function buildTexturedMeshGeometry(
       positions[i * 9 + ecke * 3 + 2] = basis.positions[v * 3 + 2]!;
     }
     const roh = mesh.triangles[i]!.uv;
-    const aufgeloest = resolveTriangleUv(roh, basis.textureIds[i]!, table);
-    if (aufgeloest) {
-      uvResolved[i] = 1;
-      uvs.set(aufgeloest.normalized, i * 6);
-    } else {
-      // 🔴 F11b fehlt: Rohbytes normiert durchreichen, NICHT raten.
+    const textureId = basis.textureIds[i]!;
+    const aufgeloest = resolveTriangleUv(roh, textureId, table);
+    if (!aufgeloest) {
+      // 🔴 keine Tabelle: Rohbytes normiert durchreichen, NICHT raten.
       for (let k = 0; k < 6; k++) uvs[i * 6 + k] = roh[k]! / 255;
+      continue;
+    }
+    uvResolved[i] = 1;
+    const platz = atlas?.placements.get(textureId);
+    if (!platz) {
+      uvs.set(aufgeloest.normalized, i * 6);
+      continue;
+    }
+    atlasPages[i] = platz.atlas;
+    for (let ecke = 0; ecke < 3; ecke++) {
+      const [au, av] = atlasUvForLocalPixel(
+        platz,
+        atlas!.size,
+        aufgeloest.pixels[ecke * 2]!,
+        aufgeloest.pixels[ecke * 2 + 1]!,
+      );
+      uvs[i * 6 + ecke * 2] = au;
+      uvs[i * 6 + ecke * 2 + 1] = av;
     }
   }
   return {
@@ -151,6 +181,7 @@ export function buildTexturedMeshGeometry(
     locationIds: basis.locationIds,
     walkClasses: basis.walkClasses,
     uvResolved,
+    atlasPages,
     triCount: mesh.triCount,
   };
 }

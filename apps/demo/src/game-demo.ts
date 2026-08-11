@@ -3,12 +3,17 @@ import {
   BufferGeometry,
   Color,
   ConeGeometry,
+  DataTexture,
   DirectionalLight,
+  DoubleSide,
   Group,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
   PerspectiveCamera,
+  RGBAFormat,
   Scene,
   WebGLRenderer,
 } from 'three';
@@ -26,6 +31,16 @@ import { resolveFieldMusic, type FieldBundle, type FieldDiagnostic } from '@webm
 import { berechneAnfangsBgStates, type HostRequest } from '@webmidgar/interpreter';
 import { MusicRuntime, planLoop } from '@webmidgar/audio';
 import {
+  applyWindowSkin,
+  windowSkinCss,
+  windowOuterSize,
+  FF7_WINDOW_SKIN,
+  RENDER_SURFACE,
+  WindowDisplayMode,
+  WindowShell,
+} from '@webmidgar/ui-window';
+import { measureFfWindow, FALLBACK_SPACING } from '@webmidgar/formats-kernel';
+import {
   buildFallbackActor,
   createActorLibrary,
   setActorFacing,
@@ -41,7 +56,7 @@ import {
   type WorldTickResult,
 } from '@webmidgar/world-runtime';
 import {
-  buildMeshGeometry,
+  buildTexturedMeshGeometry,
   followCameraPose,
   sampleGround,
   WorldStreamer,
@@ -56,27 +71,60 @@ import {
   type SemanticAction,
 } from '@webmidgar/input';
 import {
+  BATTLE_TICK_HZ,
+  applyExperience,
   createEncounterBattleStarter,
   defaultParty,
   encodeOutcome,
+  expTotalForLevel,
+  isBattleTickDue,
   partyFromSavemap,
   type BattleSession,
   type BattleStarter,
   type BattleTickInput,
+  type CharacterProgress,
   type PartyMemberSpec,
 } from '@webmidgar/battle-runtime';
 import {
+  BattleViewModel,
   applyBattleCamera,
   buildBattleActor,
+  buildBattleStage,
   buildSubstituteStage,
   loadBattleModel,
+  loadBattleStage,
   parseCameraBlock,
+  partyModelByPrefix,
+  partyModelPrefix,
   placeFormation,
   placeParty,
+  stagePrefixForLocation,
 } from '@webmidgar/render-battle';
-import { enemyModelPrefix, formationAddress } from '@webmidgar/formats-battle';
+import {
+  ATB_MAX,
+  DEFAULT_COMMANDS,
+  domPaintHost,
+  hudBoxes,
+  paintBoxes,
+  resultBoxes,
+  resultMessages,
+  type HudBox,
+  type HudFloater,
+  type HudModel,
+  type PaintHost,
+  type ResultScreenModel,
+} from '@webmidgar/ui-battle-hud';
+import { enemyModelPrefix, formationAddress, parseGrowthSection, type GrowthSection } from '@webmidgar/formats-battle';
 import { Box3, BoxGeometry, Vector3 } from 'three';
-import { MenuSession, NEUTRAL_MENU_INPUT, type MenuData, type MenuInput, type MenuViewModel } from '@webmidgar/menu';
+import {
+  MenuSession,
+  NEUTRAL_MENU_INPUT,
+  VIEW_ORDER,
+  type MenuData,
+  type MenuInput,
+  type MenuScreen,
+  type MenuViewId,
+} from '@webmidgar/menu';
 import { readSavemap } from '@webmidgar/formats-save';
 import { composeSavemapSlot, type FixtureSavemap } from '@webmidgar/fixture-gen';
 import { bootGameData, type GameData } from './game/data';
@@ -113,9 +161,25 @@ const canvas = $('view') as HTMLCanvasElement;
 const dialogOverlayEl = $('dialogOverlay');
 const dialogBoxEl = $('dialogBox');
 const battleOverlayEl = $('battleOverlay');
-const battleBoxEl = $('battleBox');
+const resultOverlayEl = $('resultOverlay');
 const menuOverlayEl = $('menuOverlay');
-const menuBoxEl = $('menuBox');
+
+/**
+ * Gemeinsame Fensterschale (Welle 2). Die Optik des Dialogfensters kommt
+ * nicht mehr aus dem <style>-Block, sondern aus @webmidgar/ui-window —
+ * dieselbe Quelle, die Menü und Kampf-HUD später benutzen.
+ * Der Nachweis, dass das pixelgleich ist: apps/demo/window-skin.html.
+ */
+applyWindowSkin(dialogBoxEl, WindowDisplayMode.Normal);
+
+/**
+ * Fensterverwaltung als Zustand. Heute setzt sie nur der Dialog; sobald der
+ * Interpreter WMODE/WCLSE anschließt, schreibt er hier hinein und die UI
+ * liest ab (siehe packages/ui-window/src/shell.ts).
+ */
+const windowShell = new WindowShell();
+/** Slot 0 = Dialogfenster des Fields. */
+const DIALOG_SLOT = 0;
 
 function setStatus(text: string): void {
   statusEl.textContent = text;
@@ -212,9 +276,29 @@ let lastWorldResult: WorldTickResult | null = null;
 // Battle (echt): eigene Szene + Kamera aus dem Formations-Kamerablock.
 const battleScene3 = new Scene();
 battleScene3.add(new DirectionalLight(0xffffff, 2.0).translateY(1));
-battleScene3.add(buildSubstituteStage());
 const battleGroup = new Group();
 battleScene3.add(battleGroup);
+/**
+ * K5 — die Bühne hängt am KAMPF, nicht am Programm: welche der 90 Bühnen
+ * (`og`…`rr`) gilt, entscheidet `location` der Formation. Die schwarze
+ * Ersatzscheibe bleibt als Rückfall, kommt im Originalbestand aber nicht vor
+ * (1000/1000 Formationen lösen auf).
+ */
+let stageGroup: Group | null = null;
+/** K5-Prüfgröße: welche Bühne zu welcher `location` gebaut wurde. */
+let stageProtokoll: {
+  prefix: string | null;
+  location: number | null;
+  teile: number;
+  texturen: number;
+  ersatz: boolean;
+} = { prefix: null, location: null, teile: 0, texturen: 0, ersatz: true };
+
+function setzeBuehne(gruppe: Group | null): void {
+  if (stageGroup) battleScene3.remove(stageGroup);
+  stageGroup = gruppe;
+  if (gruppe) battleScene3.add(gruppe);
+}
 const battleCamera = new PerspectiveCamera(50, canvas.width / canvas.height, 10, 200000);
 let partySpecs: PartyMemberSpec[] = [];
 let battleStarter: BattleStarter | null = null;
@@ -227,18 +311,46 @@ const battleModellProtokoll = new Map<
 
 interface RealBattle {
   session: BattleSession;
+  /**
+   * K7: die wirkungsfreie Projektionsschicht (S32). Sie war gebaut, aber
+   * NIRGENDS angeschlossen — Trefferzahlen und Ersatzdarstellung erschienen
+   * nie. Jetzt bekommt sie jedes Tick-Ergebnis und speist das HUD.
+   * Rückkanal gibt es weiterhin keinen: der Digest bleibt unberührt.
+   */
+  view: BattleViewModel;
   requestId: number | null;
   source: 'field' | 'world';
   encounterId: number;
   partyIds: string[];
   enemyIds: string[];
   maxHp: Map<string, number>;
+  maxMp: Map<string, number>;
   awaiting: string[];
   eventLog: string[];
   outcomeKind: string | null;
-  rewards: { exp: number; ap: number; gil: number } | null;
+  rewards: { exp: number; ap: number; gil: number; drops: number[] } | null;
+  /** Kommandofenster: gewählter Eintrag und Zeile, an der es hängt. */
+  commandIndex: number;
+  /** Meldungsfenster über der Bühne, mit Restlaufzeit in Kampftakten. */
+  message: string;
+  messageTicks: number;
+  /** Ergebnisbildschirm (N7); solange null, läuft der Kampf. */
+  result: ResultScreenModel | null;
+  resultPage: number;
 }
 let battle: RealBattle | null = null;
+/** Maler des Kampf-HUD bzw. des Ergebnisbildschirms (je ein Kastenbestand). */
+const hudHost: PaintHost = domPaintHost(battleOverlayEl as unknown as Parameters<typeof domPaintHost>[0]);
+const resultHost: PaintHost = domPaintHost(resultOverlayEl as unknown as Parameters<typeof domPaintHost>[0]);
+/**
+ * DERSELBE Maler für das Menü. Drei Bereiche, eine Rezeptur: Kastenliste aus
+ * dem Paket, `paintBoxes` setzt sie, `applyWindowSkin` gibt die Optik.
+ */
+const menuHost: PaintHost = domPaintHost(menuOverlayEl as unknown as Parameters<typeof domPaintHost>[0]);
+/** Growth-Sektion aus KERNEL.BIN — Grundlage der EXP-Verbuchung (S33). */
+let growth: GrowthSection | null = null;
+/** Fortschritt je Gruppenmitglied; überlebt den einzelnen Kampf. */
+const progressById = new Map<string, CharacterProgress>();
 
 // 🔵 Weltkarten-Begegnungstabellen sind 🔴 (S29/S33) — Demo-Ersatz-ID.
 const WORLD_DEMO_ENCOUNTER = 303;
@@ -334,10 +446,10 @@ function musicIdByName(name: string): number | null {
  * setzt `md1_1` den MUSIC-Opcode in 120 Takten 32-mal ab (das Script läuft in
  * einer Schleife), und jeder Aufruf würde die Quelle neu starten.
  */
-function spieleMusikId(musicId: number | null): void {
+function spieleMusikId(musicId: number | null, once = false): void {
   if (musicId === null || !music) return;
   if (music.state.currentTrack === musicId) return;
-  void music.dispatch({ kind: 'play-music', trackId: musicId, loop: PLATZHALTER_PLAN });
+  void music.dispatch({ kind: 'play-music', trackId: musicId, loop: PLATZHALTER_PLAN, once });
 }
 
 /**
@@ -376,6 +488,14 @@ window.addEventListener('keydown', (e) => {
     toggleWorld();
     return;
   }
+  // T blättert durch die drei Weltkarten-Darstellungsarten (F11b/F25). Die
+  // beiden Diagnosearten bleiben erreichbar — sie sind ein Werkzeug.
+  if (e.code === 'KeyT' && mode === 'world') {
+    e.preventDefault();
+    const folge: WeltDarstellung[] = ['textured', 'terrain', 'region'];
+    setzeWeltDarstellung(folge[(folge.indexOf(weltDarstellung) + 1) % folge.length]!);
+    return;
+  }
   if (!HANDLED_CODES.has(e.code)) return;
   if (document.activeElement !== selectEl) e.preventDefault();
   keyboardFeed.handleKey(e.code, true);
@@ -410,13 +530,31 @@ function menuData(): MenuData {
   return {
     savemap: data?.savemap ?? readSavemap(composeSavemapSlot(MENU_FIXTURE))!,
     itemName: data?.itemName ?? (() => null),
+    itemDescription: data?.itemDescription,
+    materiaName: data?.materiaName,
+    magicName: data?.magicName,
+    materiaRecords: data?.materiaRecords,
+    spacing: data?.textMetrik.spacing,
+    metricsMeasured: data?.textMetrik.measured ?? false,
+    metricsDiagnostic: data?.textMetrik.diagnostic ?? null,
+    /**
+     * Nur noch **Ersatz**: `resolveLocation` bevorzugt den Ortsnamen aus der
+     * Savemap (0x0F0C, ersatzweise Vorschaublock) und macht sichtbar, wenn es
+     * doch der Wirt war, der ihn geliefert hat.
+     */
     locationName: mode === 'world' ? 'Weltkarte' : fieldName || null,
   };
 }
 
 function openMenu(requestId: number | null): void {
   menuSession = new MenuSession(menuData());
-  menuSession.open('party');
+  /**
+   * `main` statt `party`: erst damit greift der zweistufige Abbruch
+   * (Unteransicht → Hauptmenü → schließen) und die Kommandospalte ist
+   * überhaupt erreichbar. Der MENU-Opcode nimmt weiterhin seinen eigenen Weg
+   * (`open(view)`) — dort schließt Abbrechen wie bisher sofort.
+   */
+  menuSession.open('main');
   menuHostRequestId = requestId;
   renderMenu();
   menuOverlayEl.classList.add('visible');
@@ -426,31 +564,135 @@ function closeMenuOverlay(): void {
   if (menuHostRequestId !== null) fieldSession?.closeMenu(menuHostRequestId);
   menuHostRequestId = null;
   menuSession = null;
+  paintBoxes(menuHost, []);
   menuOverlayEl.classList.remove('visible');
 }
 
+/**
+ * F24-B — Menü zeichnen.
+ *
+ * Die frühere `<table>` in Monospace ist ersatzlos weg. Entschieden wird
+ * nichts mehr hier: `MenuSession.screen()` liefert Fenster, Zeilen,
+ * Spaltenanker und Balken in Koordinaten der 640×480-Fläche; diese Funktion
+ * setzt sie nur noch. Gezeichnet wird mit demselben Maler und derselben
+ * Fensterschale wie das Kampf-HUD (`paintBoxes` + `applyWindowSkin`) — genau
+ * das war der Zweck der Schale.
+ */
 function renderMenu(): void {
-  const vm = menuSession?.viewModel();
-  if (!vm) {
-    menuBoxEl.innerHTML = '';
+  const bild = menuSession?.screen();
+  if (!bild) {
+    paintBoxes(menuHost, []);
     return;
   }
-  menuBoxEl.innerHTML = `<h2>${escapeHtml(vm.title)}</h2>${menuRows(vm)}`;
+  paintBoxes(menuHost, menuBoxes(bild));
 }
 
-function menuRows(vm: MenuViewModel): string {
-  const auswahl = vm.selectable[menuSession!.state.cursor];
-  return `<table>${vm.rows
-    .map((r, i) => {
-      const marke = i === auswahl ? '▶' : '';
-      return `<tr><td>${marke}</td><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.value)}</td></tr>`;
-    })
-    .join('')}</table>`;
+/** `MenuScreen` → Kastenliste des gemeinsamen Malers. */
+function menuBoxes(bild: MenuScreen): HudBox[] {
+  const boxen: HudBox[] = [];
+  const zeilenHoehe = FF7_WINDOW_SKIN.lineHeight;
+  for (const panel of bild.panels) {
+    /**
+     * 🟡 Der Maler kennt bisher nur die Normaldarstellung. Alle Fenster, die
+     * `buildMainScreen`/`buildViewScreen` heute liefern, sind Normal; ein
+     * anderer Modus würde hier auffallen, statt still falsch zu erscheinen.
+     */
+    if (panel.mode !== WindowDisplayMode.NoFrameNoBackground) {
+      boxen.push({
+        id: `menu.${panel.id}`,
+        kind: 'window',
+        rect: { x: panel.rect.x, y: panel.rect.y, w: panel.rect.width, h: panel.rect.height },
+      });
+    }
+    for (const zeile of panel.lines) {
+      // Zeilen unterhalb der Textfläche werden NICHT gezeichnet — sonst
+      // schriebe eine lange Liste über das Fußfenster hinweg.
+      if (zeile.y + zeilenHoehe > panel.content.height + 1) continue;
+      const oben = panel.content.y + zeile.y;
+      if (zeile.cursor) {
+        boxen.push({
+          id: `menu.${panel.id}.${zeile.key}.cursor`,
+          kind: 'cursor',
+          rect: { x: panel.rect.x + 6, y: oben, w: 16, h: zeilenHoehe },
+          text: FF7_WINDOW_SKIN.cursor.trim(),
+          align: 'left',
+          fontSize: FF7_WINDOW_SKIN.fontSize,
+        });
+      }
+      /**
+       * Balken ZUERST: die Kastenliste ist zugleich die Zeichenreihenfolge.
+       * In der Gegenstands- und der Materiaansicht überlappen Balken und
+       * rechtsbündiger Wert (der Balkenanker steht 180 px vor der rechten
+       * Kante, lange Werte reichen darüber hinaus) — dann muss die Zahl
+       * gewinnen, nicht der Balken.
+       */
+      zeile.bars.forEach((balken, k) => {
+        const x = panel.content.x + balken.x;
+        const y = oben + Math.round((zeilenHoehe - 12) / 2);
+        boxen.push({
+          id: `menu.${panel.id}.${zeile.key}.bar${k}.frame`,
+          kind: 'barFrame',
+          rect: { x, y, w: balken.width, h: 12 },
+        });
+        const breite = Math.round((balken.width - 4) * Math.max(0, Math.min(1, balken.fill)));
+        if (breite > 0) {
+          boxen.push({
+            id: `menu.${panel.id}.${zeile.key}.bar${k}.fill`,
+            kind: 'barFill',
+            rect: { x: x + 2, y: y + 2, w: breite, h: 8 },
+            background: MENU_BAR_COLORS[balken.tone] ?? MENU_BAR_COLORS['hp']!,
+          });
+        }
+      });
+      zeile.runs.forEach((lauf, k) => {
+        // Rechtsbündig: der Anker ist die RECHTE Kante; die gemessene Breite
+        // kommt aus dem Paket und wird hier nicht neu gerechnet.
+        const rect =
+          lauf.align === 'right'
+            ? { x: panel.content.x, y: oben, w: lauf.x, h: zeilenHoehe }
+            : { x: panel.content.x + lauf.x, y: oben, w: Math.max(lauf.width, panel.content.width - lauf.x), h: zeilenHoehe };
+        boxen.push({
+          id: `menu.${panel.id}.${zeile.key}.${k}`,
+          kind: 'value',
+          rect,
+          text: lauf.text,
+          align: lauf.align,
+          fontSize: FF7_WINDOW_SKIN.fontSize,
+          ...(lauf.dim ? { opacity: 0.45 } : {}),
+        });
+      });
+    }
+  }
+  /**
+   * Die Hinweise MÜSSEN sichtbar sein — sie tragen „Ersatzmetrik statt
+   * WINDOW.BIN", „Ort vom Wirt geraten", „Zauberzuordnung 🔴". Ein Menü, das
+   * seine Unsicherheiten verschweigt, ist genau der Fehler von Welle 1.
+   */
+  bild.notes.slice(0, 3).forEach((note, i) => {
+    boxen.push({
+      id: `menu.note${i}`,
+      kind: 'diagnostic',
+      rect: { x: 8, y: bild.surface.height - 18 * (bild.notes.length - i), w: bild.surface.width - 16, h: 16 },
+      text: note,
+      align: 'left',
+      fontSize: 12,
+      color: '#ffd050',
+    });
+  });
+  return boxen;
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!);
 }
+
+/** 🟡 Balkenfarben des Menüs — an EINER Stelle, nicht je Ansicht. */
+const MENU_BAR_COLORS: Record<string, string> = {
+  hp: 'rgb(140,213,170)',
+  mp: 'rgb(150,180,255)',
+  limit: 'rgb(204,143,176)',
+  exp: 'rgb(228,181,129)',
+};
 
 function menuTick(frame: ActionFrame): void {
   const map: [SemanticAction, keyof MenuInput][] = [
@@ -471,12 +713,18 @@ function menuTick(frame: ActionFrame): void {
     }
   }
   if (!any || !menuSession) return;
-  if (input.cancel || input.toggle) {
+  /**
+   * Abbrechen/Umschalten geht jetzt DURCH die Sitzung, statt das Overlay
+   * vorher zu schließen. Vorher war der Rückweg aus einer Unteransicht
+   * unerreichbar: der Wirt schloss das Menü, bevor `MenuSession.step` den
+   * zweistufigen Abbruch überhaupt sehen konnte.
+   */
+  menuSession.step(input);
+  menuSession.step(NEUTRAL_MENU_INPUT); // Flanke abschließen (MenuSession wirkt auf Flanken)
+  if (!menuSession.state.open) {
     closeMenuOverlay();
     return;
   }
-  menuSession.step(input);
-  menuSession.step(NEUTRAL_MENU_INPUT); // Flanke abschließen (MenuSession wirkt auf Flanken)
   renderMenu();
 }
 
@@ -491,6 +739,7 @@ function updateDialogOverlay(): void {
   if (pending.length === 0) {
     dialogVisibleId = null;
     dialogSel = 0;
+    windowShell.close(DIALOG_SLOT);
     dialogOverlayEl.classList.remove('visible');
     return;
   }
@@ -522,6 +771,8 @@ function updateDialogOverlay(): void {
     })
     .join('');
   dialogBoxEl.innerHTML = html;
+  windowShell.open(DIALOG_SLOT);
+  applyWindowSkin(dialogBoxEl, windowShell.get(DIALOG_SLOT)!.mode);
   dialogOverlayEl.classList.add('visible');
 }
 
@@ -584,6 +835,13 @@ function dialogTick(frame: ActionFrame): void {
 // --- Kampf: echte BattleSession + render-battle ------------------------------------
 
 function openBattle(encounterId: number, requestId: number | null, source: 'field' | 'world'): void {
+  /**
+   * Ein Kampf hat Vorrang vor dem Menü — und zwar sichtbar. Im normalen Lauf
+   * kann das nicht vorkommen (ein offenes Menü hält den Takt an), über
+   * `gameDebug.starteKampf` schon: dann blieb das Menü-Overlay über der Bühne
+   * stehen und war nicht mehr schließbar, weil der Kampfkontext gewinnt.
+   */
+  if (menuSession) closeMenuOverlay();
   const session = battleStarter?.(encounterId & 0x3ff) ?? null;
   if (!session || !data?.scenes) {
     openBattleStub(encounterId, requestId, source);
@@ -593,19 +851,36 @@ function openBattle(encounterId: number, requestId: number | null, source: 'fiel
   const enemyIds: string[] = [];
   for (let i = 0; i < 8; i++) if (session.actor(`enemy-${i}`)) enemyIds.push(`enemy-${i}`);
   const maxHp = new Map<string, number>();
-  for (const id of [...partyIds, ...enemyIds]) maxHp.set(id, session.actor(id)!.hp);
+  const maxMp = new Map<string, number>();
+  for (const id of [...partyIds, ...enemyIds]) {
+    maxHp.set(id, session.actor(id)!.hp);
+    maxMp.set(id, session.actor(id)!.mp);
+  }
+  // K7: Die Projektionsschicht bekommt ihren Anfangszustand aus der Sitzung
+  // (nur Lesezugriff) und ab jetzt jedes Tick-Ergebnis.
+  const view = BattleViewModel.fromSession(
+    session,
+    [...partyIds, ...enemyIds].map((id) => ({ id, maxHp: maxHp.get(id)!, maxMp: maxMp.get(id)! })),
+  );
   battle = {
     session,
+    view,
     requestId,
     source,
     encounterId,
     partyIds,
     enemyIds,
     maxHp,
+    maxMp,
     awaiting: [],
     eventLog: [],
     outcomeKind: null,
     rewards: null,
+    commandIndex: 0,
+    message: '',
+    messageTicks: 0,
+    result: null,
+    resultPage: 0,
   };
   buildBattleVisuals(encounterId & 0x3ff);
   // Field-Titel auf den Keller, Kampfmusik darüber — `pop-music` stellt ihn
@@ -614,7 +889,7 @@ function openBattle(encounterId: number, requestId: number | null, source: 'fiel
   spieleMusikId(musicIdByName('bat'));
   battleOverlayEl.classList.add('visible');
   log(`Kampf gestartet: Encounter ${encounterId} (${source}), ${enemyIds.length} Gegner`);
-  renderBattleBox();
+  renderBattleHud();
 }
 
 function buildBattleVisuals(battleId: number): void {
@@ -628,6 +903,40 @@ function buildBattleVisuals(battleId: number): void {
 
   const cams = parseCameraBlock(formation.cameraRaw).cameras;
   if (cams[0]) applyBattleCamera(battleCamera, cams[0]);
+
+  /**
+   * K5 — echte Bühne statt Ersatzscheibe. `location` der Formation indiziert
+   * DIREKT in das Bühnenband; die Teile tragen ihre Weltlage selbst, deshalb
+   * wird nichts platziert, skaliert oder gedreht (die Gruppe trägt die
+   * Battle-Basis, mehr nicht).
+   */
+  setzeBuehne(buildSubstituteStage());
+  stageProtokoll = { prefix: null, location: formation.location, teile: 0, texturen: 0, ersatz: true };
+  const praefixe = data.listBattlePrefixes();
+  const stagePrefix = stagePrefixForLocation(formation.location, praefixe);
+  if (!stagePrefix) {
+    log(`Bühne: location ${formation.location} außerhalb des Bandes (${praefixe.length} Präfixe) — Ersatzbühne`);
+  } else {
+    void loadBattleStage(stagePrefix, data)
+      .then((files) => {
+        if (gen !== battleGen) return;
+        if (!files) {
+          log(`Bühne "${stagePrefix}" nicht ladbar — Ersatzbühne`);
+          return;
+        }
+        const gebaut = buildBattleStage(stagePrefix, files);
+        setzeBuehne(gebaut.root);
+        stageProtokoll = {
+          prefix: stagePrefix,
+          location: formation.location,
+          teile: gebaut.partCount,
+          texturen: files.textures.filter((t) => t !== null).length,
+          ersatz: false,
+        };
+        log(`Bühne "${stagePrefix}" (location ${formation.location}): ${gebaut.partCount} Teile`);
+      })
+      .catch((err) => log(`Bühne "${stagePrefix}": ${(err as Error).message}`));
+  }
 
   // Gegner: sofort Platzhalterwürfel, echtes Modell asynchron nachladen.
   const placed = placeFormation(formation);
@@ -660,12 +969,54 @@ function buildBattleVisuals(battleId: number): void {
       })
       .catch((err) => log(`Battle-Modell "${prefix}": ${(err as Error).message}`));
   });
-  // Party: 🔵 Ersatzquader auf Spiegelpositionen (Party-Battle-Modelle noch nicht verdrahtet).
-  for (const pos of placeParty(battle?.partyIds.length ?? partySpecs.length)) {
-    const box = new Mesh(new BoxGeometry(500, 1500, 500), new MeshBasicMaterial({ color: 0x4466cc }));
-    box.position.set(pos[0], pos[1] + 750, pos[2]);
-    battleGroup.add(box);
-  }
+  /**
+   * K3/K4 — echte Party-Modelle statt blauer Quader.
+   *
+   * Die Charakter-ID kommt aus der Savemap, NICHT aus `PartyMemberSpec.id`:
+   * das ist der (umbenennbare) Anzeigename und trägt keine ID. Ohne Spielstand
+   * sind es die IDs der `defaultParty()`.
+   *
+   * WICHTIG: kein `battleToScene` und keine Skalierung auf das fertige Modell.
+   * `BATTLE_MODEL_SCALE = 1`, und die Modellkette trägt die Battle-Lage
+   * bereits — wer sie ein zweites Mal anwendet, legt jede Figur flach.
+   */
+  const charIds = data.savemap
+    ? data.savemap.party.filter((x): x is number => x !== null)
+    : [0, 1];
+  const plaetze = placeParty(Math.max(1, charIds.length));
+  charIds.forEach((cid, i) => {
+    const platz = plaetze[i];
+    if (!platz) return;
+    const prefix = partyModelPrefix(cid);
+    if (!prefix) {
+      // Kein Raten: unbekannte ID bekommt den Ersatzquader und eine Meldung.
+      const box = new Mesh(new BoxGeometry(500, 1500, 500), new MeshBasicMaterial({ color: 0x4466cc }));
+      box.position.set(platz[0], platz[1] + 750, platz[2]);
+      battleGroup.add(box);
+      log(`Party-Modell für Charakter ${cid} unbekannt — Ersatzquader`);
+      return;
+    }
+    void loadBattleModel(prefix, data!)
+      .then((files) => {
+        if (gen !== battleGen || !files) {
+          if (!files) log(`Party-Modell "${prefix}" nicht ladbar`);
+          return;
+        }
+        const built = buildBattleActor(`party-${i}`, files);
+        built.actor.root.position.set(platz[0], platz[1], platz[2]);
+        battleGroup.add(built.actor.root);
+        battleModellProtokoll.set(prefix, {
+          prefix,
+          teile: files.parts.length,
+          texturen: files.textures.filter((t) => t !== null).length,
+          eintraege: data?.listBattleEntries(prefix).length ?? 0,
+        });
+        log(
+          `Party-Modell "${prefix}" (${partyModelByPrefix(prefix)?.label ?? '?'}) geladen: ${files.parts.length} Teile`,
+        );
+      })
+      .catch((err) => log(`Party-Modell "${prefix}": ${(err as Error).message}`));
+  });
 }
 
 function fmtBattleEvent(e: { kind: string } & Record<string, unknown>): string | null {
@@ -683,29 +1034,140 @@ function fmtBattleEvent(e: { kind: string } & Record<string, unknown>): string |
   }
 }
 
-function renderBattleBox(): void {
+/**
+ * K7 — Trefferzahlen aus dem BattleViewModel in Flächenkoordinaten bringen.
+ *
+ * Die Zahl hängt am Ziel der Aktion. Party-Ziele bekommen die Zahl über ihre
+ * HUD-Zeile (dort steht die Figur im HUD), Gegner über gleichmäßig verteilte
+ * Ankerpunkte im oberen Bildbereich. 🟡 Das ist ein **Ersatz für eine echte
+ * Projektion** der Kampfpositionen: Die Aufstellung gehört `render-battle`
+ * (anderer Bereich), und ohne dessen Bildschirmkoordinaten wäre jede
+ * genauere Zuordnung geraten. Was sichtbar wird, ist die ZAHL — vorher
+ * erschien überhaupt nichts.
+ */
+function floaterAnchor(actorId: string): { x: number; y: number } {
+  if (!battle) return { x: 320, y: 200 };
+  const partyIndex = battle.partyIds.indexOf(actorId);
+  if (partyIndex >= 0) return { x: 150, y: 300 - partyIndex * 26 };
+  const enemyIndex = Math.max(0, battle.enemyIds.indexOf(actorId));
+  const spalten = Math.max(1, battle.enemyIds.length);
+  return { x: Math.round(((enemyIndex + 0.5) / spalten) * 560) + 40, y: 170 + (enemyIndex % 2) * 40 };
+}
+
+/** ViewState-Floater → HUD-Floater (Fortschritt 0…1 statt Resttakte). */
+function hudFloaters(): HudFloater[] {
+  if (!battle) return [];
+  const FLOAT_TICKS = 45; // Anzeigedauer des BattleViewModel
+  return battle.view.view.floating.map((f) => ({
+    actorId: f.actorId,
+    text: f.kind === 'miss' ? 'verfehlt' : f.kind === 'heal' ? `+${f.amount}` : String(f.amount),
+    kind: f.kind,
+    progress: Math.max(0, Math.min(1, 1 - f.ticksLeft / FLOAT_TICKS)),
+    anchor: floaterAnchor(f.actorId),
+  }));
+}
+
+function hudModel(): HudModel {
+  const b = battle!;
+  const view = b.view.view;
+  const model: HudModel = {
+    members: b.partyIds.map((id) => {
+      const a = b.session.actor(id)!;
+      const spec = partySpecs.find((p) => p.id === id);
+      return {
+        id,
+        name: spec?.id ?? id,
+        hp: a.hp,
+        maxHp: b.maxHp.get(id) ?? a.hp,
+        mp: a.mp,
+        maxMp: b.maxMp.get(id) ?? a.mp,
+        atb: a.atb,
+        alive: a.hp > 0,
+        awaiting: b.awaiting.includes(id),
+      };
+    }),
+    message: b.messageTicks > 0 ? b.message : '',
+    command: null,
+    floaters: hudFloaters(),
+    effectCoverage: view.effectCoverage,
+  };
+  // Die Metrik-Diagnose MUSS sichtbar bleiben — ein stiller Rückfall auf
+  // Ersatzbreiten war der Fehler von Welle 1.
+  if (data && !data.textMetrik.measured) model.metricsMeasured = false;
+  const amZug = b.awaiting[0];
+  if (amZug !== undefined) {
+    const zeile = Math.max(0, b.partyIds.indexOf(amZug));
+    model.command = { entries: DEFAULT_COMMANDS, selected: b.commandIndex, row: zeile };
+  }
+  return model;
+}
+
+function renderBattleHud(): void {
   if (!battle) return;
-  const lines: string[] = [];
-  lines.push(`KAMPF — Encounter ${battle.encounterId}`);
-  for (const id of battle.partyIds) {
-    const a = battle.session.actor(id);
-    if (a) lines.push(`  ${id.padEnd(10)} HP ${a.hp}/${battle.maxHp.get(id)}  MP ${a.mp}  ATB ${Math.floor((a.atb / 65536) * 100)}%`);
+  if (battle.result) {
+    paintBoxes(hudHost, []);
+    paintBoxes(resultHost, resultBoxes({ ...battle.result, page: battle.resultPage }));
+    battleOverlayEl.classList.remove('visible');
+    resultOverlayEl.classList.add('visible');
+    return;
   }
-  for (const id of battle.enemyIds) {
-    const a = battle.session.actor(id);
-    if (a) lines.push(`  ${id.padEnd(10)} HP ${a.hp}/${battle.maxHp.get(id)}${a.hp <= 0 ? '  ✝' : ''}`);
-  }
-  lines.push(...battle.eventLog.slice(-5).map((l) => `  · ${l}`));
-  if (battle.outcomeKind) {
-    const r = battle.rewards;
-    lines.push(`AUSGANG: ${battle.outcomeKind}${r ? ` — EXP ${r.exp} AP ${r.ap} Gil ${r.gil}` : ''}`);
-    lines.push('[Enter] weiter');
-  } else if (battle.awaiting.length > 0) {
-    lines.push(`▶ ${battle.awaiting[0]}: [Enter] Angriff · [Esc] Flucht`);
-  } else {
-    lines.push('… ATB läuft …');
-  }
-  battleBoxEl.textContent = lines.join('\n');
+  resultOverlayEl.classList.remove('visible');
+  battleOverlayEl.classList.add('visible');
+  paintBoxes(hudHost, hudBoxes(hudModel()));
+}
+
+/**
+ * N7 — Ergebnisbildschirm aus der VERBUCHUNG bauen. Gerechnet wird in
+ * `@webmidgar/battle-runtime` (`applyExperience`, `expTotalForLevel`);
+ * hier wird nur übernommen, was dabei herauskam.
+ *
+ * Ohne Growth-Sektion (KERNEL.BIN fehlt) gibt es keine Schwellen — dann
+ * zeigt der Bildschirm EXP/AP/Gil und sagt beim Level nichts Erfundenes.
+ */
+function buildResultScreen(rewards: { exp: number; ap: number; gil: number; drops: number[] }): ResultScreenModel {
+  const b = battle!;
+  const namen = b.partyIds;
+  const beute = rewards.drops.map((id) => data?.itemName(id) ?? `#${id}`);
+  return {
+    messages: resultMessages(rewards.gil, beute),
+    page: 0,
+    gainedExp: rewards.exp,
+    gainedAp: rewards.ap,
+    members: namen.map((id) => {
+      const spec = partySpecs.find((p) => p.id === id);
+      let fortschritt = progressById.get(id);
+      if (!fortschritt) {
+        fortschritt = {
+          charIndex: Math.max(0, namen.indexOf(id)),
+          level: spec?.level ?? 1,
+          exp: 0,
+          maxHp: spec?.maxHp ?? 100,
+          maxMp: spec?.maxMp ?? 10,
+        };
+        progressById.set(id, fortschritt);
+      }
+      const aufstieg = growth
+        ? applyExperience(fortschritt, rewards.exp, growth)
+        : { levelsGained: 0, hpGained: 0, mpGained: 0 };
+      if (!growth) fortschritt.exp += rewards.exp;
+      const naechste = growth ? expTotalForLevel(growth, fortschritt.charIndex, fortschritt.level + 1) : 0;
+      const vorige = growth ? expTotalForLevel(growth, fortschritt.charIndex, fortschritt.level) : 0;
+      const spanne = Math.max(1, naechste - vorige);
+      if (aufstieg.levelsGained > 0) {
+        log(
+          `${id}: Stufe ${fortschritt.level} (+${aufstieg.levelsGained}), HP +${aufstieg.hpGained}, MP +${aufstieg.mpGained}`,
+        );
+      }
+      return {
+        name: spec?.id ?? id,
+        level: fortschritt.level,
+        exp: fortschritt.exp,
+        toNextLevel: growth ? Math.max(0, naechste - fortschritt.exp) : 0,
+        levelProgress: growth ? Math.max(0, Math.min(1, (fortschritt.exp - vorige) / spanne)) : 0,
+        levelsGained: aufstieg.levelsGained,
+      };
+    }),
+  };
 }
 
 function closeRealBattle(): void {
@@ -718,55 +1180,127 @@ function closeRealBattle(): void {
   battle = null;
   battleGen++;
   battleGroup.clear();
+  // Die Bühne gehört dem beendeten Kampf — sie bleibt nicht für den nächsten stehen.
+  setzeBuehne(null);
+  stageProtokoll = { prefix: null, location: null, teile: 0, texturen: 0, ersatz: true };
+  paintBoxes(hudHost, []);
+  paintBoxes(resultHost, []);
   battleOverlayEl.classList.remove('visible');
+  resultOverlayEl.classList.remove('visible');
   void music?.dispatch({ kind: 'pop-music' });
 }
 
 function battleTick(frame: ActionFrame): void {
   if (!battle) return;
+
+  // Ausgang erreicht: erst blättert der Ergebnisbildschirm, dann schließt er.
   if (battle.outcomeKind !== null) {
-    if (frame.pressed.includes('ok')) closeRealBattle();
-    else renderBattleBox();
+    if (frame.pressed.includes('ok')) {
+      if (battle.result && battle.resultPage < battle.result.messages.length - 1) battle.resultPage++;
+      else {
+        closeRealBattle();
+        return;
+      }
+    }
+    renderBattleHud();
     return;
   }
+
   let input: BattleTickInput = {};
-  if (battle.awaiting.length > 0) {
-    const actorId = battle.awaiting[0]!;
-    if (frame.pressed.includes('ok')) {
-      const target = battle.enemyIds.find((id) => (battle!.session.actor(id)?.hp ?? 0) > 0);
-      if (target) input = { command: { actorId, command: { kind: 'attack', targetId: target } } };
-    } else if (frame.pressed.includes('cancel')) {
+  const actorId = battle.awaiting[0];
+  if (actorId !== undefined) {
+    const eintraege = DEFAULT_COMMANDS.length;
+    if (frame.pressed.includes('up')) battle.commandIndex = (battle.commandIndex + eintraege - 1) % eintraege;
+    if (frame.pressed.includes('down')) battle.commandIndex = (battle.commandIndex + 1) % eintraege;
+    if (frame.pressed.includes('cancel')) {
       input = { command: { actorId, command: { kind: 'escape' } } };
+    } else if (frame.pressed.includes('ok')) {
+      const target = battle.enemyIds.find((id) => (battle!.session.actor(id)?.hp ?? 0) > 0);
+      // 🟡 Nur „Angriff“ und „Flucht“ sind Kommandos der Sitzung; Magie und
+      // Gegenstand sind im Kampfmodell noch nicht angeschlossen. Statt sie
+      // stillschweigend als Angriff auszuführen, melden sie das offen.
+      const wahl = DEFAULT_COMMANDS[battle.commandIndex];
+      if (wahl === 'Flucht') input = { command: { actorId, command: { kind: 'escape' } } };
+      else if (wahl === 'Angriff' && target) {
+        input = { command: { actorId, command: { kind: 'attack', targetId: target } } };
+        zeigeKampfmeldung('Angriff');
+      } else if (wahl !== 'Angriff') {
+        zeigeKampfmeldung(`${wahl}: noch nicht angeschlossen`);
+      }
     }
   }
+
   const result = battle.session.tick(input);
+  // K7: dasselbe Ergebnis, das die Sitzung meldet, geht in die Projektion —
+  // ohne Rückkanal, deshalb ist der Digest davon unberührt.
+  battle.view.applyTick(result);
   battle.awaiting = result.awaitingInput;
+  if (battle.messageTicks > 0) battle.messageTicks--;
   for (const e of result.events) {
     const line = fmtBattleEvent(e as { kind: string } & Record<string, unknown>);
     if (line) battle.eventLog.push(line);
+    if (e.kind === 'action') zeigeKampfmeldung(kampfmeldung(e));
   }
   if (battle.eventLog.length > 12) battle.eventLog = battle.eventLog.slice(-12);
   if (result.outcome) {
     battle.outcomeKind = result.outcome.kind;
     if (result.outcome.kind === 'victory') {
-      battle.rewards = { exp: result.outcome.exp, ap: result.outcome.ap, gil: result.outcome.gil };
-      // 🟡 Die Siegfanfare läuft hier in der Schleife wie jeder andere Titel —
-      // ein „einmal abspielen" kennt das Kommandomodell nicht. Bis das belegt
-      // ist, wird sie vom `pop-music` beim Schließen des Kampfes abgelöst.
-      spieleMusikId(musicIdByName('fanfare'));
+      const rewards = {
+        exp: result.outcome.exp,
+        ap: result.outcome.ap,
+        gil: result.outcome.gil,
+        drops: [...result.outcome.drops],
+      };
+      battle.rewards = rewards;
+      battle.result = buildResultScreen(rewards);
+      battle.resultPage = 0;
+      // Die Siegfanfare ist ein Einmaltitel (`once`), keine Schleife — sonst
+      // wiederholt sie sich, solange der Ergebnisbildschirm offen steht.
+      // 🟡 Ungemessen bleibt, ob das Original danach einen Folgetitel startet;
+      // hier bleibt es still, bis `pop-music` beim Schließen die Feldmusik holt.
+      spieleMusikId(musicIdByName('fanfare'), true);
     }
   }
-  renderBattleBox();
+  renderBattleHud();
+}
+
+/** 🟡 Meldungsdauer über der Bühne: 30 Kampftakte = 2 s bei 15 Hz. */
+const MELDUNG_TAKTE = 30;
+
+function zeigeKampfmeldung(text: string): void {
+  if (!battle) return;
+  battle.message = text;
+  battle.messageTicks = MELDUNG_TAKTE;
+}
+
+/**
+ * 🟡 Der Meldungstext des Originals ist der ATTACKENNAME („Machine Gun“ in
+ * `…223335_1.jpg`). Die Attackennamen liegen in einer kernel-Sektion, die
+ * hier noch nicht gedeutet ist — deshalb steht die Attack-ID daneben, statt
+ * einen Namen zu erfinden.
+ */
+function kampfmeldung(e: { kind: string } & Record<string, unknown>): string {
+  const angreifer = String(e['actorId']);
+  const attackId = e['attackId'];
+  if (attackId === null || attackId === undefined) return `${angreifer}: Angriff`;
+  return `${angreifer}: Attacke #${attackId}`;
 }
 
 // --- Kampf-Stub (Rückfall, wenn der Starter die Szene nicht liefert) ----------------
 
 function openBattleStub(encounterId: number, requestId: number | null, source: 'field' | 'world'): void {
   battleStub = { encounterId, requestId, source };
-  battleBoxEl.textContent =
-    `KAMPF — Encounter ${encounterId} (${source})\n` +
-    `[Platzhalter bis BattleSession verdrahtet ist]\n` +
-    `Enter = Sieg · Esc = Flucht`;
+  // Der Stub bekommt dieselbe Fensterschale wie der echte Kampf — nur eben
+  // eine ehrliche Meldung darin, dass hier keine Sitzung laeuft.
+  paintBoxes(
+    hudHost,
+    hudBoxes({
+      members: [],
+      message: `Encounter ${encounterId} (${source}) — keine Szene: Enter = Sieg, Esc = Flucht`,
+      command: null,
+      floaters: [],
+    }),
+  );
   battleOverlayEl.classList.add('visible');
   log(`Kampf angefordert: Encounter ${encounterId} (${source})`);
 }
@@ -782,6 +1316,7 @@ function battleStubTick(frame: ActionFrame): void {
   }
   log(`Kampf beendet: ${victory ? 'Sieg' : 'Flucht'}`);
   battleStub = null;
+  paintBoxes(hudHost, []);
   battleOverlayEl.classList.remove('visible');
 }
 
@@ -1282,37 +1817,134 @@ function worldTick(frame: ActionFrame): void {
   playerMarker.position.set(worldSession.x, worldSession.h + 1400, worldSession.z);
 }
 
+/**
+ * F11b/F25 — Darstellungsart der Weltkarte.
+ *
+ * `textured` ist der neue Normalfall. Die beiden Diagnosearten bleiben
+ * ausdrücklich erhalten: sie sind Werkzeuge, kein Fehler. `terrain` färbt nach
+ * Begehbarkeitsklasse (der bisherige Zustand), `region` nach `locationId` —
+ * damit lässt sich die Ortszuordnung ohne Textur prüfen.
+ */
+type WeltDarstellung = 'textured' | 'terrain' | 'region';
+let weltDarstellung: WeltDarstellung = 'textured';
+
+/**
+ * Die Atlasseiten als Three-Texturen — EINMAL, nicht je Block. `flipY = false`
+ * ist Pflicht: die Atlas-UVs zählen v von oben.
+ */
+const atlasTexturen = new Map<number, DataTexture>();
+
+function atlasTextur(seite: number): DataTexture | null {
+  const atlas = data?.worldTextures?.atlas;
+  const bytes = atlas?.atlases[seite];
+  if (!atlas || !bytes) return null;
+  const vorhanden = atlasTexturen.get(seite);
+  if (vorhanden) return vorhanden;
+  const t = new DataTexture(bytes, atlas.size, atlas.size, RGBAFormat);
+  t.flipY = false;
+  t.minFilter = LinearMipmapLinearFilter;
+  t.magFilter = LinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  t.needsUpdate = true;
+  atlasTexturen.set(seite, t);
+  return t;
+}
+
 function buildBlockGroup(blockIndex: number, cell: { col: number; row: number }): Group {
   const gruppe = new Group();
   const block = data?.terrain?.blocks[blockIndex];
   if (!block) return gruppe;
+  const satz = weltDarstellung === 'textured' ? (data?.worldTextures ?? null) : null;
   block.meshes.forEach((mesh, meshIndex) => {
     if (!mesh) return;
-    const geo = buildMeshGeometry(mesh, blockIndex, meshIndex, GRID, cell);
-    const positions = new Float32Array(geo.triCount * 9);
-    const farben = new Float32Array(geo.triCount * 9);
+    const geo = buildTexturedMeshGeometry(mesh, blockIndex, meshIndex, GRID, {
+      ...(satz ? { table: satz.table, atlas: satz.atlas } : {}),
+      cellOverride: cell,
+    });
+    /**
+     * Nach Atlasseite trennen. 255 heißt „keine Zelle" — diese Dreiecke gehen
+     * in die Klassenfarben-Darstellung, statt mit einer falschen UV zu laufen.
+     * WM0 braucht heute genau eine Seite; die Aufteilung steht trotzdem hier,
+     * weil sie sonst beim ersten Mehrseiten-Atlas still falsch wäre.
+     */
+    const seiten = new Map<number, number[]>();
     for (let t = 0; t < geo.triCount; t++) {
-      const farbe = KLASSENFARBEN[geo.walkClasses[t]!]!;
-      for (let k = 0; k < 3; k++) {
-        const v = geo.indices[t * 3 + k]!;
-        positions.set(geo.positions.subarray(v * 3, v * 3 + 3), t * 9 + k * 3);
-        farben[t * 9 + k * 3] = farbe.r;
-        farben[t * 9 + k * 3 + 1] = farbe.g;
-        farben[t * 9 + k * 3 + 2] = farbe.b;
+      const seite = satz ? geo.atlasPages[t]! : 255;
+      let liste = seiten.get(seite);
+      if (!liste) {
+        liste = [];
+        seiten.set(seite, liste);
       }
+      liste.push(t);
     }
-    const bg = new BufferGeometry();
-    bg.setAttribute('position', new BufferAttribute(positions, 3));
-    bg.setAttribute('color', new BufferAttribute(farben, 3));
-    bg.computeVertexNormals();
-    gruppe.add(new Mesh(bg, new MeshLambertMaterial({ vertexColors: true })));
+    for (const [seite, dreiecke] of seiten) {
+      const positions = new Float32Array(dreiecke.length * 9);
+      dreiecke.forEach((t, i) => positions.set(geo.positions.subarray(t * 9, t * 9 + 9), i * 9));
+      const bg = new BufferGeometry();
+      bg.setAttribute('position', new BufferAttribute(positions, 3));
+      const textur = seite === 255 ? null : atlasTextur(seite);
+      if (textur) {
+        const uvs = new Float32Array(dreiecke.length * 6);
+        dreiecke.forEach((t, i) => uvs.set(geo.uvs.subarray(t * 6, t * 6 + 6), i * 6));
+        bg.setAttribute('uv', new BufferAttribute(uvs, 2));
+        // Unbeleuchtet und OHNE Backface-Culling — die Weltmeshes sind nicht
+        // durchgehend gleich gewickelt.
+        gruppe.add(new Mesh(bg, new MeshBasicMaterial({ map: textur, alphaTest: 0.5, side: DoubleSide })));
+        continue;
+      }
+      const farben = new Float32Array(dreiecke.length * 9);
+      dreiecke.forEach((t, i) => {
+        const idx = weltDarstellung === 'region' ? geo.locationIds[t]! : geo.walkClasses[t]!;
+        const farbe = KLASSENFARBEN[idx % KLASSENFARBEN.length]!;
+        for (let k = 0; k < 3; k++) {
+          farben[i * 9 + k * 3] = farbe.r;
+          farben[i * 9 + k * 3 + 1] = farbe.g;
+          farben[i * 9 + k * 3 + 2] = farbe.b;
+        }
+      });
+      bg.setAttribute('color', new BufferAttribute(farben, 3));
+      bg.computeVertexNormals();
+      gruppe.add(new Mesh(bg, new MeshLambertMaterial({ vertexColors: true })));
+    }
   });
   return gruppe;
+}
+
+/** Darstellungsart wechseln und alle residenten Blöcke neu bauen. */
+function setzeWeltDarstellung(art: WeltDarstellung): void {
+  weltDarstellung = art;
+  for (const [key, g] of residentBlocks) {
+    worldTerrainGroup.remove(g);
+    g.traverse((o) => {
+      if (o instanceof Mesh) {
+        o.geometry.dispose();
+        // Die geteilte Atlastextur wird NICHT entsorgt — nur das Material.
+        (o.material as MeshLambertMaterial).dispose();
+      }
+    });
+    residentBlocks.delete(key);
+  }
+  streamer.clear(); // Residenz vergessen, sonst gilt jeder Block als „schon da"
+  if (worldSession) {
+    for (const slot of streamer.update(worldSession.x, worldSession.z).load) {
+      const g = buildBlockGroup(slot.blockIndex, slot.cell);
+      residentBlocks.set(slot.key, g);
+      worldTerrainGroup.add(g);
+    }
+  }
+  setStatus(`Weltkarten-Darstellung: ${art}`);
 }
 
 // --- Takt + Render -----------------------------------------------------------------
 
 let tickCounter = 0;
+/**
+ * Eingaben der Wirtstakte, in denen KEIN Kampftakt faellig war (der Kampf
+ * laeuft mit 15 Hz in einer 30-Hz-Schleife). Ohne diesen Puffer verschwaende
+ * jeder zweite Tastendruck.
+ */
+const kampfEingabePuffer = new Set<SemanticAction>();
 
 function tick(): void {
   tickCounter++;
@@ -1323,7 +1955,28 @@ function tick(): void {
   sampler.setContext(activeContext());
   const frame = sampler.sampleTick();
   if (battle) {
-    battleTick(frame);
+    /**
+     * **Kampf-Bildrate (gemessen, dann geaendert).** Das Original begrenzt
+     * den Kampf auf 15 fps, Field und Weltkarte auf 30
+     * (`docs/fremdquellen/ffnx.md`, `ff7_limit_fps`). Bis hierher lief der
+     * Kampf in DIESER 30-Hz-Schleife mit, also doppelt so schnell wie im
+     * Original. `isBattleTickDue` halbiert ihn.
+     *
+     * Der Replay-Digest bleibt davon unberuehrt: Die `BattleSession` kennt
+     * keine Wanduhr, ihr Zustand haengt nur an der Zahl der Takte und an den
+     * Eingaben (belegt in `packages/battle-runtime/src/rate.test.ts`).
+     * Geaendert hat sich die Geschwindigkeit, nicht die Rechnung.
+     *
+     * Eingaben duerfen dabei nicht verlorengehen: Tastendruecke der
+     * uebersprungenen Wirtstakte werden gesammelt und beim naechsten
+     * Kampftakt mitgegeben.
+     */
+    for (const a of frame.pressed) kampfEingabePuffer.add(a);
+    if (isBattleTickDue(tickCounter - 1)) {
+      const gepuffert: ActionFrame = { ...frame, pressed: [...kampfEingabePuffer].sort() as typeof frame.pressed };
+      kampfEingabePuffer.clear();
+      battleTick(gepuffert);
+    }
     return;
   }
   if (battleStub) {
@@ -1439,6 +2092,15 @@ async function boot(): Promise<void> {
     },
   });
   partySpecs = data.savemap ? partyFromSavemap(data.savemap) : defaultParty();
+  /**
+   * N7: Die EXP-Kurven fuer den Ergebnisbildschirm stehen in Sektion 2 von
+   * KERNEL.BIN. Fehlt sie, zeigt der Bildschirm EXP/AP/Gil und beim Level
+   * NICHTS — statt eine Schwelle zu erfinden.
+   */
+  const growthRoh = data.kernelSections?.[2];
+  growth = growthRoh ? parseGrowthSection(growthRoh, 'KERNEL.BIN/2', []) : null;
+  if (!growth) log('Growth-Sektion nicht lesbar — Ergebnisbildschirm ohne Stufenaufstieg');
+  progressById.clear();
   battleStarter = data.scenes
     ? createEncounterBattleStarter({ scenes: data.scenes, party: partySpecs, seed: 0x51ed })
     : null;
@@ -1586,11 +2248,118 @@ function codeForAction(action: SemanticAction): string | null {
       : null,
     aufloesungen: musikProtokoll.map((m) => ({ ...m })),
   }),
+  /**
+   * K6: Kampf ohne Zufallsbegegnung starten — sonst ist das HUD nur durch
+   * minutenlanges Umherlaufen erreichbar und damit nicht automatisierbar.
+   */
+  starteKampf: (encounterId = 8): void => openBattle(encounterId, null, 'field'),
+  /**
+   * K6/N7/K7: Zustand des Kampf-HUD als Daten — Fensterkanten, Balkenstaende,
+   * Trefferzahlen und die Effektabdeckung. Damit ist die Darstellung ohne
+   * Screenshot pruefbar.
+   */
+  kampfHud: (): object => {
+    if (!battle) return { aktiv: false, taktrateHz: BATTLE_TICK_HZ };
+    const boxen = battle.result
+      ? resultBoxes({ ...battle.result, page: battle.resultPage })
+      : hudBoxes(hudModel());
+    const kante = (id: string): object | null => {
+      const b = boxen.find((x) => x.id === id);
+      return b ? { x: b.rect.x, y: b.rect.y, w: b.rect.w, h: b.rect.h, text: b.text ?? null } : null;
+    };
+    return {
+      aktiv: true,
+      taktrateHz: BATTLE_TICK_HZ,
+      ergebnisbildschirm: battle.result ? { seite: battle.resultPage, seiten: battle.result.messages.length } : null,
+      fenster: {
+        status: kante('status.window'),
+        anzeigen: kante('gauge.window'),
+        kommando: kante('command.window'),
+        meldung: kante('message.window'),
+      },
+      zeile0: {
+        name: kante('row0.name'),
+        hp: kante('row0.hp'),
+        zeitbalken: kante('row0.time.frame'),
+        zeitfuellung: kante('row0.time.fill'),
+      },
+      trefferzahlen: boxen.filter((b) => b.kind === 'floater').map((b) => ({ text: b.text, opacity: b.opacity })),
+      effektabdeckung: battle.view.view.effectCoverage,
+      kastenZahl: boxen.length,
+    };
+  },
   /** K1/K2: Teile und Texturen je geladenem Battle-Präfix. */
   battleModelle: (): object => ({
     geladen: [...battleModellProtokoll.values()],
     teileGesamt: [...battleModellProtokoll.values()].reduce((s, m) => s + m.teile, 0),
   }),
+  /**
+   * K5: Welche Bühne trägt der laufende Kampf? `ersatz: true` heißt, dass die
+   * schwarze Ersatzscheibe steht — im Originalbestand darf das nicht vorkommen.
+   */
+  kampfBuehne: (): object => ({
+    ...stageProtokoll,
+    bandGroesse: data?.listBattlePrefixes().filter((p) => p >= 'og' && p <= 'rr').length ?? 0,
+    partyModelle: (data?.savemap?.party ?? [])
+      .filter((x): x is number => x !== null)
+      .map((cid) => ({ charakterId: cid, prefix: partyModelPrefix(cid), label: partyModelByPrefix(partyModelPrefix(cid) ?? '')?.label ?? null })),
+    kinderImKampf: battleGroup.children.length,
+  }),
+  /**
+   * F24-B: Menüansicht von außen wählen — sonst ist jede Unteransicht nur
+   * über eine Tastenfolge erreichbar und damit nicht automatisierbar.
+   * Ohne offenes Menü wird eines geöffnet.
+   */
+  menueAnsicht: (view?: string): object => {
+    if (!menuSession) openMenu(null);
+    if (view) {
+      if (!VIEW_ORDER.includes(view as MenuViewId) && view !== 'main') {
+        return { fehler: `unbekannte Ansicht ${view}`, moeglich: ['main', ...VIEW_ORDER] };
+      }
+      menuSession!.open(view as MenuViewId);
+      renderMenu();
+    }
+    const bild = menuSession!.screen();
+    return {
+      ansicht: menuSession!.state.view,
+      wurzel: menuSession!.state.root,
+      zeiger: menuSession!.state.cursor,
+      metrikGemessen: bild?.metricsMeasured ?? null,
+      hinweise: bild?.notes ?? [],
+      fenster:
+        bild?.panels.map((p) => ({
+          id: p.id,
+          rect: p.rect,
+          zeilen: p.lines.length,
+          erstesLabel: p.lines[0]?.runs[0]?.text ?? null,
+        })) ?? [],
+      kaesten: bild ? menuBoxes(bild).length : 0,
+    };
+  },
+  /** F11b/F25: Darstellungsart der Weltkarte umschalten und lesen. */
+  setWeltDarstellung: (art: WeltDarstellung): object => {
+    setzeWeltDarstellung(art);
+    return { art: weltDarstellung };
+  },
+  weltTexturen: (): object => {
+    const satz = data?.worldTextures;
+    return {
+      art: weltDarstellung,
+      hinweis: data?.worldTexturHinweis ?? null,
+      verfuegbar: satz !== null && satz !== undefined,
+      bericht: satz
+        ? {
+            ...satz.report,
+            misfits: satz.report.misfits.length,
+            unresolved: satz.report.unresolved.length,
+            missingImages: satz.report.missingImages.length,
+          }
+        : null,
+      atlasSeiten: satz?.atlas.atlases.length ?? 0,
+      atlasGroesse: satz?.atlas.size ?? 0,
+      residenteBloecke: residentBlocks.size,
+    };
+  },
   /** K1/K2: Namensraum eines Präfixes, so wie der Lader ihn sieht. */
   battlePraefix: (prefix: string): object => ({
     prefix,
@@ -1645,6 +2414,67 @@ function codeForAction(action: SemanticAction): string | null {
       leer: eintrag.empty,
     };
   },
+  /**
+   * Welle 2: Textmetrik und Fensterschale von außen prüfbar machen.
+   *
+   * `textMetrik().gemessen === false` bedeutet, dass die Fenster mit der
+   * Ersatzmetrik bemessen werden — der Grund steht daneben. Genau diese
+   * Sichtbarkeit fehlte, solange FALLBACK_GLYPHS still eingesprungen ist.
+   */
+  textMetrik: (): object => {
+    const m = data?.textMetrik;
+    if (!m) return { fehler: 'keine Daten geladen' };
+    return {
+      gemessen: m.measured,
+      hinweis: data!.windowHinweis,
+      diagnose: m.diagnostic,
+      polsterung: m.spacing.padding,
+      namensplatzhalter: m.spacing.widths[0xea],
+      breiteO: m.spacing.widths[0x2f],
+      breiteI: m.spacing.widths[0x49],
+      windowBinDiagnosen: data!.windowBin?.diagnostics.map((d) => d.code) ?? null,
+      sektionen:
+        data!.windowBin?.sections.map((sek) => ({
+          komprimiert: sek.compressedLength,
+          entpackt: sek.data.length,
+          kopfLaenge: sek.declaredLength,
+        })) ?? null,
+      fontblatt: data!.windowBin?.fontTexture
+        ? { breite: data!.windowBin.fontTexture.width, hoehe: data!.windowBin.fontTexture.height }
+        : null,
+    };
+  },
+  /**
+   * Misst einen Dialog des laufenden Fields nach der Originalregel und
+   * vergleicht ihn mit der Ersatzmetrik — die Gegenprobe im Browser.
+   */
+  fensterMass: (index: number): object | null => {
+    const script = fieldBundle?.script;
+    const section = fieldBundle?.rawSections[1];
+    if (!script || !section || !data) return null;
+    const off = script.stringOffsets[index];
+    if (off === null || off === undefined) return null;
+    const start = script.stringTableOffset + off;
+    let end = start;
+    while (end < section.length && section[end] !== 0xff) end++;
+    const roh = section.subarray(start, end);
+    const echt = measureFfWindow(roh, data.textMetrik.spacing);
+    const ersatz = measureFfWindow(roh, FALLBACK_SPACING);
+    return {
+      index,
+      bytes: roh.length,
+      gemessen: { breite: echt.width, zeilen: echt.lines, hoehe: echt.height, seiten: echt.pages },
+      ersatzmetrik: { breite: ersatz.width, zeilen: ersatz.lines },
+      aussenmass: windowOuterSize(echt.width, echt.lines),
+    };
+  },
+  /** Die Fensterschale, wie die UI sie anwendet (Welle 2, Teil 2/3). */
+  fensterschale: (modus = 0): object => ({
+    modus,
+    css: windowSkinCss(modus as WindowDisplayMode),
+    slots: [...windowShell.slots.values()],
+    renderflaeche: RENDER_SURFACE,
+  }),
   /** F27-Messung: Spieleranimation setzen und Wurzellage nach dem Binden melden. */
   spielerProbe: async (animId: number): Promise<object> => {
     if (!playerHandle) return { fehler: 'kein Spielermodell' };
