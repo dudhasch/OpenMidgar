@@ -444,9 +444,63 @@ Probe: `menu-savemap-probe.rdtest.ts` (M1–M4). Datenbasis: 4 `menu_*.lgp`,
 |---|---|
 | **Inventar ab Slot-Offset 1276**, 320 Einträge à u16 — direkt hinter der Partyaufstellung (1272 + 4). Güte 1,000 | ✅ gemessen |
 | **Eintrag = `Anzahl = wert >> 9`, `Kennung = wert & 0x1FF`.** Entschieden über die **Verteilung der Anzahl**: Die Aufteilung 9/7 liefert „Anzahl 1" als häufigsten Wert (40 Einträge), die Aufteilung 8/8 kennt die 1 **überhaupt nicht** — ein Anzahlfeld ohne Einzelstücke ist widerlegt | ✅ Kontrolle |
-| **Item-Namen = Textsektion 18**, Beschreibungen = Sektion 10 (beide 256 Einträge; getrennt über die mittlere Länge 7,1 gegen 13,0) | ✅ gemessen |
-| ⚠️ **Basisraten-Fehler abgefangen:** Der erste Anlauf kontrollierte mit „Kennung + 1" und erzeugte einen Scheinbefund — in einer zu 92 % belegten Liste löst auch die falsche Kennung fast immer auf (0,946 gegen 0,919, kein Abstand). Richtiges Kontrollniveau ist der **Füllgrad der Sektion**: Der Zugewinn über die Basisrate trennt die beiden 256er-Sektionen (+0,256 / +0,196) klar von allen übrigen (≤ +0,078, teils negativ) | ⚠️ methodische Lehre |
-| 2 von 37 vorkommenden Kennungen lösen in Sektion 18 nicht auf (0,946) — vermutlich Sonderposten außerhalb der Itemliste | 🟡 offen |
+| ~~**Item-Namen = Textsektion 18**, Beschreibungen = Sektion 10 (beide 256 Einträge; getrennt über die mittlere Länge 7,1 gegen 13,0)~~ | ❌ **WIDERLEGT**, s. M4-K unten |
+| ⚠️ **Basisraten-Fehler abgefangen:** Der erste Anlauf kontrollierte mit „Kennung + 1" und erzeugte einen Scheinbefund — in einer zu 92 % belegten Liste löst auch die falsche Kennung fast immer auf (0,946 gegen 0,919, kein Abstand). Richtiges Kontrollniveau ist der **Füllgrad der Sektion**: Der Zugewinn über die Basisrate trennt die beiden 256er-Sektionen (+0,256 / +0,196) klar von allen übrigen (≤ +0,078, teils negativ) | ⚠️ methodische Lehre — **hat den Fehler trotzdem nicht verhindert** |
+| ~~2 von 37 vorkommenden Kennungen lösen in Sektion 18 nicht auf (0,946) — vermutlich Sonderposten außerhalb der Itemliste~~ | ❌ die „Sonderposten" waren Waffen, Rüstungen und Accessoires |
+
+### M4-K — Korrektur: Sektion 18 ist die **Zauberliste** (F18/F24-A, 2026-08-11)
+
+Probe: `tools/realdata-scan/src/kernel-names-probe.rdtest.ts`
+(`data/kernel/KERNEL.BIN` der Installation, `save00/01/07/09.ff7`).
+
+| Befund | Status |
+|---|---|
+| **Die Textsektionen tragen 0-basiert die Rollen** 17 Kommandos (32) · 18 **Magie/Angriffe** (256) · 19 **Gegenstände** (128, belegt 0…104) · 20 **Waffen** (128, Füllgrad 1,000) · 21 Rüstungen (32) · 22 Accessoires (32) · 23 Materia (96) · 24 Schlüsselgegenstände (64); Beschreibung = Name − 8 | ✅ gemessen |
+| **Wirkung des Fehlers, quantifiziert:** 79 Inventarzeilen über vier Spielstände — unter der alten Lesung **65 falsch benannt, 14 als „?ID", 0 richtig**. Unter der Bereichskodierung lösen **alle 79** auf (52 Gegenstände, 15 Waffen, 9 Rüstungen, 3 Accessoires; 0 offen) | ✅ Kontrolle |
+| Damit sind **beide Hälften von F24 erklärt**: die „falschen Itemnamen" und „Materia werden unter Gegenstände gelistet" — der Tester sah Zaubernamen | ✅ abgeleitet |
+
+**Warum die damalige Messung einen Scheinbefund lieferte.** Der Zugewinn über die
+Basisrate war das *richtige* Kontrollniveau für die Frage „ist das überhaupt eine
+Namensliste?" — aber er kann **Verwechslung** grundsätzlich nicht sehen. Die
+Zauberliste ist zu **75 %** belegt und trägt an den Plätzen 0…104 durchgehend
+Einträge; genau dort liegen 52 der 79 Inventarkennungen. Jede dieser Kennungen
+löste also auf, nur eben zum falschen Namen, und die Auflösungsquote stieg
+sichtbar über den Füllgrad (+0,256). Drei Fehler kamen zusammen:
+
+1. **Die Gütefunktion misst „nicht leer", nicht „richtig".** Zwei Listen mit
+   ähnlichem Füllgrad sind darüber nicht unterscheidbar. Eine Auflösungsquote
+   ist erst dann eine Aussage, wenn **mehrere Kandidatenlisten gegeneinander**
+   antreten — und Sektion 19 war nie im Kandidatenfeld, weil sie 128 statt 256
+   Einträge hat.
+2. **Die Annahme „256 Gegenstände" stammte aus der Inventargröße**, nicht aus
+   der Kernel-Datei. Das Inventar hat 320 Plätze und Kennungen bis 319; die
+   *Namens*liste hat 128. Die Zahl 256 passte auf keine der beiden und traf
+   deshalb genau die Liste, die zufällig 256 Einträge hat.
+3. **Die 14 nicht auflösbaren Kennungen wurden als „Sonderposten" abgehakt**
+   statt als Widerspruch behandelt. Sie waren der eigentliche Hinweis: Alle 14
+   liegen bei ≥ 215, also außerhalb des Gegenstandsbereichs.
+
+**Was die Messung jetzt trägt** (statt einer einzelnen Kennzahl): Die
+Rollenbestimmung nimmt die einzige 128er-Liste mit **Füllgrad 1,000** als Anker
+(Waffen — die reine Länge ist fünffach mehrdeutig: Sektionen 11/12/19/20/25),
+trägt von ihr aus die feste Rollenreihenfolge ab und prüft jede Rolle gegen ihre
+Stringanzahl sowie die Gegenstandsliste zusätzlich gegen die **Belegungsgrenze
+104**. Schlägt eine Probe fehl, wird nicht geraten.
+
+### M4-R — Recordtabellen der Kernel-Sektionen 5…9 (1-basiert) typisiert
+
+Quelle der Feldlagen: `docs/fremdquellen/elena.md` §4 (Tatsachenbeschreibung).
+Belegt wurde an den Realdaten:
+
+| Befund | Status |
+|---|---|
+| **Accounting geht für alle fünf Sektionen byteexakt auf** — Item 128 × 28 = 3584 · Waffe 128 × 44 = 5632 · Rüstung 32 × 36 = 1152 · Accessoire 32 × 16 = 512 · Materia 96 × 20 = 1920. Die Recordzahlen sind dabei nicht angenommen, sondern die Stringanzahlen der zugehörigen Namenslisten | ✅ gemessen |
+| **Die Einzellänge ist mehrdeutig** (Sektion 1 und 4 tragen beide 3584 B); eindeutig ist erst der **Lauf** aller fünf Längen in Folge — er trifft in der Datei genau einmal zu | ✅ Kontrolle |
+| **Waffe 0x06 = Wachstumsrate:** nur Werte 0…3 (21 · 85 · 20 · 2). Kontrolle: Nachbarspalten 0x04/0x05/0x07/0x08/0x09 reichen bis 100 bzw. 255 | ✅ Kontrolle |
+| **Materia 0x00…0x07 = vier aufsteigende AP-Schwellen:** 79/79 belegte Records monoton, 0/79 Gegenrichtung. Kontrolle: dieselbe Monotonieprobe auf den u16-Quadrupeln ab 0x08/0x0A/0x0C — 27/96, 41/96, 41/96 | ✅ Kontrolle |
+| **Restriktionsfelder sind bitinvertiert** (die Datei speichert *Verbote*). Beim Gegenstandsrecord tragen 128/128 Records am u16 0x0A die Bits 3–15 gesetzt **und** sechs verschiedene Belegungen der unteren drei Bit. Kontrolle: Von den 14 u16-Spalten erfüllen zwar fünf die obere Bedingung, aber nur 0x0A auch die untere — die übrigen vier sind konstantes 0xFFFF-Polster | ✅ Kontrolle |
+| Faktor „AP-Wert × 100", Bitbedeutungen der Restriktionen, alle übrigen Feldbedeutungen aus elena §4 | 🟡 übernommen, nicht einzeln nachgemessen |
+| Accessoire 0x08: Elena liest u32 und castet auf einen Index-Enum — bei 16 B Recordlänge widersprüchlich. Bleibt roh | 🔴 offen |
 
 ## R4-B1 gelöst — Kindversatz-Vorzeichen, per Sichtprüfung entschieden (2026-08-10)
 
@@ -830,3 +884,174 @@ sind die Kontrolle).
 | **NEGATIVBEFUND, mit validierter Suche:** **Kein** Kommando-Opcode trägt an **keiner** der vier Literal-Operandenpositionen die Blöcke 63–68 oder die sechs Zielzellen über Rauschniveau (99 geprüfte Opcode/Positions-Stellen über alle drei `.ev`). Die Suche ist validiert, weil dieselbe Suche 0x308 als Mesh-Zellen-Träger findet (>20 Unikate). Die Umschaltung steht **nicht als Blockindex im Script** — 0x349 trägt eine **Stufe** | ✅ Negativbefund |
 | **Kopplung Stufe → Alternativgruppe: nicht belegbar.** Keine Quelle stellt die Tabelle auf, und die eigene Gütefunktion ist **blind** — auch die Alternativblöcke haben perfekte Ränder zu den Primärnachbarn (Naht 1,0), die Änderungen liegen im Blockinneren | 🔴 / 🔵 kumulative Stufenregel dokumentiert |
 | **Community-Beschreibung korrigiert:** Das Wiki schreibt „the last 5 meshes 63, 64, 65, 66, 67 and 68" — sechs Indizes unter der Überschrift „5", und nennt Blöcke „meshes". An den Daten eindeutig: **6 Blöcke à 16 Meshes**. Die zusätzlich vermutete Gold-Saucer-Variante existiert nicht; es sind genau vier Gruppen | ✅ realdaten-entschieden |
+
+---
+
+## F06 / F11a — `field.tbl` und die Zerlegung des Texturworts (2026-08-11)
+
+Probe: `tools/realdata-scan/src/world-fieldtbl-probe.rdtest.ts`.
+Gegenstand: `field.tbl` aus `world_us.lgp` sowie das Dreiecks-Texturwort in
+WM0/WM2/WM3.MAP. Hypothesengeber waren `docs/fremdquellen/ff7-landscaper.md`
+§3.1/§5 und `gaia.md` §5 — belegt wurde ausschließlich gegen die eigenen Daten.
+
+### `field.tbl` — Accounting
+
+| Größe | Wert |
+|---|---|
+| Dateilänge | **1536 B = 64 × 24**, Rest **0** |
+| Datensatz | 2 Einträge à 12 B (Slot 0 „default", Slot 1 „alternative") |
+| Eintrag | i16 x · i16 y · u16 triangle · u16 fieldId · u8 direction · 3 B Padding |
+| Belegung | 65 von 128 Einträgen belegt (58 default, 7 alternative), 63 vollständig genullt |
+| Wertebereiche | x −2019…5907 · y −9530…3460 · triangle 0…263 · fieldId 70…744 · direction 0…248 |
+
+Die 63 genullten Slots sind aus **allen** Quoten herausgerechnet (Regel 3:
+Nullwerte bestehen die meisten Tests trivial).
+
+### `field.tbl` — vier Vorhersagen, je mit Kontrolle
+
+| # | Vorhersage | Treffer | Kontrolle | Status |
+|---|---|---|---|---|
+| K1 | Padding wiederholt das Richtungsbyte (4× dasselbe Byte) | **65/65** | dieselbe Regel an Byteposition 5/6/7: **0/65, 0/65, 0/65** | ✅ |
+| K2 | `fieldId` löst über die `maplist` auf einen existierenden flevel-Eintrag auf | **65/65** | Position −2/−1/+1/+2 B: **22/65, 1/65, 0/65, 0/65**; Zufalls-ID aus demselben Bereich: 58/65 (**trägt nicht** — die `maplist` ist dicht) | ✅ |
+| K3 | `triangle` < Dreiecksanzahl im Walkmesh des Zielfelds | **65/65** | permutierte Feldzuordnung: 54/65 (schwach) — ohne den einen Nullwert 64/64 gegen 53/64 | ✅ schwach |
+| K4 | **(x, y) liegt IM Walkmesh-Dreieck `triangle` des über `fieldId` aufgelösten Feldes** | **65/65** | anderes Dreieck desselben Feldes: **0/65**; permutiertes Feld: 11/65 | ✅ **tragend** |
+
+K4 prüft alle vier Felder gemeinsam und ist der eigentliche Beleg: eine falsche
+Feldgrenze, ein falsches Zielfeld oder ein falscher Dreiecksindex kann diese
+Vorhersage nicht erfüllen. Damit ist der 🔴-Posten „Originalquelle der
+World→Field-Einstiegspunkte" (ADR-S28-S29 Punkt 7) geschlossen.
+
+### Opcode `0x318` — Operandendeutung, ebenfalls gemessen
+
+Musterscan `PUSH a · PUSH b · 0x318` über wm0/wm2/wm3.ev. Der Opcode kommt im
+gesamten Bestand **89×** vor und **alle 89** tragen beide Operanden als direkt
+vorangehende Immediates — es gibt keine berechnete Aufrufstelle, die Stichprobe
+ist die Vollerhebung.
+
+| Deutung | belegter Slot getroffen | davon Szenario 1 |
+|---|---|---|
+| args = (Datensatz **1-basiert**, Szenario) | **89/89** | **9/9** |
+| args = (Datensatz 0-basiert, Szenario) | 75/89 | 0/9 |
+| Kontrolle: Operanden **vertauscht** | **0/89** | — |
+
+Zusätzlich: `b` ∈ {0,1} in **89/89** Fällen; `a` liegt im Bestand exakt im
+Bereich **1…64**. Die 1-basierte Lesart ist damit realdaten-entschieden — der
+schärfste Diskriminator sind die Szenario-1-Aufrufe, weil es nur **7** belegte
+alternative Slots gibt.
+
+### Texturwort — `textureId`, `locationId`, Flagbit
+
+| Karte | Dreiecke | `textureId`-Unikate | Wertebereich | lückenlos ab 0 | `locationId` (5 Bit) | Bit 14 | Bit 15 |
+|---|---|---|---|---|---|---|---|
+| WM0.MAP | 157 791 | **282** | 0…281 | ja | 18 Unikate, max 17 | **0** | 1004 |
+| WM2.MAP | 9 967 | **8** | 0…7 | ja | 2 Unikate, max 18 | **0** | 0 |
+| WM3.MAP | 8 268 | **4** | 0…3 | ja | 1 Unikat, 11 | **0** | 0 |
+
+Die Zählungen 282/8/4 decken sich mit den Referenzangaben — festgestellt
+**nach** der eigenen Messung. Lückenlosigkeit ab 0 ist die Kontrolle der
+Bitbreite: eine falsche Maske erzeugt Löcher oder Ausreißer.
+
+**Entscheidung gaia (7 Bit `locationId`) vs. ff7-landscaper (5 Bit + freies
+Bit 14 + Flag Bit 15):** Bit 14 ist in **0 von 176 026** Dreiecken gesetzt,
+Bit 15 dagegen in 1004; und die 5-Bit-Werte, die mit Bit 15 auftreten (7
+Stück), sind eine **echte Teilmenge** der ohne Bit 15 auftretenden (18). Die
+scheinbaren 7-Bit-„Werte" 64…76 liegen exakt auf `64 + bekannter 5-Bit-Wert`.
+⇒ **5 Bit Wert + Flagbit 15**, Bit 14 unbenutzt. Die BEDEUTUNG von
+`locationId` und Bit 15 bleibt 🟡.
+
+### Offen
+
+- 🔴 **F11b**: Zuordnung `textureId` → `.tex`-Datei aus `world_us.lgp` samt
+  `width`/`height`/`uOffset`/`vOffset`. Ohne sie bleibt `worldUvToLocal`
+  unbenutzt und die Geometrie reicht die rohen, seiten-absoluten u/v-Bytes
+  durch (`TexturedMeshGeometry.uvResolved === 0`).
+- 🔴 Nullpunkt und Drehsinn des `direction`-Bytes im Field-Raum.
+- 🔴 `0x33D` („Einstiegspunkt per ID", 1 Operand) ist nicht untersucht; ob es
+  denselben `field.tbl`-Namensraum benutzt, ist ungemessen.
+
+---
+
+## Längentabellen-Bündel: XYI/XYZ belegt, MINIGAME widerlegt (2026-08-11)
+
+Proben: `oplen-bundle-probe.rdtest.ts`, `oplen-struktur-probe.rdtest.ts`,
+`bank-wrap-probe.rdtest.ts`, `bg-anfangszustand-probe.rdtest.ts`.
+
+### Der Befund über den Befunden: eine blinde Gütefunktion, diagnostiziert
+
+Der Spannen-Abschluss — seit S12 die Gütefunktion für Operandenlängen —
+**unterscheidet bei seltenen Opcodes nicht zwischen richtig und falsch**. Setzt
+man `XYI` von Länge 2 auf 8, schließen **32 von 32** betroffenen Spannen in
+beiden Fällen exakt. Ursache ist die Selbstresynchronisation variabler
+Befehlsformate: Der Strom findet nach wenigen Instruktionen wieder auf dasselbe
+Raster. Die Kennzahl war also nie unentschieden, sie war unempfindlich — und
+hätte man nur sie gefragt, wäre der Posten „nicht belegt" geblieben, obwohl die
+alte Länge nachweislich falsch war.
+
+### Zwei Ersatz-Gütefunktionen mit Kontrollniveaus
+
+**Grenzplausibilität.** Log-Quotient zweier empirischer Byteverteilungen: an
+echten Instruktionsanfängen gegen Operandenbytes, über alle 702 Fields.
+Kontrollniveaus **1,24** (Anfänge) und **−1,16** (Operanden). Gewertet wird nur
+die *erste* Fundstelle je Spanne — jede weitere kann bei falscher Länge ein
+Phantom aus fremden Operandenbytes sein und würde die eigene Fehlannahme
+mitmessen.
+
+**Struktursonde.** Operandeninhalt gegen eine unabhängige Sektion desselben
+Fields. Literale Koordinaten gegen die Walkmesh-Grenzen, Dreiecksindizes gegen
+die Dreieckszahl, bankadressierte Werte gegen die 256-B-Bankgröße (hohes Byte
+muss 0 sein — ohne diese Variante wäre die Sonde bei XYI blind, denn 31 der 32
+Fundstellen tragen Bankoperanden). Geeicht an `XYZI` mit bekannter Aufteilung:
+**99,2 %** (4472/4506) gegen **0,0 %** bei Versatz +1 und **30,9 %** gegen ein
+fremdes Walkmesh.
+
+**Nahstellen-Test.** Liegt eine Fundstelle wenige Byte vor dem Spannenende,
+bleibt kein Raum zum Resynchronisieren; zusätzlich müssen die Operanden in die
+Spanne passen. Der kleinste beobachtete Abstand ist damit eine **harte obere
+Schranke** für die Länge, ganz ohne Statistik.
+
+### Ergebnisse
+
+| Opcode | Vorkommen (Fields) | ist → ref | Grenzplausibilität | Struktursonde | Urteil |
+|---|---|---|---|---|---|
+| `XYI` 0xA6 | 32 (14) | 2 → 8 | **2,37 ± 0,37** bei 8; ist-Wert −1,50 | 90,6 % gegen 15,6 % versetzt | ✅ übernommen |
+| `XYZ` 0xA7 | 42 (23) | 6 → 8 | 1,76 bei 8; ist-Wert −2,10 | 88,1 % gegen 0,0 % versetzt | ✅ übernommen |
+| `MINIGAME` 0x20 | 134 (78) | 0 → 10 | alle Längen unter Kontrollniveau | — | ❌ **widerlegt**, Schranke ≤ 5 |
+| `BGMOVIE` 0x27 | 36 (13) | 0 → 1 | ref (−1,56) schlechter als ist (−0,43) | — | ❌ nicht belegt |
+| `MVCAM` 0xFB | 55 (23) | 0 → 1 | Bestwert −0,11, unter Kontrollniveau | — | ❌ nicht belegt |
+| `BGROL` 0xE2 | 13 (6) | 1 → 2 | 0,83 ± 0,68 bei n=9 — Rauschen | 11,1 % gegen 22,2 % Kontrolle | ❌ **unterbietet die Kontrolle** |
+| `BGROL2` 0xE3 | 5 (2) | 2 = 2 | n=2 | n=2 | ❌ nicht messbar |
+
+**Zur XYZ-Ambiguität.** Die Grenzplausibilität bevorzugt Länge 4 (2,34) knapp
+vor 8 (1,76) — sie allein hätte in die Irre geführt. Entschieden hat die
+Kontrolle am dritten Wertfeld: auf @7 trifft es zu **88,1 %**, auf @9 (dort
+begänne bei Länge 4 schon die nächste Instruktion) nur zu **45,2 %**. Das Feld
+gehört also zur Instruktion.
+
+**Zu MINIGAME.** In vier Spannen von `ancnt1` steht der Opcode **6 Byte** vor
+dem Spannenende, in vier weiteren 8 Byte. Zehn Operandenbytes passen nicht
+hinein. Entweder ist 0x20 hier nicht durchgängig MINIGAME, oder die Instruktion
+ist variabel lang — aus dem Field-Bytecode allein nicht entscheidbar.
+
+**Zu BGROL.** Vergleichsniveau eines belegten Opcodes: `BGON` trifft mit seinem
+Parameterbyte an @+2 zu **98,0 %** (1963/2003) einen Parameter des eigenen
+Fields, gegen 46,7 % bei einem fremden Field. `BGROL` erreicht 11,1 % gegen
+22,2 % — schlechter als die Kontrolle. Die Alternative @+1 trifft ebenfalls
+11,1 %, davon 7 von 9 mit dem Wert 0 (Nullwerte bestehen den Test trivial).
+Nicht implementierbar ohne einen Bestand mit mehr Vorkommen.
+
+### O7 geschlossen
+
+Wortzugriffe mit Bankadresse 0xFF: **1** Fundstelle im gesamten Bestand
+(`blinele`, Opcode 0x90). IF-Wortvarianten: **0**. Kontrollzählung für 0xFE:
+**0** — die Seltenheit ist die Randlage hoher Bankadressen, keine Besonderheit
+von 0xFF. Die Wrap-Regel bleibt, begründet durch Irrelevanz statt durch Wissen;
+die Probe bleibt als Dauerprobe stehen und reißt oberhalb von 5 Fundstellen.
+
+### F35-1: Anfangszustand der Hintergrundmasken
+
+Von 1256 animierten Kachelgruppen in 508 Fields sind nach 300 Ticks **542 leer
+ohne** und **329 leer mit** Vorbelegung — **213 Gruppen mit 9682 Kacheln**
+werden wieder sichtbar. 🔴 `junonr2` gehört **nicht** dazu: Vorbelegung
+`{16:1, 17:1, 18:1}`, danach ohne wie mit Vorbelegung `{16:0, 17:0, 18:1}`. Die
+Bankbyte-Aufteilung ist als Ursache ausgeschlossen (alle 46 BG-Instruktionen
+des Fields tragen Bankbyte 0, korpusweit 97,3 % bei BGON und 96,8 % bei BGOFF).

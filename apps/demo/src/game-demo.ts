@@ -22,8 +22,9 @@ import {
   type FieldInput,
   type TickResult,
 } from '@webmidgar/field-runtime';
-import type { FieldBundle } from '@webmidgar/formats-field';
-import type { HostRequest } from '@webmidgar/interpreter';
+import { resolveFieldMusic, type FieldBundle, type FieldDiagnostic } from '@webmidgar/formats-field';
+import { berechneAnfangsBgStates, type HostRequest } from '@webmidgar/interpreter';
+import { MusicRuntime, planLoop } from '@webmidgar/audio';
 import {
   buildFallbackActor,
   createActorLibrary,
@@ -32,7 +33,7 @@ import {
   type ActorLibrary,
   type FieldActorHandle,
 } from '@webmidgar/render-actor';
-import { WORLD_GRIDS } from '@webmidgar/formats-world';
+import { fieldTblEntryForOpcode, WORLD_GRIDS } from '@webmidgar/formats-world';
 import {
   WorldSession,
   toWorldInput,
@@ -218,6 +219,11 @@ const battleCamera = new PerspectiveCamera(50, canvas.width / canvas.height, 10,
 let partySpecs: PartyMemberSpec[] = [];
 let battleStarter: BattleStarter | null = null;
 let battleGen = 0;
+/** K1/K2-Prüfgröße: geladene Teile/Texturen je Battle-Präfix (`gameDebug.battleModelle`). */
+const battleModellProtokoll = new Map<
+  string,
+  { prefix: string; teile: number; texturen: number; eintraege: number }
+>();
 
 interface RealBattle {
   session: BattleSession;
@@ -248,31 +254,103 @@ let menuSession: MenuSession | null = null;
 let menuHostRequestId: number | null = null;
 let dialogVisibleId: number | null = null;
 
-// Musik (F09): music.idx → OGG aus der Installation. 🔵 Kampf-/Sieg-Titel sind
-// Demo-Konvention („bat"/„fanfare"); die Script-Musik kommt aus HostRequests.
-const musicEl = new Audio();
-musicEl.loop = true;
-let currentMusic = '';
-let fieldMusicName = ''; // zum Zurückschalten nach dem Kampf
+/**
+ * Musik (AUD-1/F09-A/F09-D): der Wiedergabepfad läuft jetzt über
+ * `@webmidgar/audio` statt über ein eigenes `HTMLAudioElement`.
+ *
+ * Drei Defekte fallen damit zusammen weg:
+ *
+ * **AUD-1** — die Engine war gebaut, aber im laufenden Programm nicht
+ * verdrahtet. Jetzt ist `MusicRuntime` der einzige Wiedergabeweg; der
+ * Kommandozustand aus `engine.ts` ist die einzige Wahrheit darüber, was klingt.
+ *
+ * **F09-D** — die alte Wache `if (!name || currentMusic === name) return;`
+ * setzte den „laufenden Titel" VOR dem `play()` und schluckte die Ablehnung der
+ * Autoplay-Politik. War der erste Versuch abgelehnt, blieb der Titel für den
+ * Rest der Sitzung stumm, weil jede spätere Anforderung an der Wache abprallte.
+ * Das Gate-Modell kennt dafür den Zustand `suspended`: ein `play-music` vor der
+ * Nutzergeste ist eine **Vormerkung**, kein Fehlschlag — `resume()` holt sie nach.
+ *
+ * **F09-E** — `<audio loop>` kann nur die ganze Datei wiederholen; 87 % der
+ * Titel tragen `LOOPSTART`. `MusicRuntime` setzt `loopStart`/`loopEnd` am
+ * `AudioBufferSourceNode`, das Intro läuft also genau einmal.
+ *
+ * 🔵 Kampf-/Sieg-Titel bleiben Demo-Konvention („bat"/„fanfare"), werden aber
+ * über `music.idx` in eine musicId übersetzt, weil die Laufzeit mit IDs arbeitet.
+ */
+const audioCtx: AudioContext | null = typeof AudioContext === 'undefined' ? null : new AudioContext();
 
-function playMusicByName(name: string, loop = true): void {
-  if (!name || currentMusic === name) return;
-  currentMusic = name;
-  musicEl.loop = loop;
-  musicEl.src = `/ff7data/data/music_ogg/${name}.ogg`;
-  void musicEl.play().catch(() => {
-    // Autoplay-Sperre ohne Nutzergeste — bewusst still (Demo bleibt lauffähig).
-  });
+/** musicId ist 1-basiert, `music.idx` 0-basiert (S37) — die Umrechnung bleibt. */
+async function loadTrack(musicId: number): Promise<Uint8Array | null> {
+  const name = data?.musicNames[musicId - 1];
+  if (!name) return null;
+  const res = await fetch(`/ff7data/data/music_ogg/${name}.ogg`);
+  if (!res.ok) return null;
+  return new Uint8Array(await res.arrayBuffer());
 }
 
-function playMusicByTrackId(trackId: number): void {
-  // S37: musicId ist 1-basiert, music.idx 0-basiert.
-  const name = data?.musicNames[trackId - 1];
-  if (name) {
-    fieldMusicName = name;
-    playMusicByName(name);
-  }
+const music: MusicRuntime | null = audioCtx
+  ? new MusicRuntime({ context: audioCtx, loadTrack, ticksPerSecond: TICK_HZ, onDiagnostic: log })
+  : null;
+
+/**
+ * Platzhalter im Kommandomodell. Der ECHTE Schleifenplan wird erst nach dem
+ * Dekodieren aus den OGG-Tags gerechnet (`planLoop` braucht `totalSamples`),
+ * und `MusicRuntime` ignoriert dieses Feld bewusst. Hier nichts erraten.
+ */
+const PLATZHALTER_PLAN = planLoop({ loopStart: null, loopLength: null, keys: [] }, null);
+
+/** Zuletzt aufgelöste Field-Musik (zum Zurückschalten nach dem Kampf). */
+let fieldMusicId: number | null = null;
+/** Protokoll der MUSIC-Kette je Aufruf — Prüfgröße für `gameDebug.musik()`. */
+interface MusikAufloesung {
+  field: string;
+  operand: number;
+  musicId: number | null;
+  musicIndex: number | null;
+  name: string | null;
+  reason: string;
+  diagnosen: string[];
+  /** Wie oft dieselbe Auflösung unmittelbar hintereinander kam (Script-Schleife). */
+  wiederholungen: number;
 }
+const musikProtokoll: MusikAufloesung[] = [];
+
+function musicIdByName(name: string): number | null {
+  const i = data?.musicNames.indexOf(name) ?? -1;
+  return i < 0 ? null : i + 1;
+}
+
+/**
+ * Startet einen Titel — es sei denn, er läuft **nachweislich** schon.
+ *
+ * Die Wache prüft `state.currentTrack`, also das, was `applyAudioCommand`
+ * TATSÄCHLICH ausgeführt hat. Das ist der Unterschied zur alten F09-D-Wache:
+ * die merkte sich den Wunsch vor dem Abspielen und verschluckte die Ablehnung,
+ * hier bleibt `currentTrack` vor der Nutzergeste `null` — eine Vormerkung wird
+ * also niemals als „läuft schon" missdeutet.
+ *
+ * Ohne diese Wache wäre der Titel nicht stumm, sondern das Gegenteil: gemessen
+ * setzt `md1_1` den MUSIC-Opcode in 120 Takten 32-mal ab (das Script läuft in
+ * einer Schleife), und jeder Aufruf würde die Quelle neu starten.
+ */
+function spieleMusikId(musicId: number | null): void {
+  if (musicId === null || !music) return;
+  if (music.state.currentTrack === musicId) return;
+  void music.dispatch({ kind: 'play-music', trackId: musicId, loop: PLATZHALTER_PLAN });
+}
+
+/**
+ * Nutzergeste ⇒ Freigabe. `resumeAudio` holt den Stau in Reihenfolge nach; ein
+ * vor der Geste angefordertes `play-music` geht also NICHT verloren. Mehrfache
+ * Aufrufe sind wirkungslos (leerer Stau ⇒ kein Kommando im Protokoll).
+ */
+function audioFreigeben(): void {
+  if (!music) return;
+  void (audioCtx as unknown as { resume?: () => Promise<void> })?.resume?.();
+  void music.resume();
+}
+window.addEventListener('pointerdown', audioFreigeben);
 
 // Log
 let hostLog: string[] = [];
@@ -292,6 +370,7 @@ for (const ctx of Object.values(bindings)) {
   if (ctx) for (const code of Object.keys(ctx.keyboard)) HANDLED_CODES.add(code);
 }
 window.addEventListener('keydown', (e) => {
+  audioFreigeben(); // F09-D: erste Nutzergeste gibt den Ton frei, egal welche Taste
   if (e.code === 'F9') {
     e.preventDefault();
     toggleWorld();
@@ -529,7 +608,10 @@ function openBattle(encounterId: number, requestId: number | null, source: 'fiel
     rewards: null,
   };
   buildBattleVisuals(encounterId & 0x3ff);
-  playMusicByName('bat');
+  // Field-Titel auf den Keller, Kampfmusik darüber — `pop-music` stellt ihn
+  // nach dem Kampf wieder her (die Laufzeit startet ihn wirklich neu).
+  void music?.dispatch({ kind: 'push-music' });
+  spieleMusikId(musicIdByName('bat'));
   battleOverlayEl.classList.add('visible');
   log(`Kampf gestartet: Encounter ${encounterId} (${source}), ${enemyIds.length} Gegner`);
   renderBattleBox();
@@ -554,7 +636,10 @@ function buildBattleVisuals(battleId: number): void {
     box.position.set(p.scenePosition[0], p.scenePosition[1] + 600, p.scenePosition[2]);
     battleGroup.add(box);
     const prefix = enemyModelPrefix(p.enemyTypeId);
-    void loadBattleModel(prefix, (n) => data!.readBattleEntry(n))
+    // K1/K2: `data` erfüllt `BattleEntrySource` strukturell — der Lader listet
+    // damit den ECHTEN Namensraum des Präfixes auf und klassifiziert jeden
+    // Eintrag über seine Inhaltssignatur, statt Dateinamen zu raten.
+    void loadBattleModel(prefix, data!)
       .then((files) => {
         if (gen !== battleGen) return;
         if (!files) {
@@ -565,7 +650,13 @@ function buildBattleVisuals(battleId: number): void {
         built.actor.root.position.set(p.scenePosition[0], p.scenePosition[1], p.scenePosition[2]);
         battleGroup.add(built.actor.root);
         battleGroup.remove(box);
-        log(`Battle-Modell "${prefix}" geladen (${files.parts.length} Teile)`);
+        battleModellProtokoll.set(prefix, {
+          prefix,
+          teile: files.parts.length,
+          texturen: files.textures.length,
+          eintraege: data?.listBattleEntries(prefix).length ?? 0,
+        });
+        log(`Battle-Modell "${prefix}" geladen (${files.parts.length} Teile, ${files.textures.length} Texturen)`);
       })
       .catch((err) => log(`Battle-Modell "${prefix}": ${(err as Error).message}`));
   });
@@ -628,7 +719,7 @@ function closeRealBattle(): void {
   battleGen++;
   battleGroup.clear();
   battleOverlayEl.classList.remove('visible');
-  if (fieldMusicName) playMusicByName(fieldMusicName);
+  void music?.dispatch({ kind: 'pop-music' });
 }
 
 function battleTick(frame: ActionFrame): void {
@@ -659,7 +750,10 @@ function battleTick(frame: ActionFrame): void {
     battle.outcomeKind = result.outcome.kind;
     if (result.outcome.kind === 'victory') {
       battle.rewards = { exp: result.outcome.exp, ap: result.outcome.ap, gil: result.outcome.gil };
-      playMusicByName('fanfare', false);
+      // 🟡 Die Siegfanfare läuft hier in der Schleife wie jeder andere Titel —
+      // ein „einmal abspielen" kennt das Kommandomodell nicht. Bis das belegt
+      // ist, wird sie vom `pop-music` beim Schließen des Kampfes abgelöst.
+      spieleMusikId(musicIdByName('fanfare'));
     }
   }
   renderBattleBox();
@@ -694,6 +788,7 @@ function battleStubTick(frame: ActionFrame): void {
 // --- Field-Modus -------------------------------------------------------------------
 
 async function enterField(name: string, start?: { x: number; y: number }): Promise<boolean> {
+  fieldMusicId = null;
   if (!data) return false;
   setStatus(`Lade Field "${name}" …`);
   const { bundle, codes } = await data.loadFieldBundle(name);
@@ -725,10 +820,22 @@ async function enterField(name: string, start?: { x: number; y: number }): Promi
   if (!fieldCam) fieldWarnings.push('Kamera fehlt — Platzhalterkamera.');
   if (!bundle.walkmesh) fieldWarnings.push('Walkmesh fehlt — Figur inaktiv.');
 
+  /**
+   * F35-1: Der Interpreter kennt die Hintergrundkacheln nicht und darf ihren
+   * Anfangszustand nicht erraten — der Wirt reicht die fertige Karte herein.
+   * Je Animationsparameter das niedrigste vorkommende Zustandsbit; ohne diese
+   * Vorbelegung blieb `bgStates` leer und die Zeichenregel blendete ganze
+   * Kachelgruppen aus (korpusweit 213 Gruppen mit 9682 Kacheln).
+   */
+  const anfangsBgStates = berechneAnfangsBgStates(
+    (bundle.background?.layers ?? []).flatMap((l) => l.tiles.map((t) => ({ param: t.param, state: t.state }))),
+  );
+
   fieldSession = new FieldSession(bundle, {
     dialogMode: 'manual',
     menuMode: 'manual',
     encounters: true,
+    initialBgStates: anfangsBgStates,
     ...(start ? { start } : {}),
   });
   for (const a of npcActors.values()) actorGroup.remove(a.root);
@@ -854,8 +961,7 @@ function handleHostRequests(requests: HostRequest[]): void {
         openMenu(req.requestId);
         break;
       case 'music':
-        log(`Musik: Track ${req.trackId} → ${data?.musicNames[req.trackId - 1] ?? '(unbekannt)'}`);
-        playMusicByTrackId(req.trackId);
+        loeseMusikAuf(req.trackId);
         break;
       case 'sound':
         log(`Sound: ${req.soundId} (pan ${req.pan})`);
@@ -865,6 +971,60 @@ function handleHostRequests(requests: HostRequest[]): void {
         break;
     }
   }
+}
+
+/**
+ * Die MUSIC-Kette (F09-A), vollständig:
+ *
+ *   Operand v → `akaoOffsets[v]` des AKTUELLEN Fields → AKAO-Blockkopf →
+ *   u16@+4 = musicId (1…98) → `music.idx[musicId − 1]` → OGG
+ *
+ * Der Operand ist ein **field-lokaler AKAO-Index**, kein globaler Titel
+ * (Messung: 1230/1243 = 98,95 % gegen Kontrolle Nachbarfield 71,92 %). Die
+ * frühere Rechnung `musicNames[trackId − 1]` traf deshalb in 686 von 1241
+ * Aufrufen den Operanden 0 — `musicNames[-1]` ist `undefined`, und es passierte
+ * stillschweigend NICHTS; der Rest spielte einen falschen Titel.
+ */
+function loeseMusikAuf(operand: number): void {
+  const section1 = fieldBundle?.rawSections[1];
+  const offsets = fieldBundle?.script?.akaoOffsets;
+  if (!section1 || !offsets) {
+    log(`Musik: Operand ${operand} — kein Field-Script/keine Sektion 1, nicht auflösbar`);
+    return;
+  }
+  const diags: FieldDiagnostic[] = [];
+  const res = resolveFieldMusic(offsets, section1, operand, fieldName, diags);
+  for (const d of diags) log(`${d.code}: ${d.detail}`);
+  const name = res.musicIndex === null ? null : (data?.musicNames[res.musicIndex] ?? null);
+  // Die Script-Schleife setzt denselben Opcode viele Male ab (gemessen: md1_1
+  // 32-mal in 120 Takten). Eine Wiederholung ist kein neues Ereignis — sie wird
+  // gezählt, nicht erneut protokolliert und nicht erneut gemeldet.
+  const letzte = musikProtokoll[musikProtokoll.length - 1];
+  const wiederholung =
+    letzte !== undefined &&
+    letzte.field === fieldName &&
+    letzte.operand === operand &&
+    letzte.musicId === res.musicId;
+  if (wiederholung) {
+    letzte.wiederholungen++;
+  } else {
+    musikProtokoll.push({
+      field: fieldName,
+      operand,
+      musicId: res.musicId,
+      musicIndex: res.musicIndex,
+      name,
+      reason: res.reason,
+      diagnosen: diags.map((d) => d.code),
+      wiederholungen: 0,
+    });
+    if (musikProtokoll.length > 32) musikProtokoll.shift();
+    if (res.musicId === null) log(`Musik: Operand ${operand} nicht auflösbar (${res.reason})`);
+    else log(`Musik: AKAO-Index ${operand} → musicId ${res.musicId} → ${name ?? '(kein music.idx-Eintrag)'}`);
+  }
+  if (res.musicId === null) return;
+  fieldMusicId = res.musicId;
+  spieleMusikId(res.musicId);
 }
 
 function fieldTick(input: FieldInput): TickResult | null {
@@ -993,9 +1153,16 @@ function updateFieldActors(): void {
 // --- World-Modus -------------------------------------------------------------------
 
 /**
- * 🔵 Kuratierte Ortsmarken: Die echten World↔Field-Einstiegspunkte sind laut
- * S29 offen (🔴). Bis dahin: eine Demo-Marke nahe der Startposition, die in
- * das Startfield zurückführt — als Demo-Finding dokumentiert.
+ * 🔵 Kuratierte Ortsmarken als **Fußgängerpfad ohne Skript** — kein Ersatz
+ * mehr für die echten Einstiegspunkte.
+ *
+ * Der frühere Satz „die echten World↔Field-Einstiegspunkte sind offen (🔴)"
+ * stimmt seit F06 nicht mehr: sie liegen in `field.tbl` (64 Datensätze × 2
+ * Szenarien) und werden über den Weltscript-Opcode 0x318 mit 1-BASIERTER
+ * Datensatznummer angesprochen. Der Ankunftspunkt (x, y) liegt nachweislich im
+ * Walkmesh-Dreieck `triangle` des über `fieldId` aufgelösten Feldes (65/65,
+ * Kontrolle 0/65 bei anderem Dreieck, 11/65 bei permutiertem Feld). Diese Marke
+ * bleibt nur, damit man ohne Skriptlauf zu Fuß in ein Field kommt.
  */
 function curatedLocations(): WorldLocation[] {
   if (!data?.maplist || !data.terrain) return [];
@@ -1035,6 +1202,9 @@ function enterWorld(): void {
   if (!worldSession) {
     worldSession = new WorldSession(data.terrain, GRID, {
       ev: data.worldEv,
+      // F06: ohne die Tabelle bleibt 0x318 ein durchgereichtes script-command —
+      // kein erfundenes Ziel.
+      fieldTable: data.fieldTable ?? null,
       start: findLandStart(data.terrain),
       locations: curatedLocations(),
       encounters: { enabled: true, classes: Array.from({ length: 32 }, (_, i) => i) }, // 🔵 Demo: alle Klassen zählen
@@ -1065,8 +1235,23 @@ function worldTick(frame: ActionFrame): void {
   for (const req of result.requests) {
     if (req.kind === 'world-transition') {
       const ziel = data?.fieldNameByMaplist(req.destMaplistIndex);
-      log(`Weltkarte → Field: maplist[${req.destMaplistIndex}] = ${ziel ?? '(leer)'}`);
-      if (ziel) void enterField(ziel);
+      if (req.source === 'script') {
+        // F06: Ankunft aus field.tbl. `arrival.triangle` ist der Walkmesh-Index,
+        // in dem (x, y) liegt — als Ankunftsdreieck belegt (65/65).
+        // 🔴 `direction` ist eine 256er-Richtung, deren Nullpunkt im Field-Raum
+        // NICHT gemessen ist. Sie wird deshalb nur protokolliert, nicht auf die
+        // Blickrichtung angewandt — eine geratene Drehung wäre schlechter als keine.
+        const a = req.arrival;
+        log(
+          `Weltscript 0x318 → Datensatz ${req.fieldTblRecord}/Szenario ${req.scenario}: ` +
+            `maplist[${req.destMaplistIndex}] = ${ziel ?? '(leer)'}` +
+            (a ? ` @(${a.x},${a.y}) Dreieck ${a.triangle}, Richtung ${a.direction} (🔴 ungedeutet)` : ''),
+        );
+        if (ziel) void enterField(ziel, a ? { x: a.x, y: a.y } : undefined);
+      } else {
+        log(`Weltkarte → Field (Ortsmarke ${req.locationIndex}): maplist[${req.destMaplistIndex}] = ${ziel ?? '(leer)'}`);
+        if (ziel) void enterField(ziel);
+      }
     } else if (req.kind === 'encounter-check') {
       worldEncounterChecks++;
       // Die Sitzung hat bereits gewürfelt (Schwelle 24/256 alle 32 Schritte) —
@@ -1235,6 +1420,14 @@ function updateReadout(): void {
 async function boot(): Promise<void> {
   data = await bootGameData(setStatus);
   if (!data) return;
+  // Die drei Ketten, die sich früher still selbst verdeckt haben, melden sich
+  // beim Start: Namenszuordnung, Weltscript-Paarung, Einstiegstabelle.
+  log(data.kernelHinweis);
+  log(
+    `Weltscript ${data.worldChoice.evName}${data.worldChoice.evArchive ? ` (${data.worldChoice.evArchive})` : ''}: ` +
+      `${data.worldChoice.meshFunctions} Mesh-Funktionen`,
+  );
+  log(data.fieldTable ? `field.tbl: ${data.fieldTable.records.length} Datensätze` : 'field.tbl fehlt — 0x318 bleibt roh');
   actorLib = createActorLibrary((name) => data!.readCharEntry(name), {
     // F21: fehlende Teilressourcen zählen, statt sie nur magenta zu zeichnen.
     onMissing: (info) => {
@@ -1357,6 +1550,101 @@ function codeForAction(action: SemanticAction): string | null {
   },
   /** F22: Hintergrund-Zustandsbits der Script-Opcodes (BGON/BGOFF). */
   bgZustaende: (): object => ({ ...(fieldSession?.runtime?.state.bgStates ?? {}) }),
+  /**
+   * W1: Welches Weltscript liegt wirklich an? Erwartet `wm0.ev` mit 49
+   * Mesh-Funktionen. Vorher lieferte die TOC-Reihenfolge `wm2.ev` (1
+   * Mesh-Funktion, Unterwasserkarte) zum WM0-Terrain.
+   */
+  weltScript: (): object => ({
+    karte: data?.worldChoice.id ?? null,
+    kartendatei: data?.worldChoice.mapFile ?? null,
+    script: data?.worldChoice.evName ?? null,
+    archiv: data?.worldChoice.evArchive ?? null,
+    meshFunktionen: data?.worldChoice.meshFunctions ?? 0,
+    funktionenGesamt: data?.worldEv?.functions.length ?? 0,
+    fieldTblDatensaetze: data?.fieldTable?.records.length ?? 0,
+    fieldTblBelegt:
+      data?.fieldTable?.records.filter((r) => !r.default.empty || !r.alternative.empty).length ?? 0,
+  }),
+  /**
+   * F09-A: aufgelöste musicId je MUSIC-Aufruf, jüngste zuletzt. `reason`
+   * kommt unverändert aus `resolveFieldMusic` — eine stille Null gibt es nicht.
+   */
+  musik: (): object => ({
+    kontext: audioCtx === null ? null : 'AudioContext',
+    gate: music?.state.gate ?? null,
+    aktuellerTitel: music?.state.currentTrack ?? null,
+    titelkeller: [...(music?.state.trackStack ?? [])],
+    fieldMusicId,
+    schleifenplan: music?.current
+      ? {
+          trackId: music.current.trackId,
+          reason: music.current.plan.reason,
+          loopStartSekunden: Math.round(music.current.loopStartSeconds * 1000) / 1000,
+          loopEndSekunden: Math.round(music.current.loopEndSeconds * 1000) / 1000,
+        }
+      : null,
+    aufloesungen: musikProtokoll.map((m) => ({ ...m })),
+  }),
+  /** K1/K2: Teile und Texturen je geladenem Battle-Präfix. */
+  battleModelle: (): object => ({
+    geladen: [...battleModellProtokoll.values()],
+    teileGesamt: [...battleModellProtokoll.values()].reduce((s, m) => s + m.teile, 0),
+  }),
+  /** K1/K2: Namensraum eines Präfixes, so wie der Lader ihn sieht. */
+  battlePraefix: (prefix: string): object => ({
+    prefix,
+    eintraege: data?.listBattleEntries(prefix) ?? [],
+  }),
+  /**
+   * K1/K2: Ein Battle-Modell probeweise über die Auflistung laden und die
+   * Klassifikation melden. Erwartungswert für Cloud (`rt`): 33 Teile
+   * (17 Körper + 16 Waffen) und 2 Texturen — vorher waren es 3 und 0.
+   *
+   * Bewusst KEINE Party-Verdrahtung: welcher Party-Platz welches Präfix trägt,
+   * ist im Baum nirgends gemessen (🔴). Diese Sonde macht den Ladepfad prüfbar,
+   * ohne eine Zuordnung zu erfinden.
+   */
+  battleModellProbe: async (prefix: string): Promise<object | null> => {
+    if (!data) return null;
+    const eintraege = data.listBattleEntries(prefix).length;
+    const files = await loadBattleModel(prefix, data);
+    if (!files) return { prefix, geladen: false, eintraege };
+    return {
+      prefix,
+      geladen: true,
+      eintraege,
+      teile: files.parts.length,
+      texturen: files.textures.filter((t) => t !== null).length,
+      texturSlots: files.textures.length,
+      bones: files.skeleton.boneCount,
+    };
+  },
+  /** F18: Inventarnamen-Auflösung samt Grund (Bereiche 0/128/256/288). */
+  itemNamen: (ids: number[] = [0, 128, 215, 257, 307]): object => ({
+    hinweis: data?.kernelHinweis ?? null,
+    namen: ids.map((id) => ({ id, name: data?.itemName(id) ?? null })),
+  }),
+  /**
+   * F06: Ziel und Ankunftspunkt eines field.tbl-Datensatzes (1-basiert, wie der
+   * Opcode 0x318 sie trägt) — damit ist die Kette ohne Skriptlauf sichtbar.
+   */
+  fieldTblEintrag: (record: number, scenario: 0 | 1 = 0): object | null => {
+    if (!data?.fieldTable) return null;
+    const eintrag = fieldTblEntryForOpcode(data.fieldTable, record, scenario);
+    if (!eintrag) return null;
+    return {
+      record,
+      scenario,
+      fieldId: eintrag.fieldId,
+      ziel: data.fieldNameByMaplist(eintrag.fieldId),
+      x: eintrag.x,
+      y: eintrag.y,
+      triangle: eintrag.triangle,
+      direction: eintrag.direction,
+      leer: eintrag.empty,
+    };
+  },
   /** F27-Messung: Spieleranimation setzen und Wurzellage nach dem Binden melden. */
   spielerProbe: async (animId: number): Promise<object> => {
     if (!playerHandle) return { fehler: 'kein Spielermodell' };

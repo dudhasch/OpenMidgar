@@ -1,4 +1,6 @@
 import type { FieldDiagnostic } from './diagnostics.js';
+// Nur ein Typ-Import: zur Laufzeit gibt es keine Kante zurück nach `sections/`.
+import type { AkaoBlock } from './sections/akao.js';
 
 /**
  * Normalisierte Runtime-Repräsentationen (NAM) des Field-Pfads —
@@ -108,12 +110,28 @@ export interface ScriptEntity {
   entryPoints: (number | null)[];
 }
 
+/**
+ * Script-Sektion (Sektion 1).
+ *
+ * **Schemaversion 2** (engineCompat-Schritt, F09-B): `akaoOffsets` kam hinzu.
+ * Vorher wurde die Offsettabelle nur ÜBERSPRUNGEN, um an die Entry-Tabelle zu
+ * kommen — damit war die MUSIC-Kette am ersten Glied abgeschnitten. Siehe
+ * `sections/akao.ts` für die Messung, die den Operanden als field-lokalen
+ * Index in genau diese Tabelle belegt.
+ */
 export interface FieldScriptSet {
-  schemaVersion: 1;
+  schemaVersion: 2;
   entities: ScriptEntity[];
   /** Beginn des Script-Bytecode-Bereichs (sektionsrelativ). */
   dataStart: number;
   stringTableOffset: number;
+  /**
+   * `nAkao` u32-Offsets (sektionsrelativ) auf die AKAO-/Tutorial-Blöcke.
+   * **Der MUSIC-Operand indiziert diese Tabelle** — er ist keine Titelnummer.
+   */
+  akaoOffsets: number[];
+  /** Kopfklassifikation je Offset (gleiche Reihenfolge wie `akaoOffsets`). */
+  akaoBlocks: AkaoBlock[];
   /** Disjunkte Bytecode-Spannen [start, end), abgeleitet aus Entry-Points. */
   spans: { start: number; end: number }[];
   /** String-Offsets relativ zum Stringtabellen-Beginn; null = ungültig. */

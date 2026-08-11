@@ -17,6 +17,10 @@ export type FieldDiagnosticCode =
   | 'E-CAM-SIZE' // Kamerasektion hat keine gültige Recordgröße
   | 'W-CAM-ORTHO' // Achsenmatrix außerhalb der Orthonormalitätstoleranz
   | 'E-TRG-SIZE' // Triggersektion zu kurz
+  | 'E-FLD-AKAOOFF' // AKAO-Offset/MUSIC-Operand zeigt außerhalb — Titel nicht auflösbar
+  | 'W-FLD-AKAOMAG' // AKAO-Magic vorn abgeschnitten (KAO…/AO…) — belegter Datenfehler
+  | 'W-FLD-AKAOTUT' // MUSIC-Operand zeigt auf einen Tutorial- statt AKAO-Block
+  | 'W-FLD-AKAOUNK' // Block ist weder AKAO noch gültiger Tutorial-Bytecode
   | 'E-SCR-HDR' // Script-Header unplausibel
   | 'E-SCR-SPAN' // Script-Entry-Point außerhalb des Script-Bereichs
   | 'E-SCR-STR' // String-Offset außerhalb der Sektion

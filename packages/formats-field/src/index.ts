@@ -7,6 +7,7 @@ export * from './sections/walkmesh.js';
 export * from './sections/camera.js';
 export * from './sections/triggers.js';
 export * from './sections/script.js';
+export * from './sections/akao.js';
 export * from './sections/model-loader.js';
 export * from './sections/palette.js';
 export * from './sections/background.js';

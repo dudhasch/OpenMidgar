@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { IndexService } from '@webmidgar/io';
@@ -26,9 +27,16 @@ const REAL_DIR =
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 
+/**
+ * 🔵 Ausgabeort der Tafel. Frueher aus REAL_DIR abgeleitet (vier Ebenen aufwaerts) —
+ * das landete bei der Steam-Installation in 'C:\\Program Files (x86)\\webmidgar-sheets'
+ * und scheiterte mit EPERM, und bei der Kopie unter C:\\ff7-daten-kopie sogar oberhalb
+ * der Wurzel. Der Ausgabepfad darf nicht von der Lage der Originaldaten abhaengen:
+ * jetzt das Temp-Verzeichnis des Systems, ueberschreibbar per Umgebungsvariable.
+ */
 const OUT =
   process.env['WEBMIDGAR_BATTLE_SHEET_OUT'] ??
-  join(REAL_DIR, '..', '..', '..', '..', 'webmidgar-sheets', 'battle-modelle.html');
+  join(tmpdir(), 'webmidgar-sheets', 'battle-modelle.html');
 
 /** Präfixe quer über die Klassen: frühe Gegner, späte Gegner, Spielermodelle. */
 const PROBEN = ['aa', 'ab', 'ac', 'ba', 'cn', 'dz', 'gm', 'iz', 'of', 'rt', 'ru', 'rv', 'sb', 'si'];

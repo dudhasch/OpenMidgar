@@ -253,6 +253,41 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * Vorherige Werte (Stand nach F22/BGON): `diagonal a979df074f55443b`,
  * `gleiten dff830fea2efbfc3`, `skript 4df6cdd6d9f1e15c`.
  */
+/**
+ * **Nicht-Fortschreibung 2026-08-11 (F09-B, AKAO-Offsettabelle).** Ein
+ * engineCompat-Schritt, der die Digests bewusst NICHT bewegt: `FieldScriptSet`
+ * steigt von Schemaversion 1 auf **2** (neu: `akaoOffsets` + `akaoBlocks`,
+ * damit der MUSIC-Operand überhaupt auflösbar wird). Alle drei Werte bleiben
+ * gleich — und das ist die Aussage, nicht das Ausbleiben einer Aussage: Der
+ * Sitzungs-Snapshot führt das `FieldScriptSet` gar nicht mit, sondern nur den
+ * `scriptHash` über den Bytecode-Bereich. Parser-Erweiterungen, die den
+ * Bytecode nicht anfassen, DÜRFEN die Digests nicht bewegen. Wären sie
+ * gewandert, hätte die Offsettabelle in den Laufzeitzustand geleckt — DAS wäre
+ * der Fehler gewesen.
+ */
+/**
+ * **Fortschreibung 2026-08-11 (Längentabellen-Bündel).** Diesmal **keine**
+ * Änderung — und das ist der Eintrag wert, weil es die Gegenprobe zu allen
+ * vorherigen ist.
+ *
+ * Der Schritt hat die Opcode-Tabelle verändert: `XYI` (0xA6) und `XYZ` (0xA7)
+ * sind von der Skip- auf die Implementierungstabelle gewandert, ihre
+ * Operandenlängen von 2 bzw. 6 auf je 8. Zusätzlich wurden 17 tote
+ * Skip-Einträge gestrichen und 0x52 von `WCLSE` in `WMODE` umbenannt.
+ *
+ * Trotzdem stehen alle drei Digests still — **korrekt so**: Die drei
+ * Fixture-Skripte verwenden weder XYI noch XYZ, der Zustandsbaum hat kein
+ * neues Feld bekommen (`bgStates` gab es seit F22), und die gestrichenen
+ * Skip-Einträge waren unerreichbar. Hätte sich hier etwas bewegt, wäre das der
+ * Alarm gewesen: Dann hätte eine Längenänderung Opcodes berührt, die die
+ * Fixtures gar nicht enthalten — also die Tabelle an einer anderen Stelle
+ * beschädigt.
+ *
+ * Der Sichtbarkeitsnachweis der neuen Längen liegt deshalb NICHT hier, sondern
+ * in `packages/interpreter/src/interpreter.test.ts` (Ausrichtungsmarke hinter
+ * XYI/XYZ) und in den beiden Realdatenproben `oplen-bundle-probe` /
+ * `oplen-struktur-probe`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
   diagonal: '264718afa7d478d5',
   gleiten: '430f8b8a0770156f',

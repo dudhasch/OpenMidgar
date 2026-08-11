@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   assembleWorldEv,
+  composeFieldTbl,
   composeWorldMap,
   heightfieldMeshSpec,
   meshFunctionId,
   type WorldMeshSpec,
 } from '@webmidgar/fixture-gen';
-import { parseWorldEv, parseWorldMap, WORLD_MESH_EXTENT, type WorldGrid } from '@webmidgar/formats-world';
+import {
+  parseFieldTbl,
+  parseWorldEv,
+  parseWorldMap,
+  WOP_ENTER_FIELD,
+  WORLD_MESH_EXTENT,
+  type WorldGrid,
+} from '@webmidgar/formats-world';
 import { meshOrigin } from '@webmidgar/render-world';
 import { NEUTRAL_WORLD_INPUT, WorldSession, type WorldSessionOptions, type WorldTickInput } from './session.js';
 import { toWorldInput } from './input-adapter.js';
@@ -180,6 +188,102 @@ describe('Mesh-Trigger über die Script-VM', () => {
   });
 });
 
+describe('Opcode 0x318 → world-transition (F06)', () => {
+  /** field.tbl-Fixture: Datensatz 5 (1-basiert) mit beiden Szenarien. */
+  function tabelle() {
+    return parseFieldTbl(
+      composeFieldTbl([
+        {
+          index: 4, // 1-basierte Nummer 5
+          default: { x: -120, y: 640, triangle: 12, fieldId: 116, direction: 64 },
+          alternative: { x: 900, y: -80, triangle: 3, fieldId: 300, direction: 192 },
+        },
+        { index: 9, default: { x: 0, y: 0, triangle: 1, fieldId: 70, direction: 0 } },
+      ]),
+    );
+  }
+
+  function evMit318(record: number, scenario: number) {
+    return parseWorldEv(
+      assembleWorldEv([
+        {
+          id: meshFunctionId(1, 2, 0),
+          code: [
+            { op: 'PushConst', value: record },
+            { op: 'PushConst', value: scenario },
+            { op: 'Raw', word: WOP_ENTER_FIELD },
+            { op: 'Return' },
+          ],
+        },
+      ]),
+    );
+  }
+
+  function fahreBisTrigger(options: Partial<WorldSessionOptions>) {
+    const s = session({ start: { x: 8000, z: 20000 }, ...options });
+    const requests = [];
+    for (let i = 0; i < 10; i++) requests.push(...s.tick(VOR).requests);
+    return requests;
+  }
+
+  it('Szenario 0 (default): Ziel und Ankunftspunkt aus field.tbl statt Rohkommando', () => {
+    const requests = fahreBisTrigger({ ev: evMit318(5, 0), fieldTable: tabelle() });
+    expect(requests).toEqual([
+      {
+        kind: 'world-transition',
+        source: 'script',
+        locationIndex: null,
+        fieldTblRecord: 5,
+        scenario: 0,
+        destMaplistIndex: 116,
+        arrival: { x: -120, y: 640, triangle: 12, direction: 64 },
+      },
+    ]);
+  });
+
+  it('Szenario 1 (alternative): derselbe Datensatz liefert den anderen Eintrag', () => {
+    const requests = fahreBisTrigger({ ev: evMit318(5, 1), fieldTable: tabelle() });
+    expect(requests).toEqual([
+      {
+        kind: 'world-transition',
+        source: 'script',
+        locationIndex: null,
+        fieldTblRecord: 5,
+        scenario: 1,
+        destMaplistIndex: 300,
+        arrival: { x: 900, y: -80, triangle: 3, direction: 192 },
+      },
+    ]);
+  });
+
+  it('leerer Slot und fehlende Tabelle bleiben rohes script-command — kein erfundenes Ziel', () => {
+    // Datensatz 10 hat keinen alternative-Eintrag.
+    expect(fahreBisTrigger({ ev: evMit318(10, 1), fieldTable: tabelle() })).toEqual([
+      { kind: 'script-command', opcode: WOP_ENTER_FIELD, args: [10, 1] },
+    ]);
+    // Ohne Tabelle bleibt alles wie vor F06.
+    expect(fahreBisTrigger({ ev: evMit318(5, 0), fieldTable: null })).toEqual([
+      { kind: 'script-command', opcode: WOP_ENTER_FIELD, args: [5, 0] },
+    ]);
+  });
+
+  it('0-basierte Deutung ist ausgeschlossen: Datensatznummer 0 löst nicht auf', () => {
+    expect(fahreBisTrigger({ ev: evMit318(0, 0), fieldTable: tabelle() })).toEqual([
+      { kind: 'script-command', opcode: WOP_ENTER_FIELD, args: [0, 0] },
+    ]);
+  });
+
+  it('der Übergang ist ein Datum, kein Zustand: der Digest bleibt unberührt', () => {
+    const mit = session({ start: { x: 8000, z: 20000 }, ev: evMit318(5, 0), fieldTable: tabelle() });
+    const ohne = session({ start: { x: 8000, z: 20000 }, ev: evMit318(5, 0), fieldTable: null });
+    for (let i = 0; i < 10; i++) {
+      mit.tick(VOR);
+      ohne.tick(VOR);
+    }
+    expect(mit.digest()).toBe(ohne.digest());
+  });
+});
+
 describe('Übergänge und Begegnungen', () => {
   it('Aktion innerhalb einer Ortsmarke erzeugt den world-transition-Request (Daten, keine Wirkung)', () => {
     const s = session({
@@ -187,7 +291,15 @@ describe('Übergänge und Begegnungen', () => {
     });
     const treffer = s.tick({ ...NEUTRAL_WORLD_INPUT, action: true });
     expect(treffer.requests).toEqual([
-      { kind: 'world-transition', locationIndex: 0, destMaplistIndex: 116 },
+      {
+        kind: 'world-transition',
+        source: 'location',
+        locationIndex: 0,
+        fieldTblRecord: null,
+        scenario: null,
+        destMaplistIndex: 116,
+        arrival: null,
+      },
     ]);
     // Halten erzeugt keinen zweiten Request (Flanke, nicht Zustand).
     expect(s.tick({ ...NEUTRAL_WORLD_INPUT, action: true }).requests).toEqual([]);

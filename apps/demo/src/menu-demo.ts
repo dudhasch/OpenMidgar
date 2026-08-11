@@ -8,9 +8,10 @@ import {
 import { readSavemap, parseOriginalSave } from '@webmidgar/formats-save';
 import {
   indexKernelSections,
-  itemNameLookup,
+  inventoryNameLookup,
   parseKernelContainer,
-  pickItemTextLists,
+  resolveKernelNameLists,
+  type InventoryNameLookup,
 } from '@webmidgar/formats-kernel';
 import { composeSavemapSlot, type FixtureSavemap } from '@webmidgar/fixture-gen';
 
@@ -136,7 +137,7 @@ document.getElementById('laden')!.addEventListener('click', async () => {
       return;
     }
 
-    let itemName: (id: number) => string | null = () => null;
+    let itemName: InventoryNameLookup = () => null;
     let kernelHinweis = 'ohne KERNEL.BIN — Gegenstandsnamen bleiben leer';
     try {
       const [kernelHandle] = await (
@@ -144,11 +145,14 @@ document.getElementById('laden')!.addEventListener('click', async () => {
       )({ types: [{ description: 'KERNEL.BIN', accept: { 'application/octet-stream': ['.bin'] } }] });
       const kernelBytes = new Uint8Array(await (await kernelHandle!.getFile()).arrayBuffer());
       const container = await parseKernelContainer(kernelBytes, 'kernel.bin');
-      const listen = container ? pickItemTextLists(indexKernelSections(container)) : { names: null, descriptions: null };
-      itemName = itemNameLookup(listen.names);
-      kernelHinweis = listen.names
-        ? `Namen aus Sektion ${listen.names.sectionIndex} (${listen.names.strings.length} Einträge)`
-        : 'keine Namensliste erkannt';
+      // F18: bereichskodierte Auflösung über alle vier Inventarbereiche statt
+      // einer einzigen Liste (die traf die Zauberliste mit 256 Einträgen).
+      const listen = container ? resolveKernelNameLists(indexKernelSections(container)) : null;
+      itemName = listen ? inventoryNameLookup(listen) : () => null;
+      kernelHinweis =
+        listen && listen.reason === null
+          ? `Namen aus den Sektionen ${listen.items!.sectionIndex}/${listen.weapons!.sectionIndex}/${listen.armor!.sectionIndex}/${listen.accessories!.sectionIndex} (Gegenstände/Waffen/Rüstungen/Accessoires)`
+          : `Namenslisten nicht zuordenbar: ${listen?.reason ?? 'keine KERNEL.BIN'}`;
     } catch {
       // Abbruch der zweiten Auswahl ist kein Fehler — dann eben ohne Namen.
     }

@@ -9,12 +9,20 @@ import {
 } from '@webmidgar/formats-field';
 import {
   indexKernelSections,
-  itemNameLookup,
+  inventoryNameLookup,
   parseKernelContainer,
-  pickItemTextLists,
+  resolveKernelNameLists,
+  type InventoryNameLookup,
 } from '@webmidgar/formats-kernel';
 import { parseSceneBin, type SceneContainer } from '@webmidgar/formats-battle';
-import { parseWorldMap, parseWorldEv, type WorldTerrain, type WorldEv } from '@webmidgar/formats-world';
+import {
+  parseFieldTbl,
+  parseWorldMap,
+  parseWorldEv,
+  type FieldTable,
+  type WorldTerrain,
+  type WorldEv,
+} from '@webmidgar/formats-world';
 import { parseOriginalSave, readSavemap, type Savemap } from '@webmidgar/formats-save';
 import { openHttpSource, fetchRawFile } from './http-source';
 
@@ -25,6 +33,27 @@ import { openHttpSource, fetchRawFile } from './http-source';
  * .ev, Spielstand); Fields und Modelle kommen lazy über die read*-Helfer.
  */
 
+/**
+ * Welche Weltkarte geladen ist — Terrain UND Script **gemeinsam gewählt** (W1).
+ *
+ * 🔵 Der frühere Griff `[...worldGm.keys()].find((n) => n.endsWith('.ev'))` nahm
+ * den ERSTEN `.ev`-Eintrag in TOC-Reihenfolge. In `world_*.lgp` liegt `wm2.ev`
+ * (Unterwasserkarte, 1 Mesh-Funktion) VOR `wm0.ev` (49 Mesh-Funktionen) — die
+ * Demo fuhr also das Unterwasser-Script zum WM0-Terrain. Deshalb wird der
+ * Eintrag jetzt exakt benannt und mit seiner Kartendatei zusammen geführt.
+ */
+export interface WorldMapChoice {
+  id: 'wm0' | 'wm2' | 'wm3';
+  /** Rohdateipfad der Karte, so wie `fetchRawFile` ihn erwartet. */
+  mapFile: string;
+  /** Eintragsname im LGP-Archiv — exakt, nicht gesucht. */
+  evName: string;
+  /** Archiv, aus dem das Script tatsächlich kam (`null` = keins gefunden). */
+  evArchive: string | null;
+  /** Zahl der Mesh-Funktionen des geladenen Scripts (wm0 erwartet: 49). */
+  meshFunctions: number;
+}
+
 export interface GameData {
   index: IndexService;
   maplist: FieldMaplist | null;
@@ -32,13 +61,26 @@ export interface GameData {
   scenes: SceneContainer | null;
   terrain: WorldTerrain | null;
   worldEv: WorldEv | null;
+  /** Welche Karte/Script-Paarung geladen wurde (W1). */
+  worldChoice: WorldMapChoice;
+  /** `field.tbl` aus `world_us.lgp` — World↔Field-Einstiegspunkte (F06). */
+  fieldTable: FieldTable | null;
   savemap: Savemap | null;
   musicNames: string[];
-  itemName: (id: number) => string | null;
+  /**
+   * Bereichskodierte Inventarnamen (F18): 0–127 Gegenstände · 128–255 Waffen ·
+   * 256–287 Rüstungen · 288–319 Accessoires. MUSS aus `inventoryNameLookup`
+   * stammen — eine einlistige Auswahl traf früher die Zauberliste.
+   */
+  itemName: InventoryNameLookup;
+  /** Warum die Namenszuordnung (nicht) ging — sonst verdeckt sie sich selbst. */
+  kernelHinweis: string;
   kernelSections: Uint8Array[] | null;
   readFieldEntry(name: string): Promise<Uint8Array | null>;
   readCharEntry(name: string): Promise<Uint8Array | null>;
   readBattleEntry(name: string): Promise<Uint8Array | null>;
+  /** Alle Einträge eines battle.lgp-Präfixes (erfüllt `BattleEntrySource`). */
+  listBattleEntries(prefix: string): string[];
   loadFieldBundle(name: string): Promise<{ bundle: FieldBundle | null; codes: string[] }>;
   fieldNameByMaplist(index: number): string | null;
 }
@@ -80,7 +122,24 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   const flevel = entryMap(index, 'flevel');
   const char = entryMap(index, 'char');
   const battle = entryMap(index, 'battle');
-  const worldGm = entryMap(index, 'world_gm');
+
+  /**
+   * Battle-Präfixindex (K1/K2): `loadBattleModel` klassifiziert die Einträge
+   * eines Präfixes über ihre Inhaltssignatur — dafür braucht es den echten
+   * Namensraum statt eines abgetasteten Suffixfensters. Einmal beim Boot
+   * gebaut; die Map trägt bereits alle Namen kleingeschrieben.
+   */
+  const battlePraefixe = new Map<string, string[]>();
+  for (const name of battle.keys()) {
+    if (name.length !== 4) continue; // Modelldateien sind 2 B Präfix + 2 B Suffix
+    const p = name.slice(0, 2);
+    let liste = battlePraefixe.get(p);
+    if (!liste) {
+      liste = [];
+      battlePraefixe.set(p, liste);
+    }
+    liste.push(name);
+  }
 
   // maplist: der gemeinsame Namensraum aller Field-Wechsel (S11).
   let maplist: FieldMaplist | null = null;
@@ -89,17 +148,28 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
 
   const fieldNames = [...flevel.keys()].filter((n) => !n.includes('.')).sort((a, b) => a.localeCompare(b));
 
-  // kernel: Gegenstandsnamen (Menü) + Rohsektionen (Growth etc. für später).
-  let itemName: (id: number) => string | null = () => null;
+  // kernel: Inventarnamen (Menü) + Rohsektionen (Growth etc. für später).
+  // F18: Die Rollenbestimmung löst alle vier Bereiche auf, nicht eine Liste.
+  let itemName: InventoryNameLookup = () => null;
+  let kernelHinweis = 'ohne KERNEL.BIN — Inventarnamen bleiben leer';
   let kernelSections: Uint8Array[] | null = null;
   const kernelBytes = await fetchRawFile('data/kernel/KERNEL.BIN');
   if (kernelBytes) {
     const container = await parseKernelContainer(kernelBytes, 'kernel.bin');
     if (container) {
       kernelSections = container.sections.map((s: { data: Uint8Array }) => s.data);
-      const listen = pickItemTextLists(indexKernelSections(container));
-      itemName = itemNameLookup(listen.names);
+      const listen = resolveKernelNameLists(indexKernelSections(container));
+      itemName = inventoryNameLookup(listen);
+      // Der Grund MUSS sichtbar sein: eine stillschweigend leere Zuordnung hat
+      // F18 so lange verdeckt (das Menü zeigte einfach Zaubernamen).
+      kernelHinweis =
+        listen.reason === null
+          ? `Namen aus den Sektionen ${listen.items!.sectionIndex}/${listen.weapons!.sectionIndex}/${listen.armor!.sectionIndex}/${listen.accessories!.sectionIndex} (Gegenstände/Waffen/Rüstungen/Accessoires)`
+          : `Namenslisten nicht zuordenbar: ${listen.reason}`;
+    } else {
+      kernelHinweis = 'KERNEL.BIN nicht lesbar';
     }
+    status(kernelHinweis);
   }
 
   // scene.bin: alle Kampfszenen (lazy wäre möglich, aber 256 Szenen sind klein).
@@ -107,22 +177,54 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   const sceneBytes = await fetchRawFile('data/battle/scene.bin');
   if (sceneBytes) scenes = await parseSceneBin(sceneBytes, 'scene.bin');
 
-  // Weltkarte: WM0-Terrain + Weltscript.
+  // Weltkarte (W1): Terrain UND Script als EIN Paar. Der Eintrag wird exakt
+  // benannt; ein „erster .ev-Eintrag" ist TOC-Reihenfolge und damit wm2.
+  const worldChoice: WorldMapChoice = {
+    id: 'wm0',
+    mapFile: 'data/wm/WM0.MAP',
+    evName: 'wm0.ev',
+    evArchive: null,
+    meshFunctions: 0,
+  };
   let terrain: WorldTerrain | null = null;
-  const wm0 = await fetchRawFile('data/wm/WM0.MAP');
-  if (wm0) terrain = parseWorldMap(wm0);
+  const mapBytes = await fetchRawFile(worldChoice.mapFile);
+  if (mapBytes) terrain = parseWorldMap(mapBytes);
+
+  // Die Sprachvariante des Archivs ist für das Script gleichgültig — genommen
+  // wird die erste, die den EXAKT benannten Eintrag führt.
+  const worldArchives = ['world_us', 'world_gm', 'world_fr', 'world_sp'] as const;
   let worldEv: WorldEv | null = null;
-  const evEntry = [...worldGm.keys()].find((n) => n.endsWith('.ev'));
-  if (evEntry) {
-    const evBytes = await readFrom(index, worldGm, evEntry);
-    if (evBytes) {
-      try {
-        worldEv = parseWorldEv(evBytes);
-      } catch {
-        worldEv = null; // Script ist optional — die Weltkarte fährt auch ohne VM
+  let fieldTable: FieldTable | null = null;
+  for (const archiv of worldArchives) {
+    const eintraege = entryMap(index, archiv);
+    if (eintraege.size === 0) continue;
+    if (!worldEv && eintraege.has(worldChoice.evName)) {
+      const evBytes = await readFrom(index, eintraege, worldChoice.evName);
+      if (evBytes) {
+        try {
+          worldEv = parseWorldEv(evBytes);
+          worldChoice.evArchive = archiv;
+          worldChoice.meshFunctions = worldEv.functions.filter((f) => f.type === 'mesh').length;
+        } catch {
+          worldEv = null; // Script ist optional — die Weltkarte fährt auch ohne VM
+        }
+      }
+    }
+    // field.tbl (F06): World↔Field-Einstiegspunkte, Ziel des Opcodes 0x318.
+    if (!fieldTable && eintraege.has('field.tbl')) {
+      const tblBytes = await readFrom(index, eintraege, 'field.tbl');
+      if (tblBytes) {
+        const parsed = parseFieldTbl(tblBytes);
+        for (const d of parsed.diagnostics) status(`${d.code}: ${d.message}`);
+        fieldTable = parsed;
       }
     }
   }
+  status(
+    worldEv
+      ? `Weltscript ${worldChoice.evName} aus ${worldChoice.evArchive} (${worldChoice.meshFunctions} Mesh-Funktionen)`
+      : `Weltscript ${worldChoice.evName} nicht gefunden — Weltkarte fährt ohne VM`,
+  );
 
   // Musikindex (S37/O2): Zeilenindex 0-basiert, musicId der Scripts 1-basiert.
   let musicNames: string[] = [];
@@ -154,13 +256,17 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     scenes,
     terrain,
     worldEv,
+    worldChoice,
+    fieldTable,
     savemap,
     musicNames,
     itemName,
+    kernelHinweis,
     kernelSections,
     readFieldEntry: (name) => readFrom(index, flevel, name),
     readCharEntry: (name) => readFrom(index, char, name),
     readBattleEntry: (name) => readFrom(index, battle, name),
+    listBattleEntries: (prefix) => battlePraefixe.get(prefix.toLowerCase()) ?? [],
     loadFieldBundle: async (name) => {
       const bytes = await readFrom(index, flevel, name);
       if (!bytes) return { bundle: null, codes: ['E-GAME-ENTRY-FEHLT'] };

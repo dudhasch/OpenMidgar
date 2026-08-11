@@ -62,6 +62,26 @@ export async function composeKernelContainer(
 }
 
 /**
+ * Baut eine Recordsektion fester Schrittweite: `count` Records à `size` Byte.
+ * `fill(recordIndex, record)` beschreibt jeden Record; ohne Rückruf bleibt die
+ * Sektion genullt. Codegetrennt vom Leser in `formats-kernel/data-records.ts`
+ * (Dualitätsprinzip) — der Composer kennt keine Feldnamen, nur Offsets, die der
+ * Test setzt.
+ */
+export function composeRecordSection(
+  count: number,
+  size: number,
+  fill?: (recordIndex: number, record: Uint8Array, view: DataView) => void,
+): Uint8Array {
+  const bytes = new Uint8Array(count * size);
+  for (let i = 0; i < count; i++) {
+    const record = bytes.subarray(i * size, (i + 1) * size);
+    fill?.(i, record, new DataView(bytes.buffer, i * size, size));
+  }
+  return bytes;
+}
+
+/**
  * Baut eine Textsektion: `count` u16-Zeiger (relativ zum Tabellenanfang),
  * danach die kodierten Zeichenketten. Die Kodierung ist der lineare
  * ASCII-Versatz, den der Dekoder als Hypothese führt.

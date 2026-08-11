@@ -94,6 +94,17 @@ export interface RuntimeOptions {
    * (Breakpoint/Einzelschritt), Zustand bleibt unverändert.
    */
   stepGate?: ((ctx: ScriptContext) => boolean) | undefined;
+  /**
+   * 🔵 Anfangsbelegung der Hintergrund-Zustandsmasken (F35-1). Der Wirt kennt
+   * die Hintergrundkacheln, der Interpreter nicht — deshalb reicht er die
+   * fertige Karte herein, statt sie hier zu erraten. Bauen lässt sie sich mit
+   * `berechneAnfangsBgStates` aus `state.ts`; dort steht auch die Begründung.
+   *
+   * Ohne Angabe bleibt die Karte leer — der Zustand vor dieser Änderung. Ein
+   * Field ohne animierte Hintergrundgruppen liefert ohnehin `{}`, sein Digest
+   * ändert sich also nicht.
+   */
+  initialBgStates?: Readonly<Record<number, number>> | undefined;
 }
 
 export class FieldRuntime {
@@ -137,7 +148,7 @@ export class FieldRuntime {
       eventQueue: [],
       hostRequests: [],
       randomEncountersDisabled: false,
-      bgStates: {},
+      bgStates: { ...(options.initialBgStates ?? {}) },
       menuAccessRaw: 0,
       unknownSkips: {},
       droppedRequests: 0,

@@ -1,5 +1,6 @@
 import { fdiag, type FieldDiagnostic } from '../diagnostics.js';
 import { SECTION, type FieldScriptSet, type ScriptEntity } from '../nam.js';
+import { diagnoseAkaoBlock, parseAkaoBlock, type AkaoBlock } from './akao.js';
 
 /**
  * Script-/Dialogsektion — S2-Scope laut Roadmap: NUR Span-Indexierung und
@@ -55,6 +56,21 @@ export function parseScriptSection(
       ),
     );
     return null;
+  }
+
+  // AKAO-/Tutorial-Offsettabelle (F09-B). Bis Schemaversion 1 wurde sie nur
+  // übersprungen; damit war die MUSIC-Kette am ersten Glied abgeschnitten.
+  // 🟢 u32 LE, sektionsrelativ (Makou §3.2).
+  const akaoOffsets: number[] = [];
+  const akaoBlocks: AkaoBlock[] = [];
+  for (let i = 0; i < nAkao; i++) {
+    const off = view.getUint32(akaoBase + i * 4, true);
+    akaoOffsets.push(off);
+    const block = parseAkaoBlock(data, off);
+    akaoBlocks.push(block);
+    // Tutorial-Blöcke sind normaler Inhalt und bleiben still; gemeldet werden
+    // nur die belegten Defekte (abgeschnittenes Magic, Offset daneben).
+    diagnoseAkaoBlock(block, i, field, diagnostics);
   }
 
   const entities: ScriptEntity[] = [];
@@ -118,10 +134,12 @@ export function parseScriptSection(
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     entities,
     dataStart,
     stringTableOffset,
+    akaoOffsets,
+    akaoBlocks,
     spans,
     stringOffsets,
   };

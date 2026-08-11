@@ -13,7 +13,7 @@ S21–S25. Tatsächlicher Stand auf `main`:
 | Session | Stand |
 |---|---|
 | S20 (Härtung & Beta-Gate) | ✅ abgeschlossen (NFR-Bericht, R9, R5, ADR-019–023) |
-| S21 (Menü-Grundmodul) | ❌ nicht auf main. Ein früher Anfang liegt auf dem Branch `claude/s21-s24-implementation-fa4ed5` (Menü-Gerüst, Savemap-Leser, Menü-Savemap-Probe; 1 Commit, 17 Commits hinter main, ungeprüft) — er wird hier weder gemergt noch bewertet |
+| S21 (Menü-Grundmodul) | ✅ **auf main** — Korrektur 2026-08-11. Der Satz „nicht auf main" war zum Zeitpunkt des Gates richtig und ist seither überholt: `packages/menu` liegt mit `model.ts`, `session.ts`, `format.ts` sowie `menu.test.ts`/`menu-runtime.test.ts` auf `main`, der Savemap-Leser ebenso, und `apps/demo` zieht die Inventarnamen über `resolveKernelNameLists`/`inventoryNameLookup` daraus (F18/F24-A). **Offen bleibt allein die Menü-OPTIK** (F24: Rahmen, Schrift, Anordnung — die Demo zeigt eine Diagnosetabelle, kein FF7-Menü); die Datenlesung ist belegt (79/79 Inventarzeilen aufgelöst). Der genannte Branch ist damit gegenstandslos |
 | S22–S25 (Modding II, Audio-Feinsemantik, Save/Load-UI, field-add/KTX2) | ❌ nicht begonnen |
 | S37 (EXE-Datenanalyse, vorgezogen) | ✅ abgeschlossen (`decompile-findings.md`) |
 

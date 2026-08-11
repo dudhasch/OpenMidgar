@@ -234,6 +234,87 @@ lassen, nicht nur die betroffene Probe.**
 unmodifizierten** Datensatz — die zweite `flevel.lgp` der Installation gehört
 zu einem 7th-Heaven-Overlay und ist keine unabhängige Stichprobe.
 
+## O9-Nachlese — das Längentabellen-Bündel (2026-08-11)
+
+Sieben Restposten in **einem** Durchgang gemessen, gemeinsam entschieden, in
+**einem** engineCompat-Schritt übernommen. Gebündelt, weil jede einzelne
+Längenänderung den Instruktionsstrom verschiebt und damit die
+Häufigkeitszahlen aller anderen laufenden Messungen entwertet.
+
+**Der eigentliche Fund ist methodisch: der Spannen-Abschluss ist bei seltenen
+Opcodes blind, und zwar aus einem benennbaren Grund.** Setzt man `XYI` von
+Länge 2 auf 8, landet der Durchlauf sechs Byte weiter — findet aber nach
+wenigen Instruktionen wieder auf dasselbe Raster und schließt die Spanne
+trotzdem exakt. In **allen 32** betroffenen Spannen. Das ist die bekannte
+Selbstresynchronisation variabler Befehlsformate und keine Eigenheit dieses
+Bestands. Genau deshalb ließ O9 diese Posten offen: Die Gütefunktion war nicht
+unentschieden, sie war **unempfindlich**.
+
+Zwei neue Gütefunktionen schließen die Lücke
+(`tools/realdata-scan/src/oplen-bundle-probe.rdtest.ts`,
+`oplen-struktur-probe.rdtest.ts`):
+
+1. **Grenzplausibilität.** Byteverteilungen an echten Instruktionsanfängen
+   gegen Operandenbytes, als Log-Quotient. Kontrollniveaus: **1,24** an echten
+   Anfängen, **−1,16** in Operanden.
+2. **Struktursonde.** Der Inhalt der Operanden gegen eine unabhängige Sektion
+   desselben Fields: literale Koordinaten gegen die Walkmesh-Grenzen,
+   Dreiecksindizes gegen die Dreieckszahl, bankadressierte Werte gegen die
+   256-B-Bankgröße (hohes Byte muss 0 sein). Geeicht an `XYZI`, dessen
+   Aufteilung bekannt ist: **99,2 %** gegen **0,0 %** bei um ein Byte
+   verschobener Lesart.
+
+### Ergebnis: 2 von 7 übernommen
+
+| Opcode | Vorkommen | ist → ref | Urteil |
+|---|---|---|---|
+| `XYI` 0xA6 | 32 in 14 Fields | 2 → **8** | ✅ übernommen |
+| `XYZ` 0xA7 | 42 in 23 Fields | 6 → **8** | ✅ übernommen |
+| `MINIGAME` 0x20 | 134 in 78 Fields | 0 → 10 | ❌ **widerlegt** |
+| `BGMOVIE` 0x27 | 36 in 13 Fields | 0 → 1 | ❌ nicht belegt |
+| `MVCAM` 0xFB | 55 in 23 Fields | 0 → 1 | ❌ nicht belegt |
+| `BGROL` 0xE2 | 13 in 6 Fields | 1 → 2 | ❌ nicht belegt |
+| `BGROL2` 0xE3 | 5 in 2 Fields | 2 = 2 | ❌ nicht messbar |
+
+**XYI/XYZ.** Grenzplausibilität 2,37 ± 0,37 bzw. 1,76 bei Länge 8 — über dem
+Kontrollniveau echter Instruktionsanfänge; Struktursonde 90,6 % bzw. 88,1 %
+gegen 15,6 % bzw. 0,0 % bei Versatz. Bei `XYZ` hätte die Grenzplausibilität
+allein in die Irre geführt (sie bevorzugt Länge 4); entschieden hat die
+Kontrolle am dritten Wertfeld: auf @7 trifft es zu 88,1 %, auf @9 nur zu
+45,2 %.
+
+**MINIGAME ist der interessanteste Posten — die Referenz ist hier nicht bloß
+unbelegt, sondern falsifiziert.** In vier Spannen des Fields `ancnt1` steht der
+Opcode nur **6 Byte** vor dem Spannenende. Zehn Operandenbytes passen dort
+nicht hinein; die Länge kann höchstens 5 sein. Das ist eine harte Schranke ohne
+Statistik. Entweder ist 0x20 in diesem Bestand nicht durchgängig MINIGAME, oder
+die Instruktion ist variabel lang — mit dem Field-Bytecode allein nicht zu
+entscheiden.
+
+**BGROL bleibt unimplementiert, und das ist die eigentliche Entscheidung
+dieses Durchgangs.** Die Referenzaufteilung wird von den Daten nicht nur nicht
+gestützt, sondern unterboten: Das Parameterbyte an @+2 trifft in **11,1 %**
+(1/9) einen Parameter, den dasselbe Field per BGON/BGOFF schaltet — gegen ein
+Kontrollniveau von **22,2 %** bei den Parametern eines *fremden* Fields. Zum
+Vergleich das Niveau eines belegten Opcodes: `BGON` trifft an derselben Stelle
+**98,0 %** (1963/2003) gegen 46,7 % fremd. Eine geratene Rotationssemantik
+würde die BGON-Maske derselben Gruppe beschädigen und wäre schlechter als der
+heutige Übersprung. Was fehlt, ist ein Bestand mit mehr Vorkommen.
+
+**Spannen-Abschluss vorher wie nachher 99,9230 % (48.004/48.041)**, Overrun
+0,0645 %. Dass sich die Kennzahl *nicht* bewegt, ist hier kein Nullergebnis,
+sondern die Bestätigung des Befunds: Sie kann diese Posten nicht sehen.
+
+**S-DEADSKIP mitbereinigt.** 17 Opcodes standen in beiden Längentabellen; die
+Skip-Einträge waren unerreichbar, weil `vm.ts` zuerst `IMPL_OPERAND_LEN` fragt.
+Alle 17 stimmten überein — genau deshalb waren sie gefährlich. Ein Test
+erzwingt jetzt Disjunktheit und lückenlose 256er-Abdeckung.
+
+**OP-0x52 umbenannt.** 0x52 heißt `WMODE`, nicht `WCLSE`; `WCLSE` liegt auf
+0x54. Beide Längen (3 bzw. 1) waren längst richtig, beide sind Stubs — es
+ändert sich kein Verhalten, nur der Name hing am falschen Opcode. Dieselbe
+Fehlerklasse wie damals `DIR`/`TURA`.
+
 ## O9-alt — der Weg dorthin (historisch)
 
 **Neu aufgetaucht.** Die aus den Realdaten abgeleitete Längentabelle (S12,
@@ -381,18 +462,32 @@ gegen sich selbst absichern**:
 3. Der Replay-Digest über alle Fields ist der Regressionsschutz: Jede Änderung
    der Verdrängungsregel muss ihn ändern, sonst greift sie nicht.
 
-## O7 — 16-Bit-Bankzugriff an Adresse 0xFF (Ziel: S20)
+## O7 — 16-Bit-Bankzugriff an Adresse 0xFF ✅ geschlossen (2026-08-11)
 
-**Stand.** Der Interpreter wrappt innerhalb der Bank
-(`packages/interpreter/src/state.ts`): Ein Wortzugriff auf 0xFF liest
-`b[0xFF] | b[0x00] << 8`. Die Alternative wäre ein Übergriff in die
-Folgeregion. Beide Auslegungen unterscheiden sich an **genau einer** Adresse.
+**Ergebnis.** Die Wrap-Regel bleibt — sie steht jetzt auf einer Zahl statt auf
+einer Annahme. Gemessen über alle 702 Fields
+(`tools/realdata-scan/src/bank-wrap-probe.rdtest.ts`):
 
-**Methode.** Erst messen, ob es überhaupt zählt: Über alle 702 Fields zählen,
-wie viele Wortzugriffe auf Adresse 0xFF im Bytecode überhaupt vorkommen. Bei
-null Vorkommen ist die Frage entschieden — nicht durch Wissen, sondern durch
-Irrelevanz, und das wird so dokumentiert. Erst bei Vorkommen lohnt der
-Vergleich beider Auslegungen im Replay-Digest.
+| Zählung | Fundstellen |
+|---|---|
+| Wortvarianten mit Bankzugriff auf Adresse 0xFF | **1** (Field `blinele`, Opcode 0x90 `AND2`) |
+| IF-Wortvarianten mit 0xFF | **0** |
+| Kontrollzählung, dieselbe Auswertung für 0xFE | **0** |
+
+**Geschlossen durch Irrelevanz, nicht durch Wissen** — und das ist hier die
+korrekte Auflösung: Bei einer einzigen Fundstelle im gesamten Bestand kann
+keine der beiden Auslegungen (Wrap innerhalb der Bank gegen Übergriff in die
+Folgeregion) einen sichtbaren Unterschied machen. Ein Verhaltensvergleich im
+Replay-Digest wäre eine Messung an einem einzigen Byte.
+
+**Die Kontrollzählung trägt die Aussage.** Ergäbe 0xFE hundert Fundstellen und
+0xFF eine, wäre die Seltenheit von 0xFF ein eigener Befund. Beide bei ~0 heißt:
+Es ist schlicht die Randlage hoher Bankadressen, die Skripte nutzen den oberen
+Bankrand nicht.
+
+**Die Probe bleibt als Dauerprobe stehen** und schlägt bei mehr als 5
+Fundstellen fehl. Die Irrelevanz ist eine Eigenschaft des Bestands, nicht der
+Engine — ein Mod oder ein anderer Datenstand kann sie jederzeit aufheben.
 
 ## O8 — Variablenbank-Kollisionen zwischen Mods (Ziel: S22, vor MS5)
 
@@ -426,7 +521,7 @@ ist sie ein Migrationsproblem.
 | ~~O10 Höhenversatz Figur↔Walkmesh~~ | ✅ gelöst (Resttafel) | — (Modellursprung = Bodenkontakt, 3/3; waagerechte Wurzeltranslation bleibt 🟡) |
 | ~~O5 LGP-Check-Code~~ | ✅ gemessen, geschlossen | — (Partition nach Eintragsart, opt-in-Warnung nachgeliefert) |
 | O6 R1-Prioritäten | S20 | Determinismus-Zusicherung |
-| O7 0xFF-Wrap | S20 | nichts (Randfall) |
+| ~~O7 0xFF-Wrap~~ | ✅ geschlossen | — (1 Fundstelle im ganzen Bestand, Dauerprobe steht) |
 | O8 Mod-Variablenbänke | S22, vor MS5 | Mod-Kombinierbarkeit |
 
 *Rückverweis: [ROADMAP-S13-S19.md](ROADMAP-S13-S19.md) ·

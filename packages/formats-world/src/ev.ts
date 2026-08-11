@@ -94,6 +94,16 @@ export const WORLD_CMD_PUSHES: ReadonlySet<number> = new Set([0x18, 0x19, 0x1b])
 export const WOP_SET_WORLD_PROGRESS = 0x349;
 export const WORLD_PROGRESS_MAX = 4;
 
+/**
+ * 0x318 „Feld betreten" (F06). Stelligkeit 2 GEMESSEN (`WORLD_CMD_POPS`);
+ * die BEDEUTUNG der beiden Operanden ist ebenfalls gemessen, nicht übernommen
+ * — Musterscan über wm0/wm2/wm3.ev, 89 Vorkommen: args[0] = 1-basierte
+ * `field.tbl`-Datensatznummer (Bestand exakt 1…64, 89/89 auf einen belegten
+ * Slot), args[1] = Szenario (89/89 in {0,1}). Vertauschungskontrolle: 0/89.
+ * Details in `field-tbl.ts`.
+ */
+export const WOP_ENTER_FIELD = 0x318;
+
 export type EvFunctionType = 'system' | 'model' | 'mesh';
 
 export interface EvFunction {

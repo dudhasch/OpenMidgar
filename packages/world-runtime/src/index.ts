@@ -19,6 +19,8 @@ export {
   type WorldTickInput,
   type WorldTickResult,
   type WorldHostRequest,
+  type WorldTransitionSource,
+  type WorldArrival,
   type WorldSessionSnapshot,
 } from './session.js';
 export { toWorldInput } from './input-adapter.js';

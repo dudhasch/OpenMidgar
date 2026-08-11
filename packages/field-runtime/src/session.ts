@@ -173,6 +173,14 @@ export interface FieldSessionOptions {
   encounters?: boolean | undefined;
   /** 🔵 Gefahrenschwelle je Prüfung (Schrittzähler-Modell, s. `encounter.ts`). */
   encounterDangerThreshold?: number | undefined;
+  /**
+   * Anfangsbelegung der Hintergrund-Zustandsbits (F35-1). Der Interpreter kennt
+   * die Kacheln NICHT und darf sie nicht erraten — der Wirt reicht die fertige
+   * Karte herein (`berechneAnfangsBgStates` aus `@webmidgar/interpreter`, gefüttert
+   * aus `bundle.background.layers[].tiles`). Ohne Angabe bleibt `bgStates` leer,
+   * exakt wie vor dem engineCompat-Schritt.
+   */
+  initialBgStates?: Readonly<Record<number, number>> | undefined;
 }
 
 export interface FieldSessionSnapshot {
@@ -332,6 +340,7 @@ export class FieldSession {
       this.runtime = new FieldRuntime(this.script, {
         ...(options.seed !== undefined ? { seed: options.seed } : {}),
         ...(options.interpreterBudget !== undefined ? { budget: options.interpreterBudget } : {}),
+        ...(options.initialBgStates !== undefined ? { initialBgStates: options.initialBgStates } : {}),
       });
       // Ohne `start()` wird kein Slot-0-Request eingereiht — die Skripte
       // liefen sonst nie an und `tick()` wäre stillschweigend wirkungslos.

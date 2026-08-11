@@ -11,6 +11,38 @@ import type { ParseResult } from './hrc.js';
 
 const HEADER_LEN = 236;
 
+/**
+ * 🟢 INHALTS-SIGNATUR TEX — Accounting `0xEC + paletteSize·4 + w·h·bpp ==
+ * Dateilänge` ohne Parserlauf, für die Klassifikation von Archiveinträgen
+ * nach INHALT statt nach Dateiname (Battle-Modell-Lader K1/K2).
+ *
+ * Beachte: die Signatur ist BEWUSST unabhängig von `parseTex`s S7-Scope
+ * (8-bpp-palettiert). Ein Eintrag, der die Signatur trägt, aber nicht
+ * parsebar ist, IST eine Textur und muss seinen Listenplatz behalten
+ * (`null`), sonst verrutschen die `textureIndex`-Verweise der `.p`-Submeshes.
+ *
+ * Gemessen an battle.lgp (11.119 Einträge, 2026-08-11): **787** Treffer
+ * (586 Bühnen-, 201 Modellpräfixe). Kontrollhypothesen:
+ *  - Die Wache `w>0 && h>0 && bpp>0` ist NOTWENDIG: ohne sie trifft die
+ *    Signatur zusätzlich auf `jzaa`, `kaaa`, `lbaa` (je 244 B) zu, weil dort
+ *    `w·h = 0` ist und `236 + 2·4 == 244` zufällig aufgeht. Diese drei
+ *    Dateien sind in Wahrheit byteexakte SKELETTE (52 + 12·16 = 244) — die
+ *    naive Zählung „204 Modelltexturen" enthält genau diese drei Fehltreffer,
+ *    belegt sind **201**.
+ *  - Überschneidung mit `hasPSignature`: 0; mit der Skelettgrammatik: 0.
+ *  - Die 872 Einträge der `ab`/`da`-Familie: **0** Treffer.
+ */
+export function hasTexSignature(bytes: Uint8Array): boolean {
+  if (bytes.length < HEADER_LEN) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(0x3c, true);
+  const height = view.getUint32(0x40, true);
+  const paletteSize = view.getUint32(0x58, true);
+  const bytesPerPixel = view.getUint32(0x68, true);
+  if (width === 0 || height === 0 || bytesPerPixel === 0) return false;
+  return HEADER_LEN + paletteSize * 4 + width * height * bytesPerPixel === bytes.length;
+}
+
 export function parseTex(bytes: Uint8Array, asset: string): ParseResult<TextureSource> {
   const diagnostics: ModelDiagnostic[] = [];
   const fail = (code: 'E-TEX-SIZE' | 'E-TEX-FORMAT', message: string): ParseResult<TextureSource> => {

@@ -191,6 +191,53 @@ export function composeTriggersSection(spec: TriggersSpec): Uint8Array {
 
 // --- Script (Spans + Strings) ----------------------------------------------
 
+/**
+ * Ein AKAO-/Tutorial-Block hinter der Stringtabelle. Bewusst als
+ * **Zweitimplementierung** gebaut: der Kopf wird hier von Hand gelegt, damit
+ * ein Parserfehler nicht durch dieselbe Rechnung verdeckt wird.
+ */
+export type AkaoBlockSpec =
+  /** Vollständiges Magic `AKAO` + u16-ID + u16-Länge. */
+  | { kind: 'akao'; musicId: number; payload?: Uint8Array }
+  /**
+   * Belegter Originaldefekt: die ersten `missing` Magic-Bytes fehlen, der
+   * Restkopf rutscht entsprechend nach vorn (Makou §4.2).
+   */
+  | { kind: 'akao-truncated'; missing: 1 | 2; musicId: number; payload?: Uint8Array }
+  /** Tutorial-Bytecode statt Musik — erstes Byte im Opcode-Bereich 0x00…0x12. */
+  | { kind: 'tutorial'; bytes?: Uint8Array }
+  /** Weder Magic noch gültiger Tutorial-Opcode (erstes Byte > 0x12, < 0xFF). */
+  | { kind: 'unknown'; firstByte?: number }
+  /** Offset zeigt aus der Sektion heraus — erzeugt E-FLD-AKAOOFF. */
+  | { kind: 'dangling-offset'; offset?: number };
+
+function buildAkaoBlock(spec: AkaoBlockSpec): Uint8Array {
+  switch (spec.kind) {
+    case 'akao':
+    case 'akao-truncated': {
+      const missing = spec.kind === 'akao-truncated' ? spec.missing : 0;
+      const payload = spec.payload ?? new Uint8Array(16);
+      const head = new Uint8Array(8 - missing);
+      const magic = 'AKAO'.slice(missing);
+      putAscii(head, 0, magic);
+      const hv = new DataView(head.buffer);
+      hv.setUint16(4 - missing, spec.musicId, true);
+      hv.setUint16(6 - missing, payload.length, true);
+      const out = new Uint8Array(head.length + payload.length);
+      out.set(head, 0);
+      out.set(payload, head.length);
+      return out;
+    }
+    case 'tutorial':
+      // 0x00 PAUSE + u16, dann 0x11 FINISH — gültige Tutorial-Mini-VM.
+      return spec.bytes ?? Uint8Array.from([0x00, 0x10, 0x00, 0x11]);
+    case 'unknown':
+      return Uint8Array.from([spec.firstByte ?? 0x7b, 0, 0, 0]);
+    case 'dangling-offset':
+      return new Uint8Array(0);
+  }
+}
+
 export interface ScriptSpec {
   entities: {
     name: string;
@@ -199,18 +246,26 @@ export interface ScriptSpec {
   }[];
   scriptBytes: Uint8Array;
   strings?: Uint8Array[];
+  /** AKAO-/Tutorial-Blöcke; sie landen hinter der Stringtabelle (wie im Original). */
+  akao?: AkaoBlockSpec[];
 }
 
 export function composeScriptSection(spec: ScriptSpec): Uint8Array {
   const n = spec.entities.length;
+  const akaoSpecs = spec.akao ?? [];
+  const nAkao = akaoSpecs.length;
   const namesBase = SCR_HEADER_LEN;
-  const entryBase = namesBase + n * SCR_ENTITY_NAME_LEN; // nAkao = 0
+  const akaoTableBase = namesBase + n * SCR_ENTITY_NAME_LEN;
+  const entryBase = akaoTableBase + nAkao * 4;
   const dataStart = entryBase + n * SCR_ENTRIES_PER_ENTITY * 2;
   const stringTableOffset = dataStart + spec.scriptBytes.length;
   const strings = spec.strings ?? [];
   const stringOffsetsBase = 2 + strings.length * 2;
   const stringsLen = strings.reduce((sum, s) => sum + s.length, 0);
-  const total = stringTableOffset + stringOffsetsBase + stringsLen;
+  const akaoBase = stringTableOffset + stringOffsetsBase + stringsLen;
+
+  const blocks = akaoSpecs.map(buildAkaoBlock);
+  const total = akaoBase + blocks.reduce((sum, b) => sum + b.length, 0);
 
   const bytes = new Uint8Array(total);
   const view = new DataView(bytes.buffer);
@@ -218,7 +273,7 @@ export function composeScriptSection(spec: ScriptSpec): Uint8Array {
   view.setUint8(2, n);
   view.setUint8(3, 0); // nModels (S2: ungenutzt)
   view.setUint16(4, stringTableOffset, true);
-  view.setUint16(6, 0, true); // nAkao
+  view.setUint16(6, nAkao, true); // nAkao
   view.setUint16(8, 512, true); // scale (Platzhalter)
   putAscii(bytes, 16, 'fixture'); // creator[8]
   putAscii(bytes, 24, 'field'); // name[8]
@@ -238,6 +293,15 @@ export function composeScriptSection(spec: ScriptSpec): Uint8Array {
     view.setUint16(stringTableOffset + 2 + i * 2, cursor, true);
     bytes.set(s, stringTableOffset + cursor);
     cursor += s.length;
+  });
+
+  let blockAt = akaoBase;
+  blocks.forEach((block, i) => {
+    const s = akaoSpecs[i]!;
+    const offset = s.kind === 'dangling-offset' ? (s.offset ?? total + 4096) : blockAt;
+    view.setUint32(akaoTableBase + i * 4, offset, true);
+    bytes.set(block, blockAt);
+    blockAt += block.length;
   });
   return bytes;
 }

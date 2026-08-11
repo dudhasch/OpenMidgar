@@ -60,6 +60,11 @@ describe('Weltkarten-Mesh: Composer ↔ Parser', () => {
       attrHigh: 1,
       uv: [1, 2, 3, 4, 5, 6],
       textureWord: 0x1234,
+      // F11a: Zerlegung 0x1234 = 0b0001_0010_0011_0100 → id 0x034 = 52,
+      // locationId (Bits 9–13) = 9, Flagbit 15 nicht gesetzt.
+      textureId: 52,
+      locationId: 9,
+      textureFlag: false,
     });
     expect(mesh.triangles[1]!.walkClass).toBe(17);
     expect([...mesh.positions]).toEqual([0, 10, 0, 100, -20, 0, 0, 30, 100, 100, 40, 100]);

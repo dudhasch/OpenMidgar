@@ -264,7 +264,7 @@ export function stepInstruction(
       return { kind: 'continue' };
     }
     case OP.WINDOW:
-    case OP.WCLSE:
+    case OP.WMODE:
       // Dialog-Stub: Fensterverwaltung ist UI-Sache — hier nur Trace, kein Yield.
       ctx.ip = next;
       return { kind: 'continue' };
@@ -318,6 +318,48 @@ export function stepInstruction(
       ];
       a.triangle = srcValue(bp2 & 0xf, u16(8), true);
       // Ein Sprung an eine feste Position beendet einen laufenden Auftrag.
+      a.moveTarget = null;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.XYI: {
+      // Aufteilung wie XYZI, nur ohne Höhe: 2 Bankpaarbytes, i16 x/y,
+      // u16 Dreiecksindex (realdaten-belegt, Nachweis in `opcodes.ts`).
+      //
+      // 🟡 **Die Höhe bleibt unverändert.** Das ist die einzige Auslegung, die
+      // ohne Zusatzannahme auskommt: Der Opcode nennt kein z, also darf er
+      // keines setzen. War die Entität noch nie platziert, gibt es auch kein
+      // vorheriges z — dann steht dort 0, und der Walkmesh-Solver des Wirts
+      // korrigiert die Höhe über den Dreiecksindex, der hier mitgeliefert wird.
+      const bp1 = u8(0);
+      const bp2 = u8(1);
+      const a = actor(rt, ctx);
+      a.position = [
+        signed16(srcValue((bp1 >> 4) & 0xf, u16(2), true)),
+        signed16(srcValue(bp1 & 0xf, u16(4), true)),
+        a.position?.[2] ?? 0,
+      ];
+      a.triangle = srcValue((bp2 >> 4) & 0xf, u16(6), true);
+      a.moveTarget = null;
+      ctx.ip = next;
+      return { kind: 'continue' };
+    }
+    case OP.XYZ: {
+      // 2 Bankpaarbytes, i16 x/y/z — kein Dreiecksindex.
+      //
+      // 🟡 **Das Dreieck bleibt unverändert.** Dieselbe Begründung wie bei XYI:
+      // Der Opcode nennt keines. Ein Rücksetzen auf null würde dem Wirt die
+      // einzige Information nehmen, aus der er die Bodenhöhe bestimmt — und
+      // hier ist die Höhe ja explizit angegeben, also ist die Position auch
+      // ohne Dreiecksangabe vollständig.
+      const bp1 = u8(0);
+      const bp2 = u8(1);
+      const a = actor(rt, ctx);
+      a.position = [
+        signed16(srcValue((bp1 >> 4) & 0xf, u16(2), true)),
+        signed16(srcValue(bp1 & 0xf, u16(4), true)),
+        signed16(srcValue((bp2 >> 4) & 0xf, u16(6), true)),
+      ];
       a.moveTarget = null;
       ctx.ip = next;
       return { kind: 'continue' };

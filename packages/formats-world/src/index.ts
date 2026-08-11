@@ -8,6 +8,12 @@ export {
   WM0_ALTERNATIVE_CELLS,
   WM0_ALTERNATIVE_GROUPS,
   resolveBlockIndex,
+  TEXTURE_ID_MASK,
+  LOCATION_ID_SHIFT,
+  LOCATION_ID_MASK,
+  TEXTURE_FLAG_BIT,
+  decodeTextureWord,
+  type TextureWordParts,
   type WorldGrid,
   type WorldTriangle,
   type WorldMesh,
@@ -17,6 +23,22 @@ export {
   type WorldDiagnosticCode,
 } from './types.js';
 export { parseWorldMesh, parseWorldBlock, parseWorldMap, type ParseBlockResult } from './parse.js';
+export {
+  parseFieldTbl,
+  fieldTblEntry,
+  fieldTblEntryForOpcode,
+  fieldTblEntryWithFallback,
+  FIELD_TBL_RECORD_COUNT,
+  FIELD_TBL_ENTRY_BYTES,
+  FIELD_TBL_RECORD_BYTES,
+  FIELD_TBL_BYTES,
+  type FieldTable,
+  type FieldTblRecord,
+  type FieldEntryPoint,
+  type FieldTblScenario,
+  type FieldTblDiagnostic,
+  type FieldTblDiagnosticCode,
+} from './field-tbl.js';
 export {
   parseWorldEv,
   EV_FILE_BYTES,
@@ -32,6 +54,7 @@ export {
   WOP_WAIT_SET,
   WOP_WAIT,
   WOP_SET_WORLD_PROGRESS,
+  WOP_ENTER_FIELD,
   WORLD_PROGRESS_MAX,
   WORLD_CMD_POPS,
   WORLD_CMD_PUSHES,

@@ -31,7 +31,27 @@ export const OP = {
   MESSAGE: 0x40,
   ASK: 0x48,
   WINDOW: 0x50,
-  WCLSE: 0x52,
+  /**
+   * Fenstermodus setzen. Operanden: Fenster-ID, Modus, Sperrflag (Länge 3,
+   * realdaten-gemessen, n=423).
+   *
+   * ⚠️ **Namenskorrektur (2026-08-11):** Dieser Opcode hieß bei uns `WCLSE`.
+   * Das ist falsch: `WCLSE` liegt auf `0x54`. Die Referenz führt 0x52 mit
+   * Gesamtlänge 4 (⇒ Operand 3, deckt sich mit unserer gemessenen 3) und 0x54
+   * mit Gesamtlänge 2 (⇒ Operand 1, deckt sich mit `SKIP_OPERAND_LEN[0x54]`).
+   * Beide Längen waren also längst richtig — nur der Name hing am falschen
+   * Opcode, genau wie damals bei `DIR`/`TURA`. Da beide heute reine Stubs ohne
+   * Operandenauswertung sind, ändert die Korrektur **kein Verhalten**; sie
+   * verhindert, dass später die Fensterschließ-Semantik an den Modus-Opcode
+   * gehängt wird.
+   */
+  WMODE: 0x52,
+  /**
+   * Fenster schließen. **Nicht implementiert** — steht weiterhin auf dem
+   * Skip-Pfad (`SKIP_OPERAND_LEN[0x54] = 1`). Der Name ist hier nur
+   * festgehalten, damit die Zuordnung nicht erneut verrutscht.
+   */
+  WCLSE: 0x54,
   /**
    * Menü öffnen (S21). Operanden: Bankbyte, Auswahl, Parameter.
    *
@@ -93,6 +113,45 @@ export const OP = {
   ANIME1: 0xa3,
   VISI: 0xa4,
   XYZI: 0xa5,
+  /**
+   * Position + Walkmesh-Dreieck OHNE Höhe. Operanden (Länge 8): zwei
+   * Bankpaarbytes, i16 x, i16 y, u16 Dreiecksindex.
+   *
+   * ✅ **Länge und Aufteilung realdaten-belegt (2026-08-11)**, gegen drei
+   * unabhängige Gütefunktionen und mit Eichung an `XYZI`:
+   *
+   *  - *Struktursonde:* Bankadressierte Wertfelder müssen ein hohes Byte 0
+   *    tragen (Bänke sind 256 B), literale müssen in den Walkmesh-Bereich
+   *    fallen, der Dreiecksindex muss existieren. Trefferquote **90,6 %**
+   *    (29/32) gegen **15,6 %** bei um ein Byte verschobener Lesart. Eichung an
+   *    `XYZI` mit bekannter Aufteilung: 99,2 % gegen 0,0 % verschoben.
+   *  - *Grenzplausibilität:* Der Log-Quotient „sieht wie ein
+   *    Instruktionsanfang aus" liegt bei Länge 8 auf **2,37 ± 0,37** — über dem
+   *    Kontrollniveau echter Instruktionsanfänge (1,23) und weit über allen
+   *    zwölf Alternativen (nächstbeste 1,14). Die bisherige Länge 2 liegt bei
+   *    −1,50, also auf dem Niveau von Operandenbytes (−1,16).
+   *  - *Spannen-Abschluss:* **unverändert** 32/32 — diese Gütefunktion ist hier
+   *    blind, weil sich der Strom nach wenigen Instruktionen selbst
+   *    resynchronisiert. Das ist der Grund, warum O9 den Posten offenließ.
+   *
+   * **Folge der alten Länge 2:** Der Strom lief in die Operanden hinein; im
+   * häufigsten Muster (`a6 66 60 13 00 15 00 19 00`) wurde `13 00 15` als
+   * `JMPBL` mit Sprungweite 0x1500 ausgeführt — ein wilder Rücksprung.
+   */
+  XYI: 0xa6,
+  /**
+   * Position MIT Höhe, ohne Dreiecksindex. Operanden (Länge 8): zwei
+   * Bankpaarbytes, i16 x, i16 y, i16 z.
+   *
+   * ✅ **Länge und Aufteilung realdaten-belegt (2026-08-11)**: Struktursonde
+   * **88,1 %** (37/42) gegen **0,0 %** bei Versatz +1. Die Grenzplausibilität
+   * allein hätte hier in die Irre geführt — sie bevorzugt Länge 4 (2,34) knapp
+   * vor 8 (1,76). Entschieden hat die Kontrolle am dritten Wertfeld: Liegt es
+   * auf @7, trifft es zu 88,1 %; liegt es auf @9 (wie es bei Länge 4 der Fall
+   * wäre, weil dort schon die nächste Instruktion begänne), nur zu 45,2 %.
+   * Das dritte Wertfeld gehört also zur Instruktion, und die Länge ist ≥ 8.
+   */
+  XYZ: 0xa7,
   MOVE: 0xa8,
   /**
    * Blickrichtung setzen. Operanden: Bank-Byte + u8 Richtung.
@@ -188,11 +247,9 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.MESSAGE]: 2,
   [OP.ASK]: 6,
   [OP.WINDOW]: 9,
-  // O9: 1 → 3 gemessen (n=423). ⚠️ Die Referenz führt 0x52 unter einem anderen
-  // Namen als wir; da der Opcode ein reiner Stub ohne Operandenauswertung ist,
-  // betrifft das nur die Benennung, nicht das Verhalten. 🟡 zu prüfen, sobald
-  // die Fensterverwaltung Semantik bekommt (S21).
-  [OP.WCLSE]: 3,
+  // O9: 1 → 3 gemessen (n=423). Der Name ist seit 2026-08-11 korrigiert
+  // (0x52 = WMODE, nicht WCLSE); die Länge war davon nie betroffen.
+  [OP.WMODE]: 3,
   // Menü (S21) — beide Längen stammen aus derselben S12-Ableitung wie die
   // übrigen und ändern den Instruktionsstrom deshalb nicht.
   [OP.MENU]: 3,
@@ -238,6 +295,10 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
   [OP.ANIME1]: 2,
   [OP.VISI]: 1,
   [OP.XYZI]: 10,
+  // Bündelübernahme 2026-08-11 (Begründung in der OP-Tabelle oben):
+  // 0xA6 2 → 8, 0xA7 6 → 8. Beide waren vorher auf dem Skip-Pfad.
+  [OP.XYI]: 8,
+  [OP.XYZ]: 8,
   [OP.MOVE]: 5,
   [OP.DIR]: 2,
   [OP.MUSIC]: 1,
@@ -273,33 +334,93 @@ export const IMPL_OPERAND_LEN: Readonly<Record<number, number>> = {
  * dieselbe Güte, weil der Opcode zu selten vorkommt). Sie sind für den
  * Skip-Pfad brauchbar, taugen aber nicht als Beleg für die Recordstruktur —
  * wer einen dieser Opcodes implementiert, muss seine Länge einzeln prüfen.
+ *
+ * **S-DEADSKIP bereinigt (2026-08-11).** Bis dahin standen 17 Opcodes in
+ * BEIDEN Tabellen (0x02, 0x03, 0x49, 0x4A, 0x60, 0x70, 0x71, 0xA0–0xA5, 0xA8,
+ * 0xB3, 0xF0, 0xF1). Diese Einträge waren **unerreichbar**, weil `vm.ts`
+ * zuerst `IMPL_OPERAND_LEN` fragt. Alle 17 Paare stimmten überein — und genau
+ * das machte sie gefährlich: Ein toter Eintrag, der zufällig richtig ist, sieht
+ * aus wie eine Absicherung und ist in Wahrheit eine Sollbruchstelle, sobald
+ * jemand nur eine der beiden Tabellen pflegt. `interpreter.test.ts` erzwingt
+ * die Disjunktheit jetzt und prüft zugleich, dass beide Tabellen zusammen mit
+ * KAWAI alle 256 Opcodes abdecken.
  */
 export const SKIP_OPERAND_LEN: Readonly<Record<number, number>> = {
-  0x02: 2, 0x03: 2, 0x04: 3, 0x05: 1, 0x06: 2, 0x08: 1, 0x09: 0, 0x0a: 0,
+  0x04: 3, 0x05: 1, 0x06: 2, 0x08: 1, 0x09: 0, 0x0a: 0,
   0x0b: 0, 0x0c: 0, 0x0d: 0, 0x0e: 1, 0x0f: 0, 0x1a: 0, 0x1b: 0, 0x1c: 0,
+  // 🔴 **0x20 MINIGAME bleibt auf 0 — die Referenzlänge 10 ist WIDERLEGT.**
+  // Vorkommen: **134-mal in 78 Fields**. Die Referenz führt Gesamtlänge 11
+  // (⇒ Operand 10). Dagegen steht eine harte, statistikfreie Schranke: In vier
+  // Spannen (Field `ancnt1`) liegt der Opcode nur **6 Byte** vor dem
+  // Spannenende, in vier weiteren 8 Byte. Zehn Operandenbytes passen dort
+  // nicht hinein — die Länge kann höchstens 5 sein. Passend dazu verliert der
+  // Spannen-Abschluss auf der betroffenen Teilmenge (110/118 mit Länge 0 gegen
+  // 104/118 mit Länge 10), und die Grenzplausibilität bleibt für JEDE der 13
+  // geprüften Längen unter dem Kontrollniveau (Bestwert 0,14 ± 0,14 bei
+  // Länge 8; Instruktionsanfänge liegen bei 1,23).
+  //
+  // Damit ist der Posten **nicht** stillschweigend zu übernehmen. Er bleibt
+  // ein offener Befund: Entweder ist 0x20 in diesem Bestand nicht durchgängig
+  // MINIGAME, oder die Instruktion ist variabel lang. Beides ist mit dem
+  // Field-Bytecode allein nicht zu entscheiden. **Wirkung heute:** Steht die
+  // Länge zu niedrig, führt die VM Operandenbytes als Instruktionen aus; steht
+  // sie zu hoch, überspringt sie echte. Solange keine der beiden Varianten
+  // belegt ist, bleibt der gemessen bessere Ist-Wert stehen.
   0x1d: 4, 0x1e: 0, 0x1f: 0, 0x20: 0, 0x21: 0, 0x22: 1, 0x23: 4, 0x25: 8,
+  // 🔴 0x27 BGMOVIE: 36 Vorkommen in 13 Fields. Referenz 1, Ist 0. Der
+  // Spannen-Abschluss ist indifferent (18/18 für 0, 1 und 2), die
+  // Grenzplausibilität stellt die Referenz SCHLECHTER als den Ist-Wert
+  // (−1,56 gegen −0,43; Bestwert 0,27 ± 0,54 bei Länge 2, also Rauschen).
+  // Zusätzlich gilt die harte Schranke Länge ≤ 3 (kleinster Abstand zum
+  // Spannenende 4). Nicht übernommen.
   0x26: 1, 0x27: 0, 0x29: 0, 0x2a: 1, 0x2b: 1, 0x2c: 0, 0x2d: 6, 0x2e: 1,
   0x2f: 8, 0x30: 3, 0x31: 2, 0x32: 1, 0x33: 1, 0x34: 1, 0x35: 3, 0x36: 4,
   0x37: 7, 0x38: 0, 0x39: 0, 0x3a: 4, 0x3b: 4, 0x3c: 0, 0x3d: 0, 0x3e: 0,
   0x3f: 0, 0x41: 1, 0x42: 0, 0x43: 1, 0x44: 0, 0x45: 0, 0x46: 0, 0x47: 4,
-  0x49: 3, 0x4a: 1, 0x4b: 0, 0x4c: 7, 0x4d: 1, 0x4e: 14, 0x4f: 10, 0x51: 3,
+  0x4b: 0, 0x4c: 7, 0x4d: 1, 0x4e: 14, 0x4f: 10, 0x51: 3,
   0x53: 1, 0x54: 1, 0x55: 1, 0x56: 3, 0x57: 8, 0x58: 4, 0x59: 2, 0x5a: 1,
-  0x5b: 3, 0x5c: 5, 0x5d: 0, 0x5e: 7, 0x5f: 1, 0x60: 9, 0x61: 10, 0x62: 4,
+  0x5b: 3, 0x5c: 5, 0x5d: 0, 0x5e: 7, 0x5f: 1, 0x61: 10, 0x62: 4,
   0x63: 5, 0x64: 5, 0x65: 0, 0x66: 8, 0x67: 0, 0x68: 8, 0x69: 6, 0x6a: 6,
-  0x6b: 8, 0x6c: 0, 0x6d: 3, 0x6e: 2, 0x6f: 9, 0x70: 3, 0x71: 1, 0x72: 1,
+  0x6b: 8, 0x6c: 0, 0x6d: 3, 0x6e: 2, 0x6f: 9, 0x72: 1,
   0x73: 3, 0x74: 3, 0x75: 7, 0x7e: 1, 0x7f: 2, 0x9a: 1, 0x9b: 0, 0x9c: 1,
-  0x9d: 1, 0x9e: 0, 0x9f: 0, 0xa0: 1, 0xa1: 1, 0xa2: 2, 0xa3: 2, 0xa4: 1,
-  0xa5: 10, 0xa6: 2, 0xa7: 6, 0xa8: 5, 0xa9: 5, 0xaa: 1, 0xab: 3, 0xac: 0,
-  0xad: 5, 0xae: 2, 0xaf: 2, 0xb0: 4, 0xb1: 4, 0xb2: 3, 0xb3: 2, 0xb4: 5,
+  0x9d: 1, 0x9e: 0, 0x9f: 0,
+  0xa9: 5, 0xaa: 1, 0xab: 3, 0xac: 0,
+  0xad: 5, 0xae: 2, 0xaf: 2, 0xb0: 4, 0xb1: 4, 0xb2: 3, 0xb4: 5,
   0xb5: 3, 0xb6: 1, 0xb7: 2, 0xb8: 4, 0xb9: 3, 0xba: 2, 0xbb: 4, 0xbc: 4,
   0xbd: 3, 0xbe: 3, 0xbf: 1, 0xc0: 9, 0xc1: 7, 0xc2: 14, 0xc3: 10, 0xc4: 0,
   0xc5: 2, 0xc6: 2, 0xc7: 1, 0xc8: 1, 0xc9: 1, 0xca: 3, 0xcb: 2, 0xcc: 0,
   0xcd: 2, 0xce: 0, 0xcf: 0, 0xd0: 13, 0xd1: 1, 0xd2: 1, 0xd3: 1, 0xd4: 0,
   0xd5: 1, 0xd6: 1, 0xd7: 2, 0xd8: 2, 0xd9: 2, 0xda: 0, 0xdb: 2, 0xdc: 3,
   // 0xe0/0xe1/0xe4 sind seit F22/BGON implementiert (IMPL_OPERAND_LEN).
+  //
+  // 🔴 **0xE2 BGROL / 0xE3 BGROL2 bleiben bewusst auf dem Skip-Pfad.** Die
+  // Referenz führt für beide Operandenlänge 2 (banks, param). Gemessen
+  // (2026-08-11, 702 Fields): 0xE2 kommt **13-mal in 6 Fields** vor, 0xE3
+  // **5-mal in 2 Fields**. Keine der drei Gütefunktionen belegt eine Länge:
+  // Der Spannen-Abschluss ist indifferent (9/9 bzw. 2/2 für jede geprüfte
+  // Länge), die Grenzplausibilität liefert bei n=9 einen Bestwert von
+  // 0,83 ± 0,68 — Rauschen —, und die Struktursonde widerlegt die
+  // Referenzaufteilung sogar: Das Parameterbyte an @+2 trifft nur in **11,1 %**
+  // (1/9) einen Parameter, den dasselbe Field per BGON/BGOFF schaltet, gegen
+  // ein Kontrollniveau von **22,2 %** bei den BGON-Parametern eines FREMDEN
+  // Fields. Die Variante @+1 trifft zu 11,1 %, davon 7 von 9 mit dem Wert 0
+  // (Nullwerte bestehen den Test trivial). Zum Vergleich das Niveau eines
+  // belegten Opcodes: BGON trifft an derselben Stelle **98,0 %** (1963/2003)
+  // gegen 46,7 % fremd.
+  //
+  // Damit ist BGROL **nicht implementierbar**: Ohne belegte Operandenlage wäre
+  // jede Rotationssemantik geraten und würde die BGON-Maske derselben Gruppe
+  // beschädigen — schlimmer als der heutige Übersprung. Was fehlt, ist ein
+  // Bestand mit mehr Vorkommen, nicht eine weitere Auswertung dieses hier.
   0xdd: 0, 0xde: 0, 0xdf: 0, 0xe2: 1, 0xe3: 2,
   0xe5: 4, 0xe6: 4, 0xe7: 4, 0xe8: 4, 0xe9: 9, 0xea: 14, 0xeb: 1, 0xec: 3,
-  0xed: 3, 0xee: 0, 0xef: 0, 0xf0: 1, 0xf1: 4, 0xf2: 6, 0xf3: 3, 0xf4: 3,
+  0xed: 3, 0xee: 0, 0xef: 0, 0xf2: 6, 0xf3: 3, 0xf4: 3,
+  // 🔴 0xFB MVCAM: 55 Vorkommen in 23 Fields. Referenz 1, Ist 0. Die Referenz
+  // schneidet auf der Grenzplausibilität zwar besser ab als der Ist-Wert
+  // (−0,46 gegen −1,42), bleibt aber weit unter dem Kontrollniveau echter
+  // Instruktionsanfänge (1,23) — kein Kandidat erreicht es (Bestwert −0,11 bei
+  // Länge 3). Der Spannen-Abschluss verschlechtert sich sogar (31/38 gegen
+  // 34/38). Nicht übernommen; harte Schranke Länge ≤ 3.
   0xf5: 1, 0xf6: 1, 0xf7: 8, 0xf8: 1, 0xf9: 0, 0xfa: 2, 0xfb: 0, 0xfc: 1,
   0xfd: 0, 0xfe: 3, 0xff: 1,
 };

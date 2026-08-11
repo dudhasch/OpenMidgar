@@ -17,6 +17,74 @@ const HUNDRED_LEN = 100;
 const GROUP_LEN = 56;
 const BBOX_LEN = 28;
 
+/** Kopfzähler des `.p`-Layouts — Grundlage von Size-Accounting UND Parser. */
+function pCounts(view: DataView): {
+  nVertices: number;
+  nNormals: number;
+  nUnknown1: number;
+  nTexCs: number;
+  nVertexColors: number;
+  nEdges: number;
+  nPolys: number;
+  nHundreds: number;
+  nGroups: number;
+  nBBoxes: number;
+} {
+  return {
+    nVertices: view.getUint32(0x0c, true),
+    nNormals: view.getUint32(0x10, true),
+    nUnknown1: view.getUint32(0x14, true),
+    nTexCs: view.getUint32(0x18, true),
+    nVertexColors: view.getUint32(0x1c, true),
+    nEdges: view.getUint32(0x20, true),
+    nPolys: view.getUint32(0x24, true),
+    nHundreds: view.getUint32(0x30, true),
+    nGroups: view.getUint32(0x34, true),
+    nBBoxes: view.getUint32(0x38, true),
+  };
+}
+
+/**
+ * 🟢 INHALTS-SIGNATUR `.p` — das Size-Accounting des Kopfes ohne den teuren
+ * Parserlauf. Damit lassen sich Archiveinträge nach INHALT klassifizieren,
+ * statt Dateinamen zu raten (Battle-Modell-Lader K1/K2).
+ *
+ * Gemessen an battle.lgp (11.119 Einträge, 2026-08-11): trifft auf **8979**
+ * Einträge zu. Kontrollhypothesen, alle bestanden:
+ *  - Die 872 Einträge der `ab`/`da`-Familie (Animationsformate, echte
+ *    Nicht-Geometrie) treffen die Signatur **0-mal**.
+ *  - Überschneidung mit `hasTexSignature`: **0**, mit der Skelettgrammatik
+ *    (52+12·n): **0** — die drei Signaturen sind am Bestand disjunkt.
+ *  - Die Zusatzwache `nVertices>0 && nGroups>0` schließt den trivialen
+ *    Nulltreffer (128 genullte Bytes) aus und ändert am Bestand nichts
+ *    (8979 mit und ohne Wache; kleinste echte `.p`-Datei 436 B).
+ */
+export function hasPSignature(bytes: Uint8Array): boolean {
+  if (bytes.length < HEADER_LEN) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const c = pCounts(view);
+  if (c.nVertices === 0 || c.nGroups === 0) return false;
+  return expectedPLength(c) === bytes.length;
+}
+
+function expectedPLength(c: ReturnType<typeof pCounts>): number {
+  return (
+    HEADER_LEN +
+    c.nVertices * 12 +
+    c.nNormals * 12 +
+    c.nUnknown1 * 12 +
+    c.nTexCs * 8 +
+    c.nVertexColors * 4 +
+    c.nPolys * 4 + // Polygonfarben
+    c.nEdges * 4 +
+    c.nPolys * POLY_LEN +
+    c.nHundreds * HUNDRED_LEN +
+    c.nGroups * GROUP_LEN +
+    c.nBBoxes * BBOX_LEN +
+    c.nVertices * 4 // Normalindex-Tabelle
+  );
+}
+
 export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource> {
   const diagnostics: ModelDiagnostic[] = [];
   const fail = (message: string): ParseResult<MeshSource> => {
@@ -26,16 +94,19 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
   if (bytes.length < HEADER_LEN) return fail(`Datei kürzer als Header (${bytes.length} B)`);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
-  const nVertices = view.getUint32(0x0c, true);
-  const nNormals = view.getUint32(0x10, true);
-  const nUnknown1 = view.getUint32(0x14, true);
-  const nTexCs = view.getUint32(0x18, true);
-  const nVertexColors = view.getUint32(0x1c, true);
-  const nEdges = view.getUint32(0x20, true);
-  const nPolys = view.getUint32(0x24, true);
-  const nHundreds = view.getUint32(0x30, true);
-  const nGroups = view.getUint32(0x34, true);
-  const nBBoxes = view.getUint32(0x38, true);
+  const counts = pCounts(view);
+  const {
+    nVertices,
+    nNormals,
+    nUnknown1,
+    nTexCs,
+    nVertexColors,
+    nEdges,
+    nPolys,
+    nHundreds,
+    nGroups,
+    nBBoxes,
+  } = counts;
 
   const offVertices = HEADER_LEN;
   const offNormals = offVertices + nVertices * 12;
@@ -47,9 +118,7 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
   const offPolys = offEdges + nEdges * 4;
   const offHundreds = offPolys + nPolys * POLY_LEN;
   const offGroups = offHundreds + nHundreds * HUNDRED_LEN;
-  const offBBoxes = offGroups + nGroups * GROUP_LEN;
-  const offNormalIndex = offBBoxes + nBBoxes * BBOX_LEN;
-  const expected = offNormalIndex + nVertices * 4;
+  const expected = expectedPLength(counts);
   if (expected !== bytes.length) {
     return fail(`Size-Accounting: erwartet ${expected} B, tatsächlich ${bytes.length} B`);
   }

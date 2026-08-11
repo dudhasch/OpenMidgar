@@ -72,6 +72,29 @@ export function resolveBlockIndex(cell: number, grid: WorldGrid, worldProgress =
   return cell;
 }
 
+/**
+ * Zerlegung des Dreiecks-Texturworts. 🟢 Bitbreiten realdaten-belegt, s. die
+ * Feldkommentare in `WorldTriangle`.
+ */
+export const TEXTURE_ID_MASK = 0x1ff;
+export const LOCATION_ID_SHIFT = 9;
+export const LOCATION_ID_MASK = 0x1f;
+export const TEXTURE_FLAG_BIT = 0x8000;
+
+export interface TextureWordParts {
+  textureId: number;
+  locationId: number;
+  textureFlag: boolean;
+}
+
+export function decodeTextureWord(word: number): TextureWordParts {
+  return {
+    textureId: word & TEXTURE_ID_MASK,
+    locationId: (word >> LOCATION_ID_SHIFT) & LOCATION_ID_MASK,
+    textureFlag: (word & TEXTURE_FLAG_BIT) !== 0,
+  };
+}
+
 export interface WorldTriangle {
   /** Vertexindizes (u8 — ein Mesh trägt höchstens 256 Vertices). */
   v0: number;
@@ -81,10 +104,40 @@ export interface WorldTriangle {
   walkClass: number;
   /** Obere 3 Bits von Byte 3 — 🟡. */
   attrHigh: number;
-  /** 6 UV-Bytes (Deutung 🟡, roh konserviert). */
+  /**
+   * 6 UV-Bytes je Dreieck (u0,v0,u1,v1,u2,v2). 🟢 Die Bytes sind
+   * VRAM-SEITEN-ABSOLUT, nicht texturlokal — die Umrechnung braucht
+   * `uOffset`/`vOffset` der Textur (s. `worldUvToLocal` in `render-world`).
+   * Roh konserviert, weil die Umrechnung Texturmetadaten braucht, die der
+   * Parser nicht hat.
+   */
   uv: [number, number, number, number, number, number];
-  /** u16 Texturwort (Deutung 🟡, roh konserviert). */
+  /** u16 Texturwort, roh konserviert (Quelle der drei Felder darunter). */
   textureWord: number;
+  /**
+   * 🟢 `textureWord & 0x1FF`. REALDATEN-BELEGT (world-fieldtbl-probe,
+   * 2026-08-11): die belegten Werte sind LÜCKENLOS 0…281 auf WM0 (282 Werte,
+   * 157 791 Dreiecke), 0…7 auf WM2, 0…3 auf WM3. Lückenlosigkeit ab 0 ist
+   * die Kontrolle: eine falsche Bitbreite erzeugt Löcher oder Ausreißer.
+   */
+  textureId: number;
+  /**
+   * 🟢 `(textureWord >> 9) & 0x1F`. Die 5-Bit-Lesart ist gegen die 7-Bit-
+   * Lesart ENTSCHIEDEN: Bit 14 ist im gesamten Bestand nie gesetzt (0 von
+   * 176 026 Dreiecken), Bit 15 dagegen in 1004 WM0-Dreiecken — und die
+   * 5-Bit-Werte, die mit Bit 15 auftreten, sind eine ECHTE TEILMENGE der
+   * ohne Bit 15 auftretenden (7 von 18). Ein 7-Bit-Wertfeld müsste ein
+   * zusammenhängendes Spektrum zeigen; stattdessen liegen die „Werte" 64…76
+   * exakt auf 64 + bekanntem 5-Bit-Wert. Bit 15 ist also ein FLAG.
+   * Semantik der Zahl (Region/Ort) bleibt 🟡.
+   */
+  locationId: number;
+  /**
+   * 🟡 Bit 15 des Texturworts. Nur auf WM0 belegt (1004 Dreiecke), auf WM2/WM3
+   * nie. Die Referenz nennt es „Chocobo-Spuren"; die Bedeutung ist bei uns
+   * NICHT gemessen — konserviert als Flag, nicht als Behauptung.
+   */
+  textureFlag: boolean;
 }
 
 export interface WorldMesh {

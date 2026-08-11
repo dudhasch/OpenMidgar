@@ -4,7 +4,11 @@ import {
   WORLD_MESH_EXTENT,
   WORLD_PROGRESS_MAX,
   WOP_SET_WORLD_PROGRESS,
+  WOP_ENTER_FIELD,
+  fieldTblEntryForOpcode,
   resolveBlockIndex,
+  type FieldTable,
+  type FieldTblScenario,
 } from '@webmidgar/formats-world';
 import { sampleGround } from '@webmidgar/render-world';
 import {
@@ -70,6 +74,11 @@ export interface WorldSessionOptions {
   encounters?: Partial<EncounterConfig>;
   locations?: WorldLocation[];
   scriptBudget?: number;
+  /**
+   * `field.tbl` aus `world_us.lgp` (F06). Fehlt sie, bleibt 0x318 ein
+   * durchgereichtes `script-command` — kein erfundenes Ziel.
+   */
+  fieldTable?: FieldTable | null;
 }
 
 export interface WorldTickInput {
@@ -83,8 +92,36 @@ export interface WorldTickInput {
 
 export const NEUTRAL_WORLD_INPUT: WorldTickInput = { turn: 0, throttle: 0, action: false, switchVehicle: false };
 
+/** Woher der Übergang kommt: Ortsmarke des Wirts oder Skript-Opcode 0x318. */
+export type WorldTransitionSource = 'location' | 'script';
+
+/**
+ * Ankunftsangaben aus `field.tbl` (F06). 🟢 realdaten-belegt: (x, y) liegt im
+ * Walkmesh-Dreieck `triangle` des Zielfelds (65/65, Kontrolle 0/65).
+ * `direction` ist eine 256er-Richtung, ihr Nullpunkt im Field-Raum ist 🔴.
+ */
+export interface WorldArrival {
+  x: number;
+  y: number;
+  triangle: number;
+  direction: number;
+}
+
 export type WorldHostRequest =
-  | { kind: 'world-transition'; locationIndex: number; destMaplistIndex: number }
+  | {
+      kind: 'world-transition';
+      source: WorldTransitionSource;
+      /** Nur `source: 'location'`: Index in `options.locations`. */
+      locationIndex: number | null;
+      /** Nur `source: 'script'`: 1-basierte `field.tbl`-Datensatznummer. */
+      fieldTblRecord: number | null;
+      /** Nur `source: 'script'`: 0 = default, 1 = alternative. */
+      scenario: FieldTblScenario | null;
+      /** Ziel als maplist-Index — bei 'script' der `fieldId` aus `field.tbl`. */
+      destMaplistIndex: number;
+      /** Nur `source: 'script'`: Ankunftspunkt im Zielfeld. */
+      arrival: WorldArrival | null;
+    }
   | { kind: 'encounter-check'; roll: number; walkClass: number }
   /**
    * Ein vom Script ausgeführtes Kommando. Die STELLIGKEIT ist gemessen, die
@@ -154,6 +191,7 @@ export class WorldSession {
   readonly vehicles: VehicleSpec[];
   readonly locations: WorldLocation[];
   readonly vm: WorldScriptVM | null;
+  readonly fieldTable: FieldTable | null;
   private readonly encounters: EncounterConfig;
   private readonly scriptBudget: number;
 
@@ -186,6 +224,7 @@ export class WorldSession {
     this.vehicles = options.vehicles ?? defaultVehicles();
     this.locations = options.locations ?? [];
     this.vm = options.ev ? new WorldScriptVM(options.ev) : null;
+    this.fieldTable = options.fieldTable ?? null;
     this.scriptBudget = options.scriptBudget ?? 10_000;
     this.encounters = {
       enabled: false,
@@ -309,8 +348,10 @@ export class WorldSession {
     }
 
     // Ortsmarken: Aktion (steigende Flanke) innerhalb des Radius ⇒ Übergang
-    // als HostRequest-Daten. Die Marken selbst sind Wirtsdaten (🔴 die
-    // Original-Quelle der Einstiegspunkte ist offen, s. FINDINGS).
+    // als HostRequest-Daten. Die Marken sind WIRTSDATEN und bleiben es —
+    // sie sind der Fußgängerpfad ohne Skript. Die ORIGINALE Quelle der
+    // Einstiegspunkte ist seit F06 bekannt (`field.tbl`) und läuft über den
+    // Opcode 0x318, s. `verarbeiteKommandos`.
     const actionPressed = input.action && !this.prevAction;
     this.prevAction = input.action;
     if (actionPressed) {
@@ -319,7 +360,15 @@ export class WorldSession {
         const dx = this.x - loc.x;
         const dz = this.z - loc.z;
         if (dx * dx + dz * dz <= loc.radius * loc.radius) {
-          requests.push({ kind: 'world-transition', locationIndex: i, destMaplistIndex: loc.destMaplistIndex });
+          requests.push({
+            kind: 'world-transition',
+            source: 'location',
+            locationIndex: i,
+            fieldTblRecord: null,
+            scenario: null,
+            destMaplistIndex: loc.destMaplistIndex,
+            arrival: null,
+          });
           break;
         }
       }
@@ -347,6 +396,28 @@ export class WorldSession {
     for (const c of commands) {
       if (c.opcode === WOP_SET_WORLD_PROGRESS) {
         this.worldProgress = Math.max(0, Math.min(WORLD_PROGRESS_MAX, c.args[0] ?? 0));
+      }
+      if (c.opcode === WOP_ENTER_FIELD && this.fieldTable) {
+        // F06: 0x318 ist auf Semantik gehoben. args[0] = 1-basierte
+        // field.tbl-Datensatznummer, args[1] = Szenario — beides gemessen
+        // (s. `field-tbl.ts`). Löst der Datensatz auf, entsteht der
+        // world-transition-Request MIT Ziel und Ankunftspunkt; sonst bleibt
+        // es beim rohen script-command (keine Erfindung).
+        const scenario: FieldTblScenario = (c.args[1] ?? 0) === 1 ? 1 : 0;
+        const record = c.args[0] ?? 0;
+        const entry = fieldTblEntryForOpcode(this.fieldTable, record, scenario);
+        if (entry) {
+          requests.push({
+            kind: 'world-transition',
+            source: 'script',
+            locationIndex: null,
+            fieldTblRecord: record,
+            scenario,
+            destMaplistIndex: entry.fieldId,
+            arrival: { x: entry.x, y: entry.y, triangle: entry.triangle, direction: entry.direction },
+          });
+          continue;
+        }
       }
       requests.push({ kind: 'script-command', opcode: c.opcode, args: c.args });
     }

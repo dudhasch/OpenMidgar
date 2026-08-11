@@ -1,4 +1,5 @@
 import type { CharacterRecord, Savemap } from '@webmidgar/formats-save';
+import type { InventoryNameLookup } from '@webmidgar/formats-kernel';
 import { barFill, formatDuration, formatNumber, formatRatio } from './format.js';
 
 /**
@@ -19,8 +20,17 @@ import { barFill, formatDuration, formatNumber, formatRatio } from './format.js'
 /** Quellen des Menüs. Alles, was es braucht, kommt als Daten herein. */
 export interface MenuData {
   savemap: Savemap;
-  /** Gegenstandsname zu einer Kennung; `null`, wenn unbekannt (S13-Kernel). */
-  itemName: (id: number) => string | null;
+  /**
+   * Inventarname zu einer Kennung; `null`, wenn unbekannt.
+   *
+   * ⚠️ **Muss aus `inventoryNameLookup` (S13-Kernel) stammen**, nicht aus einer
+   * einzelnen Namensliste. Die Inventarkennung ist bereichskodiert — 0…127
+   * Gegenstände, 128…255 Waffen, 256…287 Rüstungen, 288…319 Accessoires —, und
+   * eine Nachschlagefunktion über nur eine Liste liefert für alles ab 128
+   * entweder nichts oder, schlimmer, den Namen eines fremden Bereichs. Genau
+   * das war F18/F24-A: 65 von 79 Inventarzeilen trugen Zaubernamen.
+   */
+  itemName: InventoryNameLookup;
   /** Anzeigename des aktuellen Ortes; `null`, wenn nicht bestimmbar. */
   locationName: string | null;
 }
@@ -116,9 +126,13 @@ export const ITEMS_PER_PAGE = 10;
 
 /**
  * Gegenstandsliste, seitenweise. Eine Kennung ohne Namen wird als solche
- * angezeigt (`?<Kennung>`) und **nicht ausgelassen**: Im Bestand lösen 2 von 37
- * vorkommenden Kennungen nicht auf, und eine stillschweigend verkürzte Liste
- * würde diese Lücke verstecken, statt sie meldbar zu machen.
+ * angezeigt (`?<Kennung>`) und **nicht ausgelassen**: Eine stillschweigend
+ * verkürzte Liste würde die Lücke verstecken, statt sie meldbar zu machen.
+ *
+ * ✅ Realdaten nach F18/F24-A: Über die vier Spielstände der Installation
+ * (79 Inventarzeilen) löst mit `inventoryNameLookup` **jede** Zeile auf —
+ * 0 Platzhalter. Unter der alten einlistigen Lesung blieben 14 Platzhalter,
+ * und die übrigen 65 Zeilen trugen den falschen Namen.
  */
 export function buildItemsView(data: MenuData, page = 0): MenuViewModel {
   const entries = data.savemap.inventory;

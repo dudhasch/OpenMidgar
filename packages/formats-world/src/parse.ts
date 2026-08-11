@@ -1,5 +1,6 @@
 import { decompressLzs } from '@webmidgar/formats-field';
 import {
+  decodeTextureWord,
   WORLD_BLOCK_BYTES,
   WORLD_MESHES_PER_BLOCK,
   type WorldBlock,
@@ -33,6 +34,7 @@ export function parseWorldMesh(bytes: Uint8Array): WorldMesh {
   let o = 4;
   for (let t = 0; t < triCount; t++, o += 12) {
     const attr = bytes[o + 3]!;
+    const textureWord = view.getUint16(o + 10, true);
     triangles[t] = {
       v0: bytes[o]!,
       v1: bytes[o + 1]!,
@@ -40,7 +42,8 @@ export function parseWorldMesh(bytes: Uint8Array): WorldMesh {
       walkClass: attr & 0x1f,
       attrHigh: attr >> 5,
       uv: [bytes[o + 4]!, bytes[o + 5]!, bytes[o + 6]!, bytes[o + 7]!, bytes[o + 8]!, bytes[o + 9]!],
-      textureWord: view.getUint16(o + 10, true),
+      textureWord,
+      ...decodeTextureWord(textureWord),
     };
     if (triangles[t]!.v0 >= vertCount || triangles[t]!.v1 >= vertCount || triangles[t]!.v2 >= vertCount) {
       throw new Error(`Dreieck ${t} referenziert Vertex außerhalb (${vertCount})`);

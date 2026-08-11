@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { composeKernelContainer, composeTextSection } from '@webmidgar/fixture-gen';
+import { composeKernelContainer, composeRecordSection, composeTextSection } from '@webmidgar/fixture-gen';
 import { parseKernelContainer } from './container.js';
+import {
+  decodeRestrictions,
+  readAccessoryRecords,
+  readArmorRecords,
+  readItemRecords,
+  readMateriaRecords,
+  readWeaponRecords,
+  resolveKernelDataSections,
+} from './data-records.js';
 import {
   DEFAULT_ASCII_OFFSET,
   buildAsciiTable,
@@ -174,5 +183,146 @@ describe('Textdekoder', () => {
     expect(decoded.unknownBytes).toBe(1);
     expect(decoded.terminated).toBe(true);
     expect(decoded.text).toBe('A�');
+  });
+});
+
+// --- F18/F24-A Zusatz: typisierte Recordtabellen ----------------------------
+
+/**
+ * Fixture mit dem Sektionslauf der fünf Datentabellen. Sektion 1 trägt
+ * absichtlich dieselbe Länge wie die Gegenstandstabelle (3584 B) — genau die
+ * Mehrdeutigkeit, an der eine Zuordnung „nach Einzellänge" scheitern würde.
+ */
+async function datenFixture(bruch?: { armorRecords?: number }): Promise<Awaited<ReturnType<typeof parseKernelContainer>>> {
+  const bytes = await composeKernelContainer([
+    { data: composeRecordSection(32, 8) },
+    { data: composeRecordSection(256, 14) }, // 3584 B — Doppelgänger der Item-Tabelle
+    { data: composeRecordSection(997, 4) },
+    { data: composeRecordSection(719, 4) },
+    {
+      data: composeRecordSection(128, 28, (i, _r, v) => {
+        v.setUint16(0x08, 1000 + i, true);
+        v.setUint16(0x0a, 0xfffc, true); // Verbotsmaske ⇒ verkaufbar + im Kampf
+        v.setUint8(0x0f, i & 0x7f);
+        v.setUint32(0x14, 0x0000_0021, true);
+        v.setUint16(0x18, 0x0004, true);
+      }),
+    },
+    {
+      data: composeRecordSection(128, 44, (i, _r, v) => {
+        v.setUint8(0x04, (i * 3) & 0xff);
+        v.setUint8(0x06, i % 4);
+        v.setUint16(0x0e, 0x01ff, true);
+        for (let s = 0; s < 8; s++) v.setUint8(0x1c + s, s);
+        v.setUint16(0x2a, 0xfff6, true);
+      }),
+    },
+    {
+      data: composeRecordSection(bruch?.armorRecords ?? 32, 36, (i, _r, v) => {
+        v.setUint8(0x02, 10 + i);
+        v.setUint16(0x20, 0xfffe, true); // nur verkaufbar
+      }),
+    },
+    {
+      data: composeRecordSection(32, 16, (i, _r, v) => {
+        v.setUint8(0x00, i & 0x07);
+        v.setUint16(0x0c, 0x01ff, true);
+        v.setUint16(0x0e, 0xffff, true); // gar nichts erlaubt
+      }),
+    },
+    {
+      data: composeRecordSection(96, 20, (i, _r, v) => {
+        [0, 2, 4, 6].forEach((o, k) => v.setUint16(o, (k + 1) * 100 + i, true));
+        v.setUint8(0x0c, i % 16);
+        v.setUint8(0x0d, 0xa0 | (i % 16));
+        v.setUint16(0x0e, 0xffff, true);
+      }),
+    },
+  ]);
+  return parseKernelContainer(bytes, 'kernel.bin');
+}
+
+describe('F18/F24-A Kernel-Datentabellen: Accounting', () => {
+  it('findet den Sektionslauf über Recordzahl × Größe == Sektionslänge — je Sektion einzeln nachgerechnet', async () => {
+    const container = (await datenFixture())!;
+    const sections = resolveKernelDataSections(container);
+    expect(sections.reason).toBeNull();
+
+    const erwartet = [
+      { role: 'item' as const, sectionIndex: 4, recordCount: 128, recordSize: 28, length: 3584 },
+      { role: 'weapon' as const, sectionIndex: 5, recordCount: 128, recordSize: 44, length: 5632 },
+      { role: 'armor' as const, sectionIndex: 6, recordCount: 32, recordSize: 36, length: 1152 },
+      { role: 'accessory' as const, sectionIndex: 7, recordCount: 32, recordSize: 16, length: 512 },
+      { role: 'materia' as const, sectionIndex: 8, recordCount: 96, recordSize: 20, length: 1920 },
+    ];
+    for (const e of erwartet) {
+      expect(sections[e.role]).toEqual(e);
+      // Das Accounting selbst: Recordzahl × Größe == tatsächliche Sektionslänge.
+      expect(e.recordCount * e.recordSize).toBe(container.sections[e.sectionIndex]!.data.length);
+    }
+    // Die Einzellänge 3584 kommt zweimal vor — nur der Lauf ist eindeutig.
+    expect(container.sections[1]!.data.length).toBe(container.sections[4]!.data.length);
+  });
+
+  it('rät nicht, wenn das Accounting nicht aufgeht', async () => {
+    const container = (await datenFixture({ armorRecords: 30 }))!;
+    const sections = resolveKernelDataSections(container);
+    expect(sections.item).toBeNull();
+    expect(sections.materia).toBeNull();
+    expect(sections.reason).toMatch(/kein Sektionslauf/);
+  });
+});
+
+describe('F18/F24-A Kernel-Datentabellen: Recordfelder', () => {
+  it('liest Item-, Waffen-, Rüstungs-, Accessoire- und Materiarecords zurück', async () => {
+    const container = (await datenFixture())!;
+    const sections = resolveKernelDataSections(container);
+
+    const items = readItemRecords(container, sections);
+    expect(items).toHaveLength(128);
+    expect(items[7]).toMatchObject({ index: 7, cameraMovementId: 1007, attackPower: 7, status: 0x21, element: 4 });
+
+    const weapons = readWeaponRecords(container, sections);
+    expect(weapons).toHaveLength(128);
+    expect(weapons[9]).toMatchObject({ index: 9, attackStrength: 27, growthRate: 1, equipableBy: 0x1ff });
+    expect(weapons[9]!.materiaSlots).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    // Wachstumsrate bleibt im gemessenen Wertebereich 0…3.
+    expect(weapons.every((w) => w.growthRate <= 3)).toBe(true);
+
+    const armor = readArmorRecords(container, sections);
+    expect(armor).toHaveLength(32);
+    expect(armor[5]!.defense).toBe(15);
+
+    const accessories = readAccessoryRecords(container, sections);
+    expect(accessories).toHaveLength(32);
+    expect(accessories[3]!.boostedStats[0]!.stat).toBe(3);
+    expect(accessories[3]!.equipableBy).toBe(0x1ff);
+
+    const materia = readMateriaRecords(container, sections);
+    expect(materia).toHaveLength(96);
+    expect(materia[2]!.apLevelsRaw).toEqual([102, 202, 302, 402]);
+    // Nur das untere Nibble ist der Typ; die oberen vier Bit bleiben roh erhalten.
+    expect(materia[2]!.typeNibble).toBe(2);
+    expect(materia[2]!.typeRaw).toBe(0xa2);
+    // Die AP-Schwellen sind aufsteigend — dieselbe Eigenschaft, über die sie an
+    // den Realdaten gegen ein Kontrollniveau belegt wurden.
+    expect(materia.every((m) => m.apLevelsRaw.every((ap, k, all) => k === 0 || all[k - 1]! <= ap))).toBe(true);
+  });
+
+  it('invertiert die Restriktionsmaske — die Datei speichert Verbote', async () => {
+    const container = (await datenFixture())!;
+    const sections = resolveKernelDataSections(container);
+
+    // 0xFFFC ⇒ ~ = 0b011 ⇒ verkaufbar + im Kampf nutzbar, im Menü nicht.
+    const item = readItemRecords(container, sections)[0]!;
+    expect(item.restrictions).toEqual({ canBeSold: true, canBeUsedInBattle: true, canBeUsedInMenu: false, raw: 0xfffc });
+    // 0xFFFE ⇒ ~ = 0b001 ⇒ nur verkaufbar.
+    expect(readArmorRecords(container, sections)[0]!.restrictions.canBeSold).toBe(true);
+    expect(readArmorRecords(container, sections)[0]!.restrictions.canBeUsedInMenu).toBe(false);
+    // 0xFFFF ⇒ ~ = 0 ⇒ gar nichts erlaubt. Ohne Invertierung wäre die Bedeutung
+    // genau umgekehrt — das ist der Fehler, den diese Zeile ausschließt.
+    const acc = readAccessoryRecords(container, sections)[0]!.restrictions;
+    expect([acc.canBeSold, acc.canBeUsedInBattle, acc.canBeUsedInMenu]).toEqual([false, false, false]);
+    expect(decodeRestrictions(0xfff8)).toMatchObject({ canBeSold: true, canBeUsedInBattle: true, canBeUsedInMenu: true });
   });
 });

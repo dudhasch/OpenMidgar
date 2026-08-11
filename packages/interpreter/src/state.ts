@@ -186,6 +186,17 @@ export const DEFAULT_MOVE_SPEED = 8;
  * Zustandsübergang und der Replay bitgenau (ADR-006).
  */
 export type HostRequest =
+  /**
+   * ⚠️ **`trackId` ist KEIN Titel, sondern der rohe MUSIC-Operand** — ein
+   * **field-lokaler Index in die AKAO-Offsettabelle** der eigenen Sektion 1
+   * (F09-B, 98,95 % gegen 71,92 %/49,88 % Kontrollniveau). Der Wirt muss ihn
+   * mit `resolveFieldMusic` aus `@webmidgar/formats-field` auflösen:
+   * `trackId → akaoOffsets[trackId] → AKAO-Kopf → musicId (1…98)
+   *  → music.idx[musicId − 1] → OGG`.
+   * Der Name bleibt aus engineCompat-Gründen stehen (er steckt in Replay-
+   * Protokollen); ihn direkt als `music.idx`-Zeile zu lesen ist falsch — genau
+   * das war der Defekt hinter F09.
+   */
   | { kind: 'music'; trackId: number }
   | { kind: 'sound'; soundId: number; pan: number }
   | { kind: 'battle'; encounterId: number; requestId: number }
@@ -278,6 +289,27 @@ export function createBanks(): Uint8Array[] {
   });
 }
 
+/**
+ * **O7 ✅ geschlossen (2026-08-11) — die Wrap-Regel steht jetzt auf einer Zahl.**
+ *
+ * Ein 16-Bit-Zugriff auf Bankadresse 0xFF braucht zwei Bytes, aber dort endet
+ * die Bank. Diese Implementierung wrappt **innerhalb** der Bank (`b[0xFF] |
+ * b[0x00] << 8`); die Alternative wäre ein Übergriff in die Folgeregion. Beide
+ * Auslegungen unterscheiden sich an genau einer Adresse.
+ *
+ * Bisher war das eine Annahme. Gemessen (702 Fields,
+ * `tools/realdata-scan/src/bank-wrap-probe.rdtest.ts`): Wortvarianten mit
+ * Bankzugriff auf Adresse 0xFF kommen **genau 1-mal** vor (Field `blinele`,
+ * Opcode 0xAND2), IF-Wortvarianten **0-mal**. Die Kontrollzählung für die
+ * Nachbaradresse 0xFE ergibt ebenfalls 0 — die Seltenheit ist also die
+ * Randlage hoher Bankadressen und keine Besonderheit von 0xFF.
+ *
+ * Die Regel bleibt damit stehen, **begründet durch Irrelevanz statt durch
+ * Wissen**: Bei einer einzigen Fundstelle im gesamten Bestand kann keine der
+ * beiden Auslegungen einen sichtbaren Unterschied machen. Die Probe bleibt als
+ * Dauerprobe erhalten und schlägt bei mehr als 5 Fundstellen fehl — dann wäre
+ * die Irrelevanz aufgehoben und die Frage wieder offen.
+ */
 export function readBank(state: FieldRuntimeState, bank: number, addr: number, word: boolean): number {
   const b = state.banks[bank & 0xf]!;
   return word ? b[addr & 0xff]! | (b[(addr + 1) & 0xff]! << 8) : b[addr & 0xff]!;
@@ -302,6 +334,84 @@ export function regionBuffers(state: FieldRuntimeState): Uint8Array[] {
     seen.set(bank, out.length);
     out.push(bank);
   }
+  return out;
+}
+
+/**
+ * 🔵 **Anfangszustand der Hintergrund-Zustandsmasken (F35-1).**
+ *
+ * Bis hierher startete jedes Field mit einer leeren `bgStates`-Karte. Für jede
+ * Tile-Gruppe mit `param ≠ 0` bedeutet das: kein Zustandsbit gesetzt, also
+ * **keine** ihrer Kacheln sichtbar. In `junonr2` sind das die Gondel (Layer 1,
+ * param 16, 53 Kacheln) und zwei weitere Gruppen — sie fehlten im Bild
+ * vollständig, obwohl die Kacheln geladen waren.
+ *
+ * **Was zuerst geprüft und ausgeschlossen wurde.** Der Verdacht lag auf der
+ * Bankbyte-Aufteilung in `vm.ts` (`banks>>4` = Parameter, `banks&0xf` =
+ * Zustand): Wäre sie falsch, träfe BGOFF den falschen Parameter. Gemessen über
+ * alle 702 Fields tragen **97,3 %** der BGON- und **96,8 %** der
+ * BGOFF-Instruktionen ein Bankbyte von 0 — und in `junonr2` sind es **alle 46**
+ * BG-Instruktionen. Bei Literaloperanden ist die Aufteilung wirkungslos. Die
+ * Maske ist also korrekt leer; die Ursache liegt nicht im Split.
+ *
+ * **Die Entscheidung.** Im Original ist beim Field-Start je Parameter genau ein
+ * Zustand aktiv, nicht keiner — sonst wäre jede animierte Hintergrundgruppe
+ * beim Betreten unsichtbar, bis das Skript sie einschaltet. Als Anfangszustand
+ * wird deshalb je Parameter das **niedrigste im Hintergrund vorkommende
+ * Zustandsbit** vorbelegt. Für `junonr2` ergibt das `{16: 1, 17: 1, 18: 1}`.
+ *
+ * Das ist eine 🔵-Architekturentscheidung, keine Messung: Welcher Zustand im
+ * Original der Anfangszustand ist, steht nicht in den Field-Daten. Das
+ * niedrigste Bit ist gewählt, weil die Zustände einer Gruppe durchweg als
+ * aufsteigende Bitfolge (1, 2, 4, …) vergeben sind und die Skripte sie in
+ * dieser Reihenfolge durchschalten — der erste Animationsschritt ist damit der
+ * plausibelste Ruhezustand. Fällt die Wahl später anders aus, ist genau diese
+ * Funktion der einzige zu ändernde Ort.
+ *
+ * `param === 0` bleibt ausgespart: Diese Kacheln sind statisch und immer
+ * sichtbar (F22-Regel), ein Zustandsbit hätten sie nur scheinbar.
+ *
+ * ---
+ *
+ * ⚠️ **Gemessene Wirkung — und die Grenze davon**
+ * (`tools/realdata-scan/src/bg-anfangszustand-probe.rdtest.ts`, 702 Fields):
+ *
+ *  - 508 Fields tragen zusammen **1256** animierte Kachelgruppen. Ohne
+ *    Vorbelegung ist beim Field-Start **jede** davon leer, mit Vorbelegung
+ *    **keine**.
+ *  - Entscheidend ist aber der Zustand NACH dem Skriptlauf, nicht beim Start.
+ *    Nach 300 Ticks sind ohne Vorbelegung **542** Gruppen leer, mit
+ *    Vorbelegung **329** — die Vorbelegung rettet **213 Gruppen mit 9682
+ *    Kacheln**, die sonst unsichtbar blieben.
+ *  - 🔴 **`junonr2` — der Auslöser von F35-1 — ist NICHT darunter.** Gemessen:
+ *    Vorbelegung `{16: 1, 17: 1, 18: 1}`, nach 300 Ticks sowohl ohne als auch
+ *    mit Vorbelegung `{16: 0, 17: 0, 18: 1}`. Das Skript des Fields räumt die
+ *    Parameter 16 und 17 selbst wieder ab: Alle **46** BG-Instruktionen von
+ *    `junonr2` tragen ein Bankbyte von 0, laufen also mit Literaloperanden und
+ *    schalten die Zustände paarweise (BGON s, dann BGOFF s) durch, gefolgt von
+ *    BGCLR auf Parameter 16.
+ *
+ * Die Gondel bleibt damit unsichtbar, und die Ursache liegt **nicht mehr im
+ * Interpreter**: Entweder erreicht der Wirt die Animationsunterroutine bei
+ * Field-Start, obwohl das Original sie erst beim Benutzen des Lifts anstößt
+ * (Kontrollfluss), oder die Zeichenregel ist falsch — dann müsste eine leere
+ * Maske nicht „alles unsichtbar" bedeuten, sondern „Rückfall auf den
+ * Anfangszustand". Die zweite Lesart passt zur Beobachtung, ist aber eine
+ * Entscheidung der Zeichenseite und gehört nicht hierher. Beides ohne Messung
+ * zu ändern, wäre Raten.
+ */
+export function berechneAnfangsBgStates(
+  kacheln: Iterable<{ param: number; state: number }>,
+): Record<number, number> {
+  const niedrigste = new Map<number, number>();
+  for (const { param, state } of kacheln) {
+    if (param === 0 || state === 0) continue;
+    const alt = niedrigste.get(param);
+    if (alt === undefined || state < alt) niedrigste.set(param, state);
+  }
+  const out: Record<number, number> = {};
+  // Stabile Schlüsselreihenfolge — der Zustandsbaum geht in den Digest ein.
+  for (const [param, state] of [...niedrigste].sort((a, b) => a[0] - b[0])) out[param] = state;
   return out;
 }
 

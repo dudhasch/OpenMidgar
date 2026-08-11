@@ -4,7 +4,7 @@ import { parseScriptSection, type FieldDiagnostic } from '@webmidgar/formats-fie
 import { CMP, IMPL_OPERAND_LEN, OP_KAWAI, SKIP_OPERAND_LEN } from './opcodes.js';
 import { FieldRuntime } from './runtime.js';
 import { prepareScript, type PreparedScript } from './prepared.js';
-import { readBank } from './state.js';
+import { berechneAnfangsBgStates, readBank } from './state.js';
 import { restoreRuntime, snapshotRuntime, stateDigest } from './serde.js';
 import { ReplayRecorder, replayRecording } from './replay.js';
 import { RingTrace } from './trace.js';
@@ -550,6 +550,30 @@ describe('Budget-Eskalation & UNKNOWN-Politik', () => {
     expect(missing).toEqual([]);
   });
 
+  it('S-DEADSKIP: beide Längentabellen sind disjunkt und decken zusammen mit KAWAI genau 256 Opcodes', () => {
+    // `vm.ts` fragt IMMER zuerst `IMPL_OPERAND_LEN`. Ein Opcode, der in beiden
+    // Tabellen steht, hat deshalb einen toten Skip-Eintrag. Bis 2026-08-11
+    // waren das 17 Stück (0x02, 0x03, 0x49, 0x4A, 0x60, 0x70, 0x71, 0xA0–0xA5,
+    // 0xA8, 0xB3, 0xF0, 0xF1). Alle 17 stimmten überein — und genau darin lag
+    // der Fehler: Ein toter Eintrag, der zufällig richtig ist, meldet sich nie,
+    // bis jemand nur eine der beiden Tabellen pflegt. Dieser Test macht die
+    // Doppelung zu einem sofortigen Testbruch statt zu einer stillen Falle.
+    const doppelt = Object.keys(IMPL_OPERAND_LEN)
+      .map(Number)
+      .filter((op) => SKIP_OPERAND_LEN[op] !== undefined)
+      .map((op) => `0x${op.toString(16)}`);
+    expect(doppelt).toEqual([]);
+
+    // KAWAI darf in keiner der beiden Tabellen stehen — seine Länge steht im
+    // ersten Operandenbyte, ein Tabelleneintrag würde sie überschreiben.
+    expect(IMPL_OPERAND_LEN[OP_KAWAI]).toBeUndefined();
+    expect(SKIP_OPERAND_LEN[OP_KAWAI]).toBeUndefined();
+
+    // Und die Summe muss aufgehen: lückenlos, überschneidungsfrei, 256.
+    const summe = Object.keys(IMPL_OPERAND_LEN).length + Object.keys(SKIP_OPERAND_LEN).length + 1;
+    expect(summe).toBe(256);
+  });
+
   it('Fault-Journal + Slot-Isolation greifen bei einem Laufzeitfault (Masterplan 4.3)', () => {
     const asm = new ScriptAssembler();
     // Unbekannter Vergleichsoperator (15) → strukturierter Fault statt Raten.
@@ -564,6 +588,130 @@ describe('Budget-Eskalation & UNKNOWN-Politik', () => {
     expect(rt.state.faults[0]).toMatchObject({ reason: 'unknown-comparison' });
     expect(entity.disabledSlots).toContain(0);
     expect(rt.enqueueRequest(0, 0, 1, 'async')).toBe(false); // Slot gesperrt
+  });
+});
+
+describe('XYI / XYZ (Bündelübernahme 2026-08-11)', () => {
+  /**
+   * Rohbytes statt Assembler: Die zu prüfende Aussage IST die Byteaufteilung.
+   * Ginge sie über einen Assembler, der dieselbe Annahme kodiert, prüfte der
+   * Test nur, ob zwei Kopien derselben Annahme zueinander passen.
+   */
+  const lauf = (bytes: number[]): FieldRuntime => {
+    const rt = new FieldRuntime(prepare([{ name: 'npc', entries: [0] }], new Uint8Array(bytes)), {
+      mainLoop: false,
+    });
+    rt.start();
+    rt.tick();
+    return rt;
+  };
+  // SETBYTE Bank 3 Adresse 0 ← 7: die Ausrichtungsprobe hinter dem Testopcode.
+  const MARKE = [0x80, 0x30, 0x00, 0x07];
+
+  it('XYI setzt x, y und das Dreieck — und lässt die Höhe stehen', () => {
+    const rt = lauf([
+      // XYZI: Ausgangsposition mit Höhe 50 und Dreieck 9.
+      0xa5, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x32, 0x00, 0x09, 0x00,
+      // XYI: x=10, y=20, Dreieck 3 — kein Höhenoperand.
+      0xa6, 0x00, 0x00, 0x0a, 0x00, 0x14, 0x00, 0x03, 0x00,
+      ...MARKE,
+      0x00,
+    ]);
+    const actor = rt.state.actors[0]!;
+    expect(actor.position).toEqual([10, 20, 50]); // Höhe unverändert
+    expect(actor.triangle).toBe(3);
+    // Die Marke beweist die Länge 8: Bei jeder anderen liefe der Strom in die
+    // Operanden und träfe SETBYTE nie an der richtigen Stelle.
+    expect(bank(rt, 3, 0)).toBe(7);
+  });
+
+  it('XYZ setzt x, y und die Höhe — und lässt das Dreieck stehen', () => {
+    const rt = lauf([
+      0xa5, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x32, 0x00, 0x09, 0x00,
+      // XYZ: x=−4, y=8, z=100.
+      0xa7, 0x00, 0x00, 0xfc, 0xff, 0x08, 0x00, 0x64, 0x00,
+      ...MARKE,
+      0x00,
+    ]);
+    const actor = rt.state.actors[0]!;
+    expect(actor.position).toEqual([-4, 8, 100]);
+    expect(actor.triangle).toBe(9); // Dreieck unverändert
+    expect(bank(rt, 3, 0)).toBe(7);
+  });
+
+  it('XYI liest Bankoperanden über die Nibbleaufteilung der beiden Bankbytes', () => {
+    // Bankbyte 1 = 0x33 (x und y aus Bank 3), Bankbyte 2 = 0x30 (Dreieck aus
+    // Bank 3). Die Adressen stehen als u16 im Bytecode — das hohe Byte ist bei
+    // echten Bankoperanden immer 0, genau die Signatur, an der die Länge 8
+    // gemessen wurde.
+    // Die Bankzugriffe sind 16 Bit breit (wie bei XYZI), die Adressen liegen
+    // deshalb um zwei auseinander und werden mit SETWORD gefüllt.
+    const rt = lauf([
+      0x81, 0x30, 0x10, 0x2a, 0x00, // Bank 3[0x10] ← 42  (x)
+      0x81, 0x30, 0x12, 0x0b, 0x00, // Bank 3[0x12] ← 11  (y)
+      0x81, 0x30, 0x14, 0x05, 0x00, // Bank 3[0x14] ← 5   (Dreieck)
+      0xa6, 0x33, 0x30, 0x10, 0x00, 0x12, 0x00, 0x14, 0x00,
+      ...MARKE,
+      0x00,
+    ]);
+    const actor = rt.state.actors[0]!;
+    expect(actor.position?.[0]).toBe(42);
+    expect(actor.position?.[1]).toBe(11);
+    expect(actor.triangle).toBe(5);
+    expect(bank(rt, 3, 0)).toBe(7);
+  });
+
+  it('XYI beendet einen laufenden Bewegungsauftrag wie XYZI', () => {
+    const rt = lauf([
+      0xa8, 0x00, 0x64, 0x00, 0x64, 0x00, // MOVE 100/100 → yield
+      0x00,
+    ]);
+    expect(rt.state.actors[0]!.moveTarget).not.toBeNull();
+    // Zweiter Lauf: XYI nach MOVE muss den Auftrag löschen.
+    const rt2 = lauf([
+      0xa6, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00,
+      0x00,
+    ]);
+    expect(rt2.state.actors[0]!.moveTarget).toBeNull();
+  });
+});
+
+describe('Anfangszustand der Hintergrundmasken (F35-1)', () => {
+  it('belegt je Parameter das niedrigste vorkommende Zustandsbit', () => {
+    // Kachelsatz nach dem Muster von `junonr2`: param 16 mit den Zuständen
+    // 1/2/4, param 17 mit 1…128, dazu statische Kacheln (param 0).
+    const kacheln = [
+      { param: 0, state: 0 },
+      { param: 16, state: 4 },
+      { param: 16, state: 1 },
+      { param: 16, state: 2 },
+      { param: 17, state: 8 },
+      { param: 17, state: 2 },
+    ];
+    expect(berechneAnfangsBgStates(kacheln)).toEqual({ 16: 1, 17: 2 });
+  });
+
+  it('lässt statische Kacheln (param 0) und Zustand 0 außen vor', () => {
+    expect(berechneAnfangsBgStates([{ param: 0, state: 0 }, { param: 5, state: 0 }])).toEqual({});
+  });
+
+  it('die Runtime übernimmt die Vorbelegung und BGOFF räumt sie wieder ab', () => {
+    // BGOFF param 16 Zustand 0 (Bit 1) — genau das Bit, das die Vorbelegung
+    // gesetzt hat. Damit ist belegt, dass Vorbelegung und Opcode dieselbe
+    // Maske meinen und nicht zwei getrennte Karten führen.
+    const rt = new FieldRuntime(
+      prepare([{ name: 'bg', entries: [0] }], new Uint8Array([0xe1, 0x00, 0x10, 0x00, 0x00])),
+      { mainLoop: false, initialBgStates: { 16: 1, 17: 4 } },
+    );
+    expect(rt.state.bgStates).toEqual({ 16: 1, 17: 4 });
+    rt.start();
+    rt.tick();
+    expect(rt.state.bgStates).toEqual({ 16: 0, 17: 4 });
+  });
+
+  it('ohne Angabe bleibt die Karte leer — der Zustand vor der Änderung', () => {
+    const rt = new FieldRuntime(prepare([{ name: 'bg', entries: [0] }], new Uint8Array([0x00])), {});
+    expect(rt.state.bgStates).toEqual({});
   });
 });
 
