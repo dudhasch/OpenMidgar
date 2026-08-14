@@ -1,8 +1,8 @@
 # WebMidgar — Technischer Masterplan
 
-**Projekt:** Clean-Room-Reimplementierung der technischen Laufzeitumgebung von *Final Fantasy VII (PC, 1998)* im Browser.
+**Projekt:** Reimplementierung der technischen Laufzeitumgebung von *Final Fantasy VII (PC, 1998)* im Browser, aufgebaut aus dokumentierten und selbst rekonstruierten Formatfakten.
 **Rolle dieses Dokuments:** Verbindliche Architekturreferenz für alle Folgesessions. Kein Anwendungscode; ausschließlich Architektur, Verträge, Schemata, Entscheidungslogik und Validierungsstrategie.
-**Rechtsrahmen:** Es werden keine Originalassets, Originaldialoge oder Bytecode-Dumps verteilt oder eingebettet. Alle Spieldaten stammen ausschließlich aus einer lokal vom Nutzer bereitgestellten, legal erworbenen Installation und verlassen den Browser nie. Formatwissen stammt aus öffentlich dokumentierter Community-Forschung (Qhimm Wiki, q-gears/ffvii-tools, Makou Reactor, TouphScript) und ist grundsätzlich als **zu verifizierende Referenz** zu behandeln.
+**Rechtsrahmen:** Es werden keine Originalassets, Originaldialoge oder Bytecode-Dumps verteilt oder eingebettet. Alle Spieldaten stammen ausschließlich aus einer lokal vom Nutzer bereitgestellten, legal erworbenen Installation und verlassen den Browser nie. Formatwissen stammt aus öffentlich dokumentierter Community-Forschung (Qhimm Wiki, q-gears/ffvii-tools, Makou Reactor, TouphScript) und ist grundsätzlich als **zu verifizierende Referenz** zu behandeln. Seit [ADR-027](ADR-027-DECOMP-REFERENZ.md) zählen dazu auch dekompilierte Originalquellen — als Referenz lesbar, mit Herkunftspflicht, Plattformvorbehalt und **ohne Textübernahme** (die betreffenden Repos stehen ohne Lizenz).
 
 **Legende der Aussagenklassen** (durchgängig im Dokument verwendet):
 
@@ -484,7 +484,7 @@ Walkmesh
 
 ## Ziel
 
-Ein sicherer, deterministischer, unterbrechbarer Interpreter für Field-Events. Der Interpreter führt den **im Nutzerdatenbestand vorhandenen** Bytecode aus; WebMidgar definiert nur die Ausführungssemantik (Clean-Room: Semantiktabellen werden aus öffentlicher Dokumentation und Verhaltensbeobachtung abgeleitet, nie aus Original-Disassembly des Engine-Codes).
+Ein sicherer, deterministischer, unterbrechbarer Interpreter für Field-Events. Der Interpreter führt den **im Nutzerdatenbestand vorhandenen** Bytecode aus; WebMidgar definiert nur die Ausführungssemantik. Semantiktabellen werden **vorrangig aus den Daten selbst** abgeleitet (Gütefunktion + Kontrollhypothese, s. O9) und erst nachrangig aus Fremdquellen; seit [ADR-027](ADR-027-DECOMP-REFERENZ.md) gehören dekompilierte Quellen dazu, unter Herkunftspflicht und Messvorrang (Auflagen A2/A4) und ohne Übernahme von Quelltext (A1).
 
 ## 4.1 Opcode-Taxonomie
 
@@ -689,6 +689,7 @@ Dialog-Record (`dialogues[]`): `{field, dialogueIndex, textKey → Ersetzungstex
 | ADR-021 | GPU-Uploads werden gestückelt: Atlasseiten nie in einem `texImage2D`, sondern in Streifen ≤ 2048 × 256 je Frame | Ganze Seite je Upload | Frame-Budget von 2 ms wird eingehalten (1,0 ms p95 statt 5,4 ms); Bildaufbau über bis zu 8 Frames | Akzeptiert |
 | ADR-022 | R5-Matrix aus einer Installation (57 Archive, 5 registrierte Fingerprints) statt aus einer Community-Beta | Beta abwarten | Trennschärfe in beide Richtungen belegt; Stichprobe der Größe 1 bleibt Restrisiko bis 1.0 | Akzeptiert (Restrisiko) |
 | ADR-023 | GPU-Registry existiert als Messmodell in `tools/nfr-run`, nicht in der Renderschicht | Registry vorziehen, bevor es GPU-Ressourcen gibt | Lebenszyklus belegt (500/500 Erwerbe/Freigaben, exakte Rückkehr auf 0); Promotion mit der Renderer-Integration | Akzeptiert (Restrisiko) |
+| ADR-027 | Dekompilierte Originalquellen (u. a. `ff7-decomp`, PSX) dürfen als **Referenz gelesen** werden; vier bindende Auflagen: keine Textübernahme (Quellen ohne Lizenz), Herkunftspflicht mit Klasse 🟡 bis zur Gegenprobe, Plattformvorbehalt PSX↔PC, Messvorrang. Volltext: [ADR-027-DECOMP-REFERENZ.md](ADR-027-DECOMP-REFERENZ.md) | Clean-Room beibehalten; Orakel-Modus (nur Ja/Nein nach eigener Herleitung); Zwei-Kammer-Modell mit Firewall-Agent | Öffnet die nicht messbaren Posten (`camdat`, Stage, `ab`, Formelsatz, Menü-Aufteilung); Begriff „Clean-Room" entfällt projektweit; Rechtsposition hängt fortan an A1/A2 | Akzeptiert |
 
 ## Risiken und offene Forschung
 

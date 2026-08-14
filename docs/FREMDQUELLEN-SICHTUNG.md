@@ -31,25 +31,33 @@ urheberrechtlich geschützt, die Formulierung ihrer Beschreibung schon.
 | ff7-landscaper | **keine** (+ GPL-Portierungen ohne Hinweis) | all rights reserved, doppelt belastet |
 | kujata (+ Forks) | **keine** (`package.json` sagt ISC) | ungeklärt |
 | Workers | **keine** | all rights reserved |
-| ff7-coaster | **keine** | ⛔ siehe unten |
+| ff7-coaster | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme** |
+| ff7-decomp (PSX) | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme**, Plattformvorbehalt |
 | gears.pdf | keine Gesamtangabe; Kapitel Battle Mechanics © T. Fergusson 2001–2003 | Fakten ja, Prosa nein |
 
 ### ⛔ Sperrvermerke
 
-1. **ff7-coaster ist dekompilierter Originalcode.** Jede Datei trägt
-   „(c) 1997 Square / decompiled by ergonomy_joe", die Dateinamen sind
-   `ff7.exe`-Adressen, zwei Binärbibliotheken sind aus dem Spiel
-   herausgeschnitten. **Nicht hineinsehen.** Dasselbe gilt für die
-   Nachbarrepos `ff7-worldmap`, `ff7-chocobo`, `ff7snobo.github.io`.
-2. **makoureactor `src/core/field/BackgroundTiles.cpp:42-93`** enthält eine
-   auskommentierte **Hex-Rays-Dekompilierung** der Retail-`ff7.exe`. Die
-   Hintergrund-Projektion dort nicht lesen — eigenständig aus Messdaten
-   herleiten.
+1. ~~**ff7-coaster ist dekompilierter Originalcode.**~~ **Aufgehoben durch
+   [ADR-027](ADR-027-DECOMP-REFERENZ.md) (2026-08-15).** `ff7-coaster` und die
+   Nachbarrepos `ff7-worldmap`, `ff7-chocobo`, `ff7snobo.github.io` dürfen als
+   Referenz gelesen werden — ebenso
+   [Xeeynamo/ff7-decomp](https://github.com/Xeeynamo/ff7-decomp) (PSX). Es
+   gelten die vier Auflagen des ADR: **keine Textübernahme** (alle diese Repos
+   stehen ohne Lizenz — es gibt kein Nutzungsrecht am Quelltext),
+   Herkunftspflicht mit Klasse 🟡 bis zur Gegenprobe, Plattformvorbehalt
+   PSX↔PC, Messvorrang.
+2. ~~**makoureactor `src/core/field/BackgroundTiles.cpp:42-93`**~~ **Aufgehoben
+   durch ADR-027.** Die auskommentierte Hex-Rays-Passage darf gelesen werden;
+   die Hintergrund-Projektion bleibt trotzdem gegen unsere Messdaten zu
+   belegen, bevor sie 🟢 wird (Auflage A2).
 3. **Aeris und kujata-data enthalten echte Spieldateien** (Felddateien, PNGs,
-   abgeleitete Assets). Nie nach `C:\ff7-web`.
-4. **Elena `Compression/LzsCompression.cs`** liest sich wie eine
-   Dekompilierung — eigenes `formats-field/src/lzs.ts` ist ohnehin vorhanden.
+   abgeleitete Assets). Nie nach `C:\ff7-web`. **Bleibt in Kraft** — anderer
+   Grund als Sperre 1/2 (Originaldaten, nicht Code).
+4. ~~**Elena `Compression/LzsCompression.cs`**~~ **Aufgehoben durch ADR-027**
+   (Sperrgrund war der Dekompilierungsverdacht). Praktisch gegenstandslos: das
+   eigene `formats-field/src/lzs.ts` ist realdaten-belegt und bleibt.
 5. **ff7tk** führt Sonys PSV/VMP-Signierschlüssel mit. Nicht in unseren Baum.
+   **Bleibt in Kraft.**
 
 ---
 

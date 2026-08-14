@@ -1,11 +1,14 @@
 # WebMidgar
 
-Open-Source-Clean-Room-Reimplementierung der technischen Laufzeitumgebung von
-*Final Fantasy VII (PC, 1998)* im Browser. Originaldaten werden ausschließlich
+Open-Source-Reimplementierung der technischen Laufzeitumgebung von
+*Final Fantasy VII (PC, 1998)* im Browser, aufgebaut aus dokumentierten und
+selbst rekonstruierten Formatfakten. Originaldaten werden ausschließlich
 lokal vom Nutzer bereitgestellt (File System Access API) und clientseitig
 verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 
 **Architekturreferenz:** [docs/WEBMIDGAR-MASTERPLAN.md](docs/WEBMIDGAR-MASTERPLAN.md)
+· **Umgang mit Fremdquellen:** [ADR-027](docs/ADR-027-DECOMP-REFERENZ.md)
+(dekompilierte Quellen als Referenz zugelassen, Textübernahme ausgeschlossen)
 
 ## Stand
 
