@@ -38,6 +38,8 @@ import {
   RENDER_SURFACE,
   WindowDisplayMode,
   WindowShell,
+  paintGlyphText,
+  type FontContext,
 } from '@webmidgar/ui-window';
 import { measureFfWindow, FALLBACK_SPACING } from '@webmidgar/formats-kernel';
 import {
@@ -127,7 +129,9 @@ import {
 } from '@webmidgar/menu';
 import { readSavemap } from '@webmidgar/formats-save';
 import { composeSavemapSlot, type FixtureSavemap } from '@webmidgar/fixture-gen';
+import { CURSOR_SPALTE } from '@webmidgar/menu';
 import { bootGameData, type GameData } from './game/data';
+import { buildFontContext } from './game/font';
 
 /**
  * 1.0-Integration: EINE Seite, die Field, Weltkarte, Kampf und Menü zu einem
@@ -209,6 +213,11 @@ worldScene.add(worldTerrainGroup, worldMarkerGroup);
 type Mode = 'boot' | 'field' | 'world';
 let mode: Mode = 'boot';
 let data: GameData | null = null;
+/**
+ * Welle 3: die Spielschrift. `null` heißt Systemschrift — der Bootlog sagt
+ * dann, warum (fehlende `WINDOW.BIN`, unlesbares Fontblatt).
+ */
+let fontKontext: FontContext | null = null;
 
 // Field
 let fieldSession: FieldSession | null = null;
@@ -564,7 +573,7 @@ function closeMenuOverlay(): void {
   if (menuHostRequestId !== null) fieldSession?.closeMenu(menuHostRequestId);
   menuHostRequestId = null;
   menuSession = null;
-  paintBoxes(menuHost, []);
+  paintBoxes(menuHost, [], fontKontext);
   menuOverlayEl.classList.remove('visible');
 }
 
@@ -581,10 +590,10 @@ function closeMenuOverlay(): void {
 function renderMenu(): void {
   const bild = menuSession?.screen();
   if (!bild) {
-    paintBoxes(menuHost, []);
+    paintBoxes(menuHost, [], fontKontext);
     return;
   }
-  paintBoxes(menuHost, menuBoxes(bild));
+  paintBoxes(menuHost, menuBoxes(bild), fontKontext);
 }
 
 /** `MenuScreen` → Kastenliste des gemeinsamen Malers. */
@@ -613,7 +622,9 @@ function menuBoxes(bild: MenuScreen): HudBox[] {
         boxen.push({
           id: `menu.${panel.id}.${zeile.key}.cursor`,
           kind: 'cursor',
-          rect: { x: panel.rect.x + 6, y: oben, w: 16, h: zeilenHoehe },
+          // Breite = CURSOR_SPALTE aus @webmidgar/menu: derselbe Betrag, um
+          // den die Zeile eingerückt ist — sonst ragt der Zeiger aus dem Kasten.
+          rect: { x: panel.rect.x + 6, y: oben, w: CURSOR_SPALTE, h: zeilenHoehe },
           text: FF7_WINDOW_SKIN.cursor.trim(),
           align: 'left',
           fontSize: FF7_WINDOW_SKIN.fontSize,
@@ -760,17 +771,33 @@ function updateDialogOverlay(): void {
   const lines = sichtbar.split('\n');
   const gesamtZeilen = text.split('\n');
   const hatAuswahl = first.firstChoice !== null && first.lastChoice !== null;
-  const html = gesamtZeilen
-    .map((_, i) => {
+  if (fontKontext) {
+    // Welle 3: aus dem Fontblatt zeichnen. Die Zeilenaufteilung bleibt
+    // dieselbe — nur der Inhalt jeder Zeile besteht jetzt aus Glyphenkästen
+    // statt aus Systemschrift.
+    const zeilenEl = gesamtZeilen.map((_, i) => {
       const line = lines[i] ?? '';
+      const div = document.createElement('div');
       if (hatAuswahl && i >= first.firstChoice! && i <= first.lastChoice!) {
-        const sel = i - first.firstChoice! === dialogSel ? ' sel' : '';
-        return `<div class="choice${sel}">${escapeHtml(line)}</div>`;
+        div.className = i - first.firstChoice! === dialogSel ? 'choice sel' : 'choice';
       }
-      return `<div>${escapeHtml(line) || '&nbsp;'}</div>`;
-    })
-    .join('');
-  dialogBoxEl.innerHTML = html;
+      paintGlyphText(div, line, fontKontext, { lineHeight: FF7_WINDOW_SKIN.lineHeight });
+      return div;
+    });
+    dialogBoxEl.replaceChildren(...zeilenEl);
+  } else {
+    const html = gesamtZeilen
+      .map((_, i) => {
+        const line = lines[i] ?? '';
+        if (hatAuswahl && i >= first.firstChoice! && i <= first.lastChoice!) {
+          const sel = i - first.firstChoice! === dialogSel ? ' sel' : '';
+          return `<div class="choice${sel}">${escapeHtml(line)}</div>`;
+        }
+        return `<div>${escapeHtml(line) || '&nbsp;'}</div>`;
+      })
+      .join('');
+    dialogBoxEl.innerHTML = html;
+  }
   windowShell.open(DIALOG_SLOT);
   applyWindowSkin(dialogBoxEl, windowShell.get(DIALOG_SLOT)!.mode);
   dialogOverlayEl.classList.add('visible');
@@ -1105,15 +1132,15 @@ function hudModel(): HudModel {
 function renderBattleHud(): void {
   if (!battle) return;
   if (battle.result) {
-    paintBoxes(hudHost, []);
-    paintBoxes(resultHost, resultBoxes({ ...battle.result, page: battle.resultPage }));
+    paintBoxes(hudHost, [], fontKontext);
+    paintBoxes(resultHost, resultBoxes({ ...battle.result, page: battle.resultPage }), fontKontext);
     battleOverlayEl.classList.remove('visible');
     resultOverlayEl.classList.add('visible');
     return;
   }
   resultOverlayEl.classList.remove('visible');
   battleOverlayEl.classList.add('visible');
-  paintBoxes(hudHost, hudBoxes(hudModel()));
+  paintBoxes(hudHost, hudBoxes(hudModel()), fontKontext);
 }
 
 /**
@@ -1183,8 +1210,8 @@ function closeRealBattle(): void {
   // Die Bühne gehört dem beendeten Kampf — sie bleibt nicht für den nächsten stehen.
   setzeBuehne(null);
   stageProtokoll = { prefix: null, location: null, teile: 0, texturen: 0, ersatz: true };
-  paintBoxes(hudHost, []);
-  paintBoxes(resultHost, []);
+  paintBoxes(hudHost, [], fontKontext);
+  paintBoxes(resultHost, [], fontKontext);
   battleOverlayEl.classList.remove('visible');
   resultOverlayEl.classList.remove('visible');
   void music?.dispatch({ kind: 'pop-music' });
@@ -1300,6 +1327,7 @@ function openBattleStub(encounterId: number, requestId: number | null, source: '
       command: null,
       floaters: [],
     }),
+    fontKontext,
   );
   battleOverlayEl.classList.add('visible');
   log(`Kampf angefordert: Encounter ${encounterId} (${source})`);
@@ -1316,7 +1344,7 @@ function battleStubTick(frame: ActionFrame): void {
   }
   log(`Kampf beendet: ${victory ? 'Sieg' : 'Flucht'}`);
   battleStub = null;
-  paintBoxes(hudHost, []);
+  paintBoxes(hudHost, [], fontKontext);
   battleOverlayEl.classList.remove('visible');
 }
 
@@ -2076,6 +2104,9 @@ async function boot(): Promise<void> {
   // Die drei Ketten, die sich früher still selbst verdeckt haben, melden sich
   // beim Start: Namenszuordnung, Weltscript-Paarung, Einstiegstabelle.
   log(data.kernelHinweis);
+  const schrift = buildFontContext(data.windowBin);
+  fontKontext = schrift.kontext;
+  log(schrift.hinweis);
   log(
     `Weltscript ${data.worldChoice.evName}${data.worldChoice.evArchive ? ` (${data.worldChoice.evArchive})` : ''}: ` +
       `${data.worldChoice.meshFunctions} Mesh-Funktionen`,

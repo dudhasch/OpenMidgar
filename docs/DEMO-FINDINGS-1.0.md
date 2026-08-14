@@ -646,3 +646,94 @@ automatisierten Bild-gegen-Bild-Vergleich der neuen Optik gibt es deshalb nicht.
 Ersetzt ist er durch DOM-Kantenmessungen im Browser, den 457/457-Eigenschafts-
 vergleich und Struktur-/Geometrietests. Wer den Pixelvergleich will, muss die
 Referenzbilder zuerst in den Arbeitsbaum holen.
+
+---
+
+## Welle 3 — die Spielschrift (2026-08-15)
+
+**Erledigt der dritte tragende Vorbehalt der Welle-2-Abnahme.** Text kommt nicht
+mehr aus einer Systemschrift, sondern aus dem Fontblatt der Installation
+(`WINDOW.BIN` Sektion 1). Betroffen sind Dialog, Menü und Kampf-HUD in einem
+Zug, weil alle drei durch dieselbe Fensterschale laufen.
+
+### Zuerst gemessen, dann gebaut
+
+`tools/realdata-scan/src/fontblatt-probe.rdtest.ts` klärt den Aufbau einer
+Zelle, bevor eine Zeile gezeichnet wird:
+
+| Größe | Befund |
+|---|---|
+| Blatt | 256 × 252, 4 bpp, Zellen 12 × 12, 21 je Zeile — **die Zellennummer ist der Textcode** |
+| Palettenindizes im Bestand | nur **0, 1, 3** — durchsichtig, dunkel, hell |
+| Paletten | 8 Zeilen (grau, blau, rot, magenta, grün, cyan, gelb, weiß) |
+| belegte Zellen | 212, davon **212 linksbündig** |
+| rechte Randspalte berührt | **1 von 212** — Kontrollniveau dafür, dass das Raster sitzt |
+
+Zwei Folgerungen bestimmen den Zeichenweg und stehen als Kommentar am Code:
+**(1) Der Schatten steckt im Blatt** (Index 1 ist die dunkle Kante) — der
+CSS-Schatten wird deshalb beim Zeichnen ausdrücklich zurückgenommen, sonst käme
+er doppelt. **(2) Die Textfarbe ist eine Palettenzeile, kein CSS-Wert**;
+Farbwechsel im Text sind ein Zeilenwechsel. Vorgabe ist Zeile 7 (weiß).
+
+### Abnahme gegen den echten Bestand
+
+`tools/realdata-scan/src/schrift-abdeckung.rdtest.ts`, 702 Fields:
+
+| Größe | Wert | Kontrolle |
+|---|---|---|
+| Zeichen im Dialogbestand | 2 584 250 | — |
+| **Abdeckung** (Zeichen mit Textcode) | **99,9993 % (2 584 232)** | die 18 Fehlstellen sind ausnahmslos `U+FFFD` aus dem Dekoder, kein Blattproblem |
+| verschiedene Codes | 98 | — |
+| **Stimmigkeit** Zeichen → Code → Zelle (`Vorschub = Tinte + 1`) | **84,19 %** gewichtet | Zelle +1: **45,58 %** · Zelle −1: **39,26 %** |
+
+Die Rückabbildung Zeichen → Code wird **aus derselben `FfTextTable` abgeleitet**,
+mit der dekodiert wurde — keine zweite Tabelle, die auseinanderlaufen könnte.
+Mehrzeichige Belegungen (Namensplatzhalter, `', '`) zerfallen beim Zeichnen in
+ihre Einzelzeichen.
+
+### Was die neue Schrift sofort aufgedeckt hat
+
+**F46 — Die Menüaufteilung war für die Spielschrift zu schmal.** Mit der
+Systemschrift passte alles; mit den echten Vorschüben nicht mehr. Gemessen an
+der laufenden Demo: längstes Kommando („Gegenstand") **138 px**, Zeigerspalte
+20 px, „Zeit" + „8:39:36" **154 px** — die Textfläche der linken Spalte bot
+134 px. Der Zeiger lag auf dem „G", und der Zeitwert überschrieb sein Label
+(sichtbar als „Ze8:39:36"). Die Spaltenbreite ist damit **keine freie Zahl
+mehr**: Sie ist aus der gemessenen Schrift nach unten begrenzt und steht jetzt
+mit Herleitung in `packages/menu/src/layout.ts` (204 px ⇒ 170 px Textfläche).
+🔴 Die *Anordnung* bleibt unbelegt — gemessen ist die Untergrenze, nicht die
+Aufteilung.
+
+**F47 — Der Auswahlzeiger ist kein Blattzeichen.** `▶` ist das einzige Zeichen
+im gesamten Bestand ohne Zelle; im Original sitzt der Zeiger in der
+Fenstergrafik (Sektion 0). Fehlstellen werden deshalb **sichtbar in
+Systemschrift** gesetzt statt als leeres Kästchen — der erste Entwurf hatte den
+Zeiger stumm verschwinden lassen.
+
+**F48 — Die oberen Bits des Breitenbytes bleiben offen, aber jetzt scharf
+gestellt.** Der Welle-2-Vorbehalt fragte, welche Auslegung beim *Zeichnen* gilt.
+`tools/realdata-scan/src/glyph-oberbits-probe.rdtest.ts` misst beide gegen die
+Tintenbreite:
+
+| Gruppe | additiv trifft Tinte + 1 | untere 5 Bit treffen Tinte + 1 |
+|---|---|---|
+| ohne obere Bits (200 Glyphen) | 97,0 % | 97,0 % (dieselbe Rechnung — eingebaute Kontrolle) |
+| **mit oberen Bits (12 Glyphen)** | **0,0 %** | **16,7 %** |
+
+**Beide Auslegungen fallen durch.** Betroffen sind genau `" ( ) , . 1 : Ä Å Ç É
+Ñ`. Gezeichnet wird weiter mit der additiven Regel, weil sie als einzige
+unabhängig belegt ist (Fenstermessung Welle 2: 38,90 % exakt gegen 21,80 %) —
+sichtbare Folge ist der Abstand hinter `1` und `.`. Der Sichtvergleich mit dem
+Referenzdialog (`20260810223255_1.jpg`, „Follow me. ”") zeigt genau denselben
+breiten Abstand hinter dem Punkt, stützt die additive Regel also. Offen bleibt,
+ob das Original zusätzlich einen **linken Versatz** aus den oberen Bits
+anwendet; das entscheidet erst eine Aufnahme mit Ziffern in Dialogschrift oder
+die Textroutine des Originals (jetzt nach [ADR-027](ADR-027-DECOMP-REFERENZ.md)
+zulässig).
+
+### Rückfall
+
+Ohne `WINDOW.BIN` bleibt es bei der Systemschrift — sichtbar und begründet: Der
+Bootlog schreibt entweder „Spielschrift aus WINDOW.BIN (212 belegte Zellen,
+Palettenzeile 7, Vorschub aus der Breitentabelle)" oder den Grund, warum nicht.
+Ein stiller Rückfall existiert nicht.

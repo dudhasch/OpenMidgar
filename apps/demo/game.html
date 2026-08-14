@@ -32,9 +32,18 @@
       margin-bottom: 1.2rem; min-width: 50%; max-width: 92%;
       white-space: pre-wrap;
     }
-    #dialogOverlay .choice { padding-left: 1.2em; }
+    /*
+     * Auswahl-Einzug in PIXELN, nicht in em: Sobald der Text aus dem Fontblatt
+     * gezeichnet wird (Welle 3), steht die Schriftgröße des Kastens auf 0 —
+     * jede em-Angabe wäre dann still 0. Der Zeiger ist bis heute kein
+     * Blattzeichen (er sitzt im Fenstergrafik-Blatt, WINDOW.BIN Sektion 0),
+     * deshalb behält er ausdrücklich seine eigene Schriftgröße.
+     */
+    #dialogOverlay .choice { padding-left: 26px; }
     #dialogOverlay .choice.sel { padding-left: 0; }
-    #dialogOverlay .choice.sel::before { content: '▶ '; }
+    #dialogOverlay .choice.sel::before {
+      content: '▶ '; font-size: 21px; line-height: 32px; vertical-align: top;
+    }
     /*
      * Menü: nur noch die Zeichenfläche. Fenster, Zeilen und Balken setzt der
      * gemeinsame Maler absolut in Koordinaten der 640×480-Menüfläche (F40);

@@ -93,7 +93,8 @@ export interface MainMenuLayout {
 
 /**
  * 🟡 Die Vorgabeaufteilung. Die Zahlen ergeben sich aus dem Raster: 640 px
- * Breite, links eine Kommandospalte von 168 px, rechts der Rest.
+ * Breite, links eine Kommandospalte (Breite seit Welle 3 aus der gemessenen
+ * Spielschrift abgeleitet, s. `LINKE_SPALTE`), rechts der Rest.
  *
  * 🟢 **Was an ihnen KEINE Wahl mehr ist — das Höhenbudget** (gemessen beim
  * Verdrahten der Demo, weil die erste Fassung die Gil-Zeile verschluckte):
@@ -113,13 +114,64 @@ export interface MainMenuLayout {
  * Zeit — eine erzwungene Entscheidung, keine gemessene. Sobald eine
  * Menüaufnahme auftaucht, wird sie hier korrigiert.
  */
+/**
+ * Spalte für den Auswahlzeiger. Er ist **kein Blattzeichen** (er sitzt in der
+ * Fenstergrafik, `WINDOW.BIN` Sektion 0) und wird als eigener Kasten links vor
+ * die Zeile gesetzt; der Text rückt um diesen Betrag ein, damit er nicht
+ * darunter liegt.
+ */
+export const CURSOR_SPALTE = 20;
+
+/**
+ * Breite der linken Spalte — seit Welle 3 **aus der gemessenen Spielschrift
+ * abgeleitet**, nicht mehr geraten.
+ *
+ * Sobald der Text aus dem Fontblatt kommt, ist die Spaltenbreite keine freie
+ * Zahl mehr: Sie muss den längsten Kommandonamen plus Zeigerspalte tragen, und
+ * in derselben Spalte steht darunter „Zeit" mit rechtsbündigem Wert. Gemessen
+ * an der deutschen Fassung (640×480-Fläche, Vorschübe aus `WINDOW.BIN`):
+ *
+ * | Inhalt | gemessen |
+ * |---|---|
+ * | längstes Kommando („Gegenstand") | 138 px |
+ * | Zeigerspalte | 20 px |
+ * | „Zeit" + „8:39:36" | 46 + 108 = 154 px |
+ * | „Gil" + „15.473" | 28 + 96 = 124 px |
+ *
+ * Die Textfläche eines Fensters ist `Breite − 34` (Bordüre 2 × 5 px,
+ * Polsterung 2 × 12 px). Verlangt werden davon 158 px (Kommando + Zeiger) und
+ * 154 px (Zeit + Wert), Letzteres mit sichtbarem Abstand dazwischen. Gesetzt
+ * sind **204 px** ⇒ 170 px Textfläche: 12 px Reserve für die Kommandospalte,
+ * 16 px Abstand in der Zeitzeile. Die alten 168 px stammten aus der
+ * Systemschrift und waren für „Gegenstand" **zu schmal** — der Zeiger lag auf
+ * dem G, und Zeit und Wert überschrieben sich.
+ *
+ * 🔴 Unverändert offen bleibt die *Anordnung* (welches Fenster wo steht, ob die
+ * Kommandospalte links oder rechts sitzt): dafür fehlt weiterhin eine
+ * Menüaufnahme. Gemessen ist die Untergrenze, nicht die Aufteilung.
+ */
+const LINKE_SPALTE = 204;
+
 export const FF7_MAIN_MENU_LAYOUT: MainMenuLayout = {
-  commands: { x: 0, y: 0, width: 168, height: 342 },
-  timeGil: { x: 0, y: 342 + PANEL_GAP, width: 168, height: 86 },
-  party: { x: 168 + PANEL_GAP, y: 0, width: MENU_SURFACE.width - 168 - PANEL_GAP, height: 424 },
-  location: { x: 168 + PANEL_GAP, y: 426, width: MENU_SURFACE.width - 168 - PANEL_GAP, height: 54 },
+  commands: { x: 0, y: 0, width: LINKE_SPALTE, height: 342 },
+  timeGil: { x: 0, y: 342 + PANEL_GAP, width: LINKE_SPALTE, height: 86 },
+  party: {
+    x: LINKE_SPALTE + PANEL_GAP,
+    y: 0,
+    width: MENU_SURFACE.width - LINKE_SPALTE - PANEL_GAP,
+    height: 424,
+  },
+  location: {
+    x: LINKE_SPALTE + PANEL_GAP,
+    y: 426,
+    width: MENU_SURFACE.width - LINKE_SPALTE - PANEL_GAP,
+    height: 54,
+  },
   partyEntryHeight: 132,
-  columns: { valueRight: 0, second: 150, third: 300, barWidth: 120 },
+  // Balken 20 px schmaler als vorher: Die Gruppenfläche verliert durch die
+  // breitere linke Spalte 36 px; `third + barWidth` muss in ihre Textfläche
+  // (434 − 34 = 400 px) passen und tut das jetzt exakt.
+  columns: { valueRight: 0, second: 150, third: 300, barWidth: 100 },
 };
 
 /** Zwei Rechtecke überlappen? Wird im Test gegen die Aufteilung geprüft. */

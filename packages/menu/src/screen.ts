@@ -9,6 +9,7 @@ import {
 } from '@webmidgar/ui-window';
 import { barFill, formatDuration, formatNumber, formatRatio } from './format.js';
 import {
+  CURSOR_SPALTE,
   FF7_MAIN_MENU_LAYOUT,
   MENU_SURFACE,
   type MainMenuLayout,
@@ -195,7 +196,7 @@ export function buildMainScreen(
   const befehlsZeilen: MenuScreenLine[] = sichtbar.map((s, i) => ({
     key: `cmd.${s.key}`,
     y: i * m.lineHeight,
-    runs: [run(COMMAND_LABELS[s.key], 0, 'left', m, s.locked)],
+    runs: [run(COMMAND_LABELS[s.key], CURSOR_SPALTE, 'left', m, s.locked)],
     bars: [],
     selectable: !s.locked,
     cursor: state.partyCursor === null && i === state.commandCursor,

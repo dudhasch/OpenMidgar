@@ -9,7 +9,14 @@
  * Farbe der Schale.
  */
 
-import { FF7_WINDOW_SKIN, WindowDisplayMode, applyWindowSkin } from '@webmidgar/ui-window';
+import {
+  FF7_WINDOW_SKIN,
+  WindowDisplayMode,
+  applyWindowSkin,
+  paintGlyphText,
+  type FontContext,
+  type GlyphContainer,
+} from '@webmidgar/ui-window';
 import type { HudBox } from './model.js';
 
 /** Minimalsicht auf ein Element — hält den Maler ohne `lib.dom` testbar. */
@@ -17,6 +24,9 @@ export interface PaintElement {
   style: { setProperty(name: string, value: string): void };
   textContent: string | null;
   remove(): void;
+  /** Nur vorhanden, wenn aus der Spielschrift gezeichnet wird. */
+  replaceChildren?(...nodes: unknown[]): void;
+  ownerDocument?: { createElement(tag: string): unknown } | null;
 }
 
 export interface PaintHost {
@@ -31,7 +41,11 @@ const px = (n: number): string => `${n}px`;
  * Zeichnet eine Kastenliste. Elemente, die diesmal fehlen, werden entfernt —
  * so bleibt der Baum genau so groß wie das Modell.
  */
-export function paintBoxes(host: PaintHost, boxes: readonly HudBox[]): void {
+export function paintBoxes(
+  host: PaintHost,
+  boxes: readonly HudBox[],
+  font: FontContext | null = null,
+): void {
   const seen = new Set<string>();
   for (const box of boxes) {
     seen.add(box.id);
@@ -93,7 +107,21 @@ export function paintBoxes(host: PaintHost, boxes: readonly HudBox[]): void {
         break;
       }
     }
-    if (box.text !== undefined) el.textContent = box.text;
+    if (box.text !== undefined) {
+      // Aus der Spielschrift zeichnen, wo sie vorliegt; sonst wie bisher Text
+      // setzen. Der Rückfall ist bewusst sichtbar und nicht still: ohne
+      // `WINDOW.BIN` steht dieselbe Systemschrift da wie vor Welle 3.
+      const zeichenbar = font !== null && typeof el.replaceChildren === 'function';
+      if (zeichenbar) {
+        paintGlyphText(el as unknown as GlyphContainer, box.text, font, {
+          // Einzeiler sitzen mittig im Kasten (der ist auf den Pixel gesetzt);
+          // mehrzeilige Kästen nehmen die Zeilenhöhe der Schale.
+          lineHeight: box.text.includes('\n') ? FF7_WINDOW_SKIN.lineHeight : box.rect.h,
+        });
+      } else {
+        el.textContent = box.text;
+      }
+    }
   }
   for (const [id, el] of host.existing) {
     if (seen.has(id)) continue;
