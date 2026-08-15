@@ -730,3 +730,74 @@ nicht verworfen: Die Endpunkte sind **keine** Walkmesh-Vertices (Bestwert
 2/1095), und @0/@6 sind **keine** Dreiecksnummern (0,8 % / 0,9 % gegen
 Nachbarkontrollen 0,4 % / 1,8 %). Eine Austritts**linie** ist im Record nicht
 auffindbar; der Übertritt läuft deshalb über den Punkt.
+
+## F35 — wenn drei Deutungen scheitern und die alte Regel bleibt (2026-08-15)
+
+F35-1 endete mit einer Alternative: Heißt eine leere Hintergrundmaske
+„unsichtbar" oder „Anfangszustand"? Beide Lesarten waren plausibel, und genau
+das ist der Zustand, in dem in diesem Projekt normalerweise geraten würde.
+
+**Alle drei geprüften Deutungen sind an ihrer eigenen Vorhersage gescheitert** —
+Einmal-Effekte (H1), Rückfall auf den Anfangszustand (H2), BGCLR ≠ BGOFF (H3).
+Die Zahlen stehen in den [Demo-Findings](DEMO-FINDINGS-1.0.md).
+
+**Das methodisch Wichtige ist die Vertauschungskontrolle.** H1 sagte, auf 0
+endende Gruppen seien kleiner. Gemessen: Median 36 gegen 25 — die falsche
+Richtung. Man könnte daraus „also H2" folgern. Die Kontrolle mit **vertauschten**
+Endmasken liefert 35 gegen 27, also praktisch denselben Split. Damit ist nicht
+H1 widerlegt und H2 bestätigt, sondern **die ganze Messgröße entwertet**: Die
+Endmaske trägt über die Gruppengröße keine Information. Ohne die Kontrolle wäre
+aus einem Nicht-Signal ein Befund geworden.
+
+**Entschieden hat am Ende eine Größe, die keine Deutung braucht:** Welchen
+Bildanteil nimmt die geltende Regel weg? Median **0,0 %**; 27 von 508 Fields
+über 10 %, genau **eines** über 50 %. Der typische Field verliert nichts, also
+bleibt die Regel — und der Ausläufer ist als Dauerprobe eingezäunt, statt
+weggeredet zu werden.
+
+**Nebenbefund, der eine eigene Zeile verdient:** Die Zuordnung in F35-1 („`lift`
+ist die Hintergrundgruppe param 17/18") war falsch. `lift` hat weder Modell noch
+Hintergrundparameter; 17 und 18 gehören `smoke0`/`smoke1`. Der Fehler entstand
+dadurch, dass zwei modelllose Entitäten und drei Hintergrundparameter im selben
+Field vorkamen und die Zuordnung **erschlossen statt gemessen** wurde. Die
+Messung war einen Kontrollflusslauf entfernt.
+
+## F07 — der erste Schreibpfad des Projekts (2026-08-15)
+
+Bis Welle 4 hat WebMidgar **nur gelesen**. Der Menü-Schreibpfad ist damit ein
+Bruch mit einer bis dahin bequemen Eigenschaft: Was man nicht schreibt, kann man
+nicht beschädigen. Drei Vorkehrungen ersetzen diese Bequemlichkeit:
+
+1. **Die Bytes sind die Wahrheit.** Geschrieben wird in den 4340-B-Slot,
+   `readSavemap` bleibt die einzige Deutung. Ein zweiter Weg über das
+   `Savemap`-Objekt hätte zwei Quellen erzeugt.
+2. **Keine Handlung in place.** Jede Funktion gibt einen neuen Slot zurück. Das
+   kostet 4,3 kB je Handlung und macht die Frage „welche Bytes hat das
+   geändert?" zur Testroutine.
+3. **Die Bytedifferenz ist die Abnahme.** Nicht „liest sich der Wert zurück",
+   sondern „hat sich außerhalb des erlaubten Fensters etwas bewegt".
+
+**Die Datei des Nutzers wird nie geschrieben.** Der veränderte Slot geht in den
+eigenen, versionierten Spielstand; die Installation bleibt Lesequelle.
+
+🔴 **„Benutzen" bleibt offen, und zwar aus Datenlage, nicht aus Zeitmangel.**
+Der `ItemRecord` trägt `attackPower` und `damageCalculationId`, aber keine
+belegte Wirkungsangabe. Solange nicht gemessen ist, wie viele HP ein Trank
+zurückgibt, ist die ehrliche Umsetzung **keine** — ein Gegenstand, der
+verbraucht wird und nichts tut, ist schlechter als ein fehlender Menüpunkt. Eine
+mögliche Messung liegt auf der Hand und ist notiert: Die Beschreibungstexte der
+Kernel-Listen enthalten Zahlen; welcher Recordbyte diese Zahl vorhersagt, ist
+mit Vertauschungskontrolle prüfbar.
+
+## Offen aus Welle 4
+
+- 🔴 **F35-Rest:** Was `junonr2`s `lift` zeichnet, ist ungeklärt — weder Modell
+  noch Hintergrundparameter. Die Animationsspannen hängen an Story-`REQSW`.
+- 🔴 **Bildanteil-Ausläufer:** 27 Fields verlieren mehr als 10 % ihrer Kacheln,
+  `junin7` 61,7 %. Als Dauerprobe eingezäunt, nicht erklärt.
+- 🔴 **Gegenstandswirkung** (s. o.) — Voraussetzung für „Benutzen".
+- 🟡 **HP-/MP-Maxima nach Ausrüstungswechsel** (@56/@58 tragen Boni).
+- 🔴 **Materia-Umverteilung** beim Waffenwechsel.
+- ⚠️ **`menu-savemap-probe.rdtest.ts`** schließt seine Dateihandles nicht; der
+  Realdatenlauf meldet dadurch zwei `ERR_INVALID_STATE`-Fehler außerhalb der
+  Tests. Kein Fehlschlag, aber Lärm, der einen echten Fehler verdecken kann.

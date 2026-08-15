@@ -83,6 +83,21 @@ export interface GameData {
   /** `field.tbl` aus `world_us.lgp` — World↔Field-Einstiegspunkte (F06). */
   fieldTable: FieldTable | null;
   savemap: Savemap | null;
+  /**
+   * Rohbytes desselben Slots (4340 B) — **die Wahrheit**, aus der `savemap`
+   * gelesen wurde.
+   *
+   * Sie werden seit Welle 4 mitgeführt, weil das Menü sie verändert (F07):
+   * Ausrüsten schreibt in diese Bytes, und `readSavemap` deutet sie danach neu.
+   * Ohne sie gäbe es nur die gedeutete Fassung, und ein Schreibweg über das
+   * gedeutete Objekt hätte zwei Quellen erzeugt, die auseinanderlaufen können.
+   */
+  savemapRaw: Uint8Array | null;
+  /**
+   * Fingerprint der Quellinstallation. Ein Spielstand gehört zu seinen Daten;
+   * beim Laden warnt `acceptSlot`, wenn er von woanders stammt.
+   */
+  sourceFingerprint: string;
   musicNames: string[];
   /**
    * Bereichskodierte Inventarnamen (F18): 0–127 Gegenstände · 128–255 Waffen ·
@@ -382,6 +397,7 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
 
   // Spielstand: erster belegter Slot der ersten vorhandenen Save-Datei.
   let savemap: Savemap | null = null;
+  let savemapRaw: Uint8Array | null = null;
   for (const file of ['save/save00.ff7', 'save/save01.ff7']) {
     const bytes = await fetchRawFile(file);
     if (!bytes) continue;
@@ -389,7 +405,12 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     const slot = parsed?.slots.find((s) => s.occupied);
     if (slot) {
       savemap = readSavemap(slot.raw);
-      if (savemap) break;
+      // Eigene Kopie: Der Wirt schreibt hinein, und die Bytes des geladenen
+      // Dateipuffers gehören ihm nicht.
+      if (savemap) {
+        savemapRaw = slot.raw.slice();
+        break;
+      }
     }
   }
 
@@ -403,6 +424,8 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     worldChoice,
     fieldTable,
     savemap,
+    savemapRaw,
+    sourceFingerprint: result.sourceFingerprint,
     musicNames,
     itemName,
     itemDescription,

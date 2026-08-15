@@ -25,10 +25,11 @@ import {
   planTransition,
   type FieldChange,
   type FieldInput,
+  type FieldSessionSnapshot,
   type TickResult,
 } from '@webmidgar/field-runtime';
 import { resolveFieldMusic, type FieldBundle, type FieldDiagnostic } from '@webmidgar/formats-field';
-import { berechneAnfangsBgStates, type HostRequest } from '@webmidgar/interpreter';
+import { berechneAnfangsBgStates, regionBuffers, type HostRequest } from '@webmidgar/interpreter';
 import { MusicRuntime, planLoop } from '@webmidgar/audio';
 import {
   applyWindowSkin,
@@ -124,10 +125,19 @@ import {
   VIEW_ORDER,
   type MenuData,
   type MenuInput,
+  type MenuActionHost,
   type MenuScreen,
   type MenuViewId,
+  type SaveSlotChoice,
 } from '@webmidgar/menu';
-import { readSavemap } from '@webmidgar/formats-save';
+import {
+  formatPlaytime,
+  readSavemap,
+  SaveSlotStore,
+  SAVE_SCHEMA_VERSION,
+  type Savemap,
+  type SaveSlot,
+} from '@webmidgar/formats-save';
 import { composeSavemapSlot, type FixtureSavemap } from '@webmidgar/fixture-gen';
 import { CURSOR_SPALTE } from '@webmidgar/menu';
 import { bootGameData, type GameData } from './game/data';
@@ -497,6 +507,21 @@ window.addEventListener('keydown', (e) => {
     toggleWorld();
     return;
   }
+  /**
+   * Schnellspeichern und -laden auf Platz 0 (F07). Das Menü kann speichern,
+   * aber nicht laden — das Original hat im Hauptmenü keinen Ladepunkt, und
+   * einen zu erfinden wäre eine Ansicht ohne Vorbild. Zwei Tasten sind hier
+   * die ehrlichere Lösung als ein erfundener Menüeintrag.
+   */
+  if (e.code === 'F6' || e.code === 'F7') {
+    e.preventDefault();
+    const tat = e.code === 'F6' ? spielstandSchreiben(0) : spielstandLaden(0);
+    void tat.then((text) => {
+      log(text);
+      setStatus(text);
+    });
+    return;
+  }
   // T blättert durch die drei Weltkarten-Darstellungsarten (F11b/F25). Die
   // beiden Diagnosearten bleiben erreichbar — sie sind ein Werkzeug.
   if (e.code === 'KeyT' && mode === 'world') {
@@ -537,7 +562,13 @@ const MENU_FIXTURE: FixtureSavemap = {
 
 function menuData(): MenuData {
   return {
-    savemap: data?.savemap ?? readSavemap(composeSavemapSlot(MENU_FIXTURE))!,
+    /**
+     * `savemapAktuell` statt `data.savemap`: Seit Welle 4 verändert das Menü
+     * den Stand (F07). Wer hier die Ladefassung nähme, zeigte nach jedem
+     * Ausrüsten wieder die alte Ausrüstung — die Handlung liefe ins Leere,
+     * ohne dass irgendetwas fehlschlüge.
+     */
+    savemap: savemapAktuell ?? readSavemap(composeSavemapSlot(MENU_FIXTURE))!,
     itemName: data?.itemName ?? (() => null),
     itemDescription: data?.itemDescription,
     materiaName: data?.materiaName,
@@ -555,8 +586,153 @@ function menuData(): MenuData {
   };
 }
 
+// --- Spielstand: Wirt der Menü-Handlungen und Speicherplätze (F07) ---------------
+
+/**
+ * Die laufenden Spielstandsbytes. Sie starten als Kopie aus der Installation
+ * (`data.savemapRaw`) und werden ab hier vom Menü verändert — die Datei des
+ * Nutzers wird nie geschrieben.
+ */
+let savemapBytes: Uint8Array | null = null;
+let savemapAktuell: Savemap | null = null;
+
+/** Wie viele Plätze die Speicheransicht anbietet. */
+const SPEICHERPLAETZE = 4;
+
+const saveStore = new SaveSlotStore();
+let saveStoreBereit = false;
+let saveUebersicht: SaveSlotChoice[] = Array.from({ length: SPEICHERPLAETZE }, (_, i) => ({
+  index: i,
+  label: 'Leer',
+  belegt: false,
+}));
+
+async function saveStoreOeffnen(): Promise<boolean> {
+  if (saveStoreBereit) return true;
+  try {
+    await saveStore.open();
+    saveStoreBereit = true;
+    await saveUebersichtAktualisieren();
+    return true;
+  } catch (err) {
+    log(`Spielstandspeicher nicht verfügbar: ${String(err)}`);
+    return false;
+  }
+}
+
+async function saveUebersichtAktualisieren(): Promise<void> {
+  if (!saveStoreBereit) return;
+  const belegt = await saveStore.list(SPEICHERPLAETZE);
+  saveUebersicht = Array.from({ length: SPEICHERPLAETZE }, (_, i) => {
+    const meta = belegt.find((m) => m.index === i);
+    if (!meta) return { index: i, label: 'Leer', belegt: false };
+    return {
+      index: i,
+      label: `${meta.fieldId}  ${formatPlaytime(Math.floor(meta.tickCounter / 30))}`,
+      belegt: true,
+    };
+  });
+}
+
+/**
+ * Baut den Spielstand aus dem laufenden Zustand.
+ *
+ * Was mitgeht, ist genau das, was sich nicht wieder herleiten lässt: die
+ * Variablenregionen des Interpreters, der Field-Snapshot und seit Version 2
+ * die Savemap. Alles Ableitbare — geladene Modelle, Kamera, Hintergrundnetze —
+ * bleibt draußen und wird beim Laden neu gebaut.
+ */
+function spielstandBauen(label: string): SaveSlot | null {
+  if (!fieldSession) return null;
+  return {
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    sourceFingerprint: data?.sourceFingerprint ?? 'unbekannt',
+    createdAt: Date.now(),
+    globalState: fieldSession.runtime ? regionBuffers(fieldSession.runtime.state).map((b) => b.slice()) : [],
+    fieldId: fieldName,
+    fieldState: fieldSession.snapshot(),
+    tickCounter: fieldSession.snapshot().tick,
+    label,
+    ...(savemapBytes ? { savemap: savemapBytes.slice() } : {}),
+  };
+}
+
+async function spielstandSchreiben(index: number): Promise<string> {
+  if (!(await saveStoreOeffnen())) return 'Speichern nicht möglich — kein Speicher';
+  const slot = spielstandBauen(`${fieldName} (Platz ${index + 1})`);
+  if (!slot) return 'Speichern nicht möglich — keine laufende Field-Sitzung';
+  try {
+    await saveStore.write(index, slot);
+    await saveUebersichtAktualisieren();
+    log(`Spielstand ${index + 1} geschrieben (${slot.fieldId}, Tick ${slot.tickCounter})`);
+    return `Platz ${index + 1} gespeichert — ${slot.fieldId}`;
+  } catch (err) {
+    log(`Speichern fehlgeschlagen: ${String(err)}`);
+    return `Speichern fehlgeschlagen: ${String(err)}`;
+  }
+}
+
+/**
+ * Lädt einen Spielstand: erst das Field betreten (das baut Netze, Modelle und
+ * Sitzung neu auf), dann den Snapshot einspielen.
+ *
+ * Die Reihenfolge ist nicht beliebig — `FieldSession.restore` lehnt einen
+ * Snapshot ab, der zu einem anderen Field gehört, und genau diese Prüfung ist
+ * der Grund, warum hier nicht andersherum gearbeitet wird.
+ */
+async function spielstandLaden(index: number): Promise<string> {
+  if (!(await saveStoreOeffnen())) return 'Laden nicht möglich — kein Speicher';
+  const ergebnis = await saveStore.read(index, data?.sourceFingerprint);
+  if (!ergebnis) return `Platz ${index + 1} ist leer`;
+  if (!ergebnis.ok) return `Platz ${index + 1} unlesbar: ${ergebnis.reason}`;
+  for (const w of ergebnis.warnings) log(`Spielstand ${index + 1}: ${w}`);
+
+  const slot = ergebnis.slot;
+  if (mode === 'world') toggleWorld();
+  const betreten = await enterField(slot.fieldId);
+  if (!betreten || !fieldSession) return `Field "${slot.fieldId}" nicht ladbar`;
+
+  const wieder = fieldSession.restore(slot.fieldState as FieldSessionSnapshot);
+  for (const w of wieder.warnings) log(`Spielstand ${index + 1}: ${w}`);
+  if (!wieder.ok) return `Snapshot abgelehnt: ${wieder.reason ?? 'unbekannt'}`;
+
+  if (slot.savemap) {
+    savemapBytes = slot.savemap.slice();
+    savemapAktuell = readSavemap(savemapBytes);
+  }
+  updateFieldActors();
+  log(`Spielstand ${index + 1} geladen (${slot.fieldId}, Tick ${slot.tickCounter})`);
+  return `Platz ${index + 1} geladen — ${slot.fieldId}`;
+}
+
+/**
+ * Der Wirt, den die Menüsitzung für ihre Handlungen ruft (F07).
+ *
+ * Er ist bewusst dünn: Er hält die Bytes, deutet sie mit `readSavemap` und
+ * reicht die neue Datensicht zurück. Das Schreiben selbst liegt in
+ * `@webmidgar/formats-save`, die Ablauflogik in `@webmidgar/menu` — hier steht
+ * nur die Verbindung.
+ */
+const menuWirt: MenuActionHost = {
+  slot: () => savemapBytes,
+  apply: (slot) => {
+    savemapBytes = slot;
+    savemapAktuell = readSavemap(slot);
+    return menuData();
+  },
+  saveSlots: () => saveUebersicht,
+  requestSave: (index) => {
+    void spielstandSchreiben(index).then((text) => {
+      menuSession?.setMessage(text);
+      renderMenu();
+    });
+    return `Platz ${index + 1} wird gespeichert …`;
+  },
+};
+
 function openMenu(requestId: number | null): void {
-  menuSession = new MenuSession(menuData());
+  void saveStoreOeffnen().then(() => renderMenu());
+  menuSession = new MenuSession(menuData(), menuWirt);
   /**
    * `main` statt `party`: erst damit greift der zweistufige Abbruch
    * (Unteransicht → Hauptmenü → schließen) und die Kommandospalte ist
@@ -2113,6 +2289,18 @@ async function boot(): Promise<void> {
   // Die drei Ketten, die sich früher still selbst verdeckt haben, melden sich
   // beim Start: Namenszuordnung, Weltscript-Paarung, Einstiegstabelle.
   log(data.kernelHinweis);
+  /**
+   * F07: Der laufende Spielstand ist ab hier eine **eigene Kopie**. Die Datei
+   * des Nutzers bleibt unberührt — geschrieben wird nur in den eigenen,
+   * versionierten Spielstandsplatz.
+   */
+  savemapBytes = data.savemapRaw ? data.savemapRaw.slice() : null;
+  savemapAktuell = data.savemap;
+  log(
+    savemapBytes
+      ? 'Spielstand geladen — Ausrüsten und Speichern sind freigegeben'
+      : 'Kein Spielstand in der Installation gefunden — das Menü bleibt lesend',
+  );
   const schrift = buildFontContext(data.windowBin);
   fontKontext = schrift.kontext;
   log(schrift.hinweis);
@@ -2350,6 +2538,24 @@ function codeForAction(action: SemanticAction): string | null {
    * über eine Tastenfolge erreichbar und damit nicht automatisierbar.
    * Ohne offenes Menü wird eines geöffnet.
    */
+  /**
+   * F07: Was steht gerade im laufenden Spielstand? Die Menüansicht zeigt nur
+   * die erste Zeile je Fenster; für die Abnahme einer **Schreibhandlung**
+   * braucht es den Wert selbst.
+   */
+  spielstand: (): object => ({
+    bytes: savemapBytes?.length ?? null,
+    ausruestung: (savemapAktuell?.characters ?? []).slice(0, 3).map((c) => ({
+      name: c.name,
+      waffe: c.weapon,
+      ruestung: c.armor,
+      accessoire: c.accessory,
+    })),
+    inventarWaffen: (savemapAktuell?.inventory ?? [])
+      .filter((e) => e.itemId >= 128 && e.itemId < 256)
+      .map((e) => `${e.itemId}×${e.count}`),
+    speicherplaetze: saveUebersicht,
+  }),
   menueAnsicht: (view?: string): object => {
     if (!menuSession) openMenu(null);
     if (view) {

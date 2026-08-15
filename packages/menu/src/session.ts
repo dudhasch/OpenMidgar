@@ -17,17 +17,31 @@ import {
   buildPhsView,
 } from './views.js';
 import { buildMainScreen, buildViewScreen, COMMAND_LABELS, type MenuScreen } from './screen.js';
-import { MENU_ITEM_ORDER } from '@webmidgar/formats-save';
+import {
+  buildEquipPickView,
+  buildSaveView,
+  MATERIA_HINWEIS,
+  pickTargetSlot,
+  saveTargetIndex,
+  type MenuActionHost,
+  type PendingAction,
+} from './actions.js';
+import { equipItem, MENU_ITEM_ORDER, unequipItem, type EquipSlotKind } from '@webmidgar/formats-save';
 
 /**
  * Menü-Ablauf (S21) als reines Zustandsmodell — dieselbe Bauform wie die
  * Dialogsitzung aus S15.
  *
- * **Das Menü hat keine Zustandswirkung auf die Spielwelt.** Es liest die
- * Savemap und sonst nichts; es tickt den Interpreter nicht, es schreibt keine
- * Bank, es erzeugt keinen HostRequest. Genau deshalb bleibt der Replay-Digest
- * beim Öffnen und Schließen unverändert — das ist nicht Absicht der
- * Implementierung, sondern Folge davon, dass es hier nichts zu schreiben gibt.
+ * **Das Menü hat keine Zustandswirkung auf die Spielwelt.** Es tickt den
+ * Interpreter nicht, es schreibt keine Bank, es erzeugt keinen HostRequest.
+ * Deshalb bleibt der Replay-Digest beim Öffnen und Schließen unverändert.
+ *
+ * ⚠️ **Seit Welle 4 gilt das für die Welt, nicht mehr für den Spielstand.**
+ * Ausrüsten und Speichern (F07) verändern die Savemap — über den Wirt
+ * ({@link MenuActionHost}), nie direkt. Der Replay-Digest bleibt davon
+ * trotzdem unberührt, und das ist keine Nachlässigkeit: Er deckt den
+ * Interpreterlauf ab, und der liest die Savemap nicht. Würde er es je tun,
+ * müsste die Savemap in den Digest — dieser Absatz ist die Merkstelle dafür.
  */
 
 export interface MenuInput {
@@ -73,10 +87,10 @@ export const VIEW_ORDER: readonly MenuViewId[] = [
 ];
 
 /**
- * Kommando → Ansicht. `formation` und `save` haben in dieser Welle keine
- * Ansicht: Reihenwechsel ist eine Handlung (nicht mein Auftrag), Speichern ist
- * S24. Sie bleiben in der Kommandospalte sichtbar und tun nichts — das ist
- * ehrlicher als sie auszublenden, denn das Original hat sie.
+ * Kommando → Ansicht. `formation` hat weiterhin keine: Der Reihenwechsel ist
+ * eine Handlung ohne gemessene Wirkung im Kampf, und ein Menüpunkt, der etwas
+ * schreibt, das nirgends gelesen wird, wäre schlimmer als einer, der nichts
+ * tut. `save` führt seit Welle 4 in die Speicheransicht (F07).
  */
 export const COMMAND_TO_VIEW: Readonly<Partial<Record<(typeof MENU_ITEM_ORDER)[number], MenuViewId>>> = {
   item: 'items',
@@ -87,7 +101,11 @@ export const COMMAND_TO_VIEW: Readonly<Partial<Record<(typeof MENU_ITEM_ORDER)[n
   limit: 'limit',
   config: 'config',
   phs: 'phs',
+  save: 'save',
 };
+
+/** Zeilenreihenfolge der Ausrüstungsansicht — Anker der Auswahl. */
+const EQUIP_ZEILEN: readonly EquipSlotKind[] = ['weapon', 'armor', 'accessory'];
 
 export interface MenuState {
   open: boolean;
@@ -104,10 +122,30 @@ export interface MenuState {
   page: number;
   /** Angezeigter Charakter der Statusansicht (Index im Recordarray). */
   characterIndex: number;
+  /**
+   * Laufende Handlung, während die Auswahlliste offen ist (F07). Sie steht im
+   * Zustand und nicht in einer Instanzvariable, damit `changed` sie mitbekommt
+   * und die Darstellung sich weiter allein am Zustand hängen kann.
+   */
+  pending: PendingAction | null;
+  /** Rückmeldung der letzten Handlung — wird in der Ansicht gezeigt. */
+  message: string | null;
+  /** Ansicht, aus der die Auswahlliste geöffnet wurde. */
+  pickReturn: MenuViewId | null;
 }
 
 export function createMenuState(): MenuState {
-  return { open: false, view: 'party', root: 'party', cursor: 0, page: 0, characterIndex: 0 };
+  return {
+    open: false,
+    view: 'party',
+    root: 'party',
+    cursor: 0,
+    page: 0,
+    characterIndex: 0,
+    pending: null,
+    message: null,
+    pickReturn: null,
+  };
 }
 
 export class MenuSession {
@@ -115,7 +153,15 @@ export class MenuSession {
   /** Vorheriger Eingabezustand — das Menü wertet ausschließlich Flanken. */
   private prev: MenuInput = { ...NEUTRAL_MENU_INPUT };
 
-  constructor(private data: MenuData) {}
+  /**
+   * Der Wirt der Handlungen (F07). Fehlt er, bleibt das Menü lesend — genau
+   * wie bis Welle 3, und die Ansichten sagen es an der Stelle, an der die
+   * Handlung stünde.
+   */
+  constructor(
+    private data: MenuData,
+    private actions: MenuActionHost | null = null,
+  ) {}
 
   /** Datenquelle austauschen (neuer Spielstand geladen). */
   setData(data: MenuData): void {
@@ -162,6 +208,13 @@ export class MenuSession {
         return buildPhsView(this.data);
       case 'config':
         return buildConfigView(this.data);
+      case 'pick': {
+        const p = this.state.pending;
+        if (!p || p.kind !== 'equip') return null;
+        return buildEquipPickView(this.data, this.state.characterIndex, p.equipSlot);
+      }
+      case 'save':
+        return buildSaveView(this.actions?.saveSlots?.() ?? null);
       case 'main':
         // Das Hauptmenü ist ein Bildschirm, keine Zeilenliste. Als
         // Zeilenmodell liefert es die Kommandospalte — so bleibt die
@@ -205,7 +258,11 @@ export class MenuSession {
       return buildMainScreen(this.data, { commandCursor: this.state.cursor, partyCursor: null });
     }
     const vm = this.viewModel();
-    return vm ? buildViewScreen(vm, this.data, this.state.cursor) : null;
+    if (!vm) return null;
+    // Die Rückmeldung einer Handlung gehört in die Ansicht, nicht in ein
+    // Protokoll — dieselbe Regel, nach der `notes` überhaupt eingeführt wurde.
+    const mit = this.state.message ? { ...vm, notes: [this.state.message, ...(vm.notes ?? [])] } : vm;
+    return buildViewScreen(mit, this.data, this.state.cursor);
   }
 
   private clampCursor(): void {
@@ -239,9 +296,20 @@ export class MenuSession {
          * bewusst: Der zweite Weg hat kein Hauptmenü, in das er zurückkehren
          * könnte, und sein Verhalten ist in den S21-Tests verankert.
          */
-        if (this.state.root === 'main' && this.state.view !== 'main') {
+        if (this.state.view === 'pick') {
+          // Aus der Auswahlliste zurück in die Ansicht, die sie geöffnet hat —
+          // nie direkt hinaus. Sonst verlöre ein versehentliches Abbrechen den
+          // ganzen Menüpfad.
+          this.state.view = this.state.pickReturn ?? 'equip';
+          this.state.pending = null;
+          this.state.pickReturn = null;
+          this.state.cursor = 0;
+          this.state.message = null;
+          this.clampCursor();
+        } else if (this.state.root === 'main' && this.state.view !== 'main') {
           this.state.view = 'main';
           this.state.cursor = 0;
+          this.state.message = null;
           this.clampCursor();
         } else {
           this.close();
@@ -267,6 +335,13 @@ export class MenuSession {
    * Gegenstandsliste ab Seite 2 nur über einen Umweg erreichbar.
    */
   private blaettern(richtung: number): void {
+    /**
+     * Auswahllisten blättern nicht. `VIEW_ORDER` kennt sie nicht, und ohne
+     * diese Wache würde `indexOf` −1 liefern und der Spieler mit einem
+     * Seitwärtsdruck aus der laufenden Handlung in die Gruppenansicht fallen —
+     * mit einer `pending`-Handlung, die dann nirgends mehr sichtbar ist.
+     */
+    if (this.state.view === 'pick' || this.state.view === 'save') return;
     if (this.state.view === 'items') {
       const seiten = itemPageCount(this.data);
       const naechste = this.state.page + richtung;
@@ -289,12 +364,18 @@ export class MenuSession {
   }
 
   /**
-   * Bestätigen. In der Gruppenansicht öffnet es den Status der gewählten Figur;
-   * überall sonst tut es **nichts** — es gibt in dieser Session keine Aktion,
-   * die etwas verändern könnte, und eine Taste, die scheinbar wirkt, wäre
-   * schlimmer als eine, die erkennbar nicht wirkt.
+   * Bestätigen.
+   *
+   * Vier Wege, in der Reihenfolge, in der sie geprüft werden: Hauptmenü öffnet
+   * die Ansicht des Kommandos · Ausrüstung öffnet die Auswahlliste · die
+   * Auswahlliste führt die Handlung aus · die Gruppenansicht öffnet den Status.
+   * Überall sonst tut Bestätigen nichts, und das bleibt so: Eine Taste, die
+   * scheinbar wirkt, ist schlimmer als eine, die erkennbar nicht wirkt.
    */
   private bestaetigen(): void {
+    if (this.state.view === 'equip') return this.equipPlatzWaehlen();
+    if (this.state.view === 'pick') return this.handlungAusfuehren();
+    if (this.state.view === 'save') return this.speichern();
     // Im Hauptmenü öffnet Bestätigen die Ansicht des gewählten Kommandos.
     if (this.state.view === 'main') {
       const sichtbar = this.visibleCommands();
@@ -320,5 +401,99 @@ export class MenuSession {
     this.state.characterIndex = index;
     this.state.view = 'status';
     this.state.cursor = 0;
+  }
+
+  // --- Handlungen (F07) ----------------------------------------------------
+
+  /** Ist ein beschreibbarer Spielstand da? Wenn nicht: sagen, warum nicht. */
+  private schreibbar(): Uint8Array | null {
+    if (!this.actions) {
+      this.state.message = 'Das Menü läuft ohne Wirt — es kann nur anzeigen';
+      return null;
+    }
+    const slot = this.actions.slot();
+    if (!slot) {
+      this.state.message = 'Kein beschreibbarer Spielstand geladen — Ausrüsten ist gesperrt';
+      return null;
+    }
+    return slot;
+  }
+
+  /** Ausrüstungsansicht: Zeile 0/1/2 öffnet die Auswahlliste des Platzes. */
+  private equipPlatzWaehlen(): void {
+    const kind = EQUIP_ZEILEN[this.state.cursor];
+    if (!kind) return;
+    if (!this.schreibbar()) return;
+    this.state.pending = { kind: 'equip', equipSlot: kind };
+    this.state.pickReturn = 'equip';
+    this.state.view = 'pick';
+    this.state.cursor = 0;
+    this.state.message = MATERIA_HINWEIS;
+    this.clampCursor();
+  }
+
+  /**
+   * Auswahlliste bestätigen: ausrüsten oder abnehmen.
+   *
+   * Der Wirt schreibt, diese Sitzung übernimmt nur das Ergebnis. Schlägt die
+   * Handlung fehl, bleibt die Liste offen und der Grund steht in der Ansicht —
+   * ein stiller Fehlschlag wäre hier besonders teuer, weil der Spieler sonst
+   * glaubt, seine Waffe sei getauscht.
+   */
+  private handlungAusfuehren(): void {
+    const p = this.state.pending;
+    if (!p || p.kind !== 'equip' || !this.actions) return;
+    const slot = this.schreibbar();
+    if (!slot) return;
+    const vm = this.viewModel();
+    const zeile = vm?.rows[vm.selectable[this.state.cursor] ?? -1];
+    const ziel = pickTargetSlot(zeile);
+    if (ziel === undefined) return;
+
+    const ergebnis =
+      ziel === null
+        ? unequipItem(slot, this.state.characterIndex, p.equipSlot)
+        : equipItem(slot, this.state.characterIndex, p.equipSlot, ziel);
+
+    if (!ergebnis.ok) {
+      this.state.message = `Nicht möglich: ${ergebnis.reason}`;
+      return;
+    }
+    this.data = this.actions.apply(ergebnis.slot);
+    this.state.view = this.state.pickReturn ?? 'equip';
+    this.state.pending = null;
+    this.state.pickReturn = null;
+    this.state.cursor = 0;
+    this.state.message =
+      ziel === null ? 'Abgenommen' : (ergebnis.note ?? 'Ausgerüstet');
+    this.clampCursor();
+  }
+
+  /** Speicheransicht bestätigen — die Anforderung geht an den Wirt. */
+  private speichern(): void {
+    const vm = this.viewModel();
+    const zeile = vm?.rows[vm.selectable[this.state.cursor] ?? -1];
+    const index = saveTargetIndex(zeile);
+    if (index === undefined) return;
+    if (!this.actions?.requestSave) {
+      this.state.message = 'Kein Spielstandspeicher angebunden';
+      return;
+    }
+    this.state.message = this.actions.requestSave(index);
+  }
+
+  /**
+   * Der Wirt meldet das Ergebnis einer angeforderten Handlung nach — er
+   * arbeitet asynchron, die Sitzung wartet nicht. Ohne diesen Weg stünde nach
+   * einem Speichervorgang für immer „wird gespeichert…" in der Ansicht.
+   */
+  setMessage(text: string | null): void {
+    this.state.message = text;
+  }
+
+  /** Datensicht ersetzen, nachdem der Wirt einen Stand geladen hat. */
+  refresh(data: MenuData): void {
+    this.data = data;
+    this.clampCursor();
   }
 }

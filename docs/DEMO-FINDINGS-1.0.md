@@ -12,7 +12,7 @@ bewertet und mit Fix-Status geführt. Konvention: F-Nummern sind stabil.
 | F04 | Field/Interaktion | Keine Talk-Interaktion vorhanden. Fix: `requestEntityScript(entity, entry)` im Interpreter (TALK_SCRIPT_SLOT=1, Leerspan-Erkennung über Slot-Wiederholungen 288.665/0-Gegenbeleg), Talk-Auslösung in FieldSession (TALK_RANGE=40 🟡, confirm-Flanke, nächster NPC). Sichtnachweis: OK neben dem Bahnsteig-Wächter liefert dekodierten Text „Received "Potion"!" wie im Original; Folgedialog + Sound 360 laufen | Kernfehler — behoben | ✅ (Slot-1-Konvention bleibt 🟡) |
 | F05 | Kampf | Echter Kampfmodus integriert: Zufalls-/Script-Encounter → BattleStarter → BattleSession; ATB, Kommandos (Angriff/Flucht), Gegner-KI, Sieg/EXP/AP/Gil/Fanfare, Rückkehr ins Field mit battle-finished-Event. Sichtnachweis `.shots/battle-fixed.jpg` | Integrationslücke | ✅ integriert (Bühne=Ersatzscheibe, Party=Quader, Kamera=Intro-Kamera — 🔴-Formatlücken) |
 | F06 | Weltkarte | ~~Echte World↔Field-Einstiegspunkte sind 🔴 (S29)~~ **Formatlücke geschlossen (2026-08-11): die Einstiegspunkte stehen in `field.tbl` (world_us.lgp) und werden über Opcode `0x318` adressiert.** Accounting byteexakt: 1536 B = 64 × 24, Rest 0; 65 von 128 Einträgen belegt, 63 genullt und aus allen Quoten herausgerechnet. Vier Vorhersagen je mit Kontrolle: **K1** Richtungsbyte 65/65 gegen 0/0/0 bei 1–3 B Versatz · **K2** `fieldId` löst über die maplist (788 Namen) auf einen existierenden flevel-Eintrag auf 65/65 gegen 22/1/0/0 bei −2/−1/+1/+2 B (die Zufallskontrolle 58/65 trägt NICHT — die maplist ist zu dicht belegt, das ist so vermerkt und nicht geschönt) · **K3** `triangle` < Dreiecksanzahl im Ziel-Walkmesh 65/65 gegen 54/65 permutiert (schwach) · **K4, tragend** der Ankunftspunkt (x, y) liegt IM Walkmesh-Dreieck `triangle` des über `fieldId` aufgelösten Feldes: **65/65 gegen 0/65** bei einem anderen Dreieck desselben Feldes und **11/65** bei permutiertem Feld. Zusatzbefund, der die Referenz KORRIGIERT: die Datensatznummer von `0x318` ist **1-basiert** — Vollerhebung über wm0/wm2/wm3.ev, 89 Fundstellen, 1-basiert 89/89 belegte Slots gegen 75/89 bei 0-basiert (Szenario 1 sogar 9/9 gegen 0/9); die Operandenreihenfolge ist gegen die Vertauschungskontrolle mit 0/89 entschieden | Formatlücke geschlossen, Demo verdrahtet | ✅ **behoben.** `parseFieldTbl` in `packages/formats-world`, an `WorldSession` durchgereicht, `world-transition` nach `source` unterschieden, Ankunft {x,y} an `enterField` weitergereicht. Live: `gameDebug.fieldTblEintrag(1,0)` ⇒ fieldId 170 ⇒ `mds5_5`, (711,−2420), Dreieck 16. 🔴 **Rest:** `direction` wird nur geloggt, nicht angewandt — Nullpunkt und Drehsinn im Field-Raum sind ungemessen. ⚠️ Der Zweig `source: 'script'` ist statisch belegt, aber **nie live ausgelöst** worden |
-| F07 | Menü | Menü ist lesend (S21-Stand): kein Ausrüsten/Benutzen/Speichern | Bekannte Ausbaustufe | 🟡 offen |
+| F07 | Menü | Menü ist lesend (S21-Stand): kein Ausrüsten/Benutzen/Speichern | Bekannte Ausbaustufe | ✅ **Ausrüsten und Speichern behoben (Welle 4)** — Schreibpfad `formats-save/src/write.ts`, Ablauf `menu/src/actions.ts`, Abnahme über die Bytedifferenz und die Stückzahlerhaltung. 🔴 **„Benutzen" bleibt offen**, weil die Wirkungsangabe im `ItemRecord` ungemessen ist — s. unten |
 | F08 | Charaktergröße | Sichtvergleich der Feldmodell-Skalierung (scale/512-Hypothese) gegen Referenzbilder steht aus | Kalibrierung | 🔜 geplant |
 | F09 | Audio | music/sound-HostRequests werden nur geloggt (music.idx→OGG-Kette wäre seit S37 möglich) | Integrationslücke, nicht 1.0-kritisch | ✅ vollständig verdrahtet (2026-08-11): Kette über resolveFieldMusic, Wiedergabe über MusicRuntime |
 | F09-B | Audio/Field | **Der MUSIC-Operand ist kein Titel, sondern ein field-lokaler Index in die AKAO-Offsettabelle von Sektion 1.** Die Demo las ihn direkt als `music.idx`-Zeile. Gemessen über 702 Fields/1243 Vorkommen: „Operand < nAkao des eigenen Fields" 98,95 % (Kontrollen 71,92 % Nachbarfield, 49,88 % Byte-davor); an `akaoOffsets[v]` steht in 1228/1230 = 99,84 % das Magic `AKAO` (Kontrollen Versatz +4 und Zufallsoffset je 0,00 %); `u16@+4` liegt 1230/1230 im Band 1…98 (Kontrolle „u16 zwei Byte weiter" 14,63 %). Gegenhypothese Kujata (`u8@+50`) 31,06 % — fällt durch. Die 2 Magic-Fehlschläge sind exakt die belegten `KAO…`-Blöcke (`junair2`, `junone7`, `sininb1`, `sininb2`), mit Versatzausgleich lösen 1230/1230 auf | Kette `MUSIC v → akaoOffsets[v] → AKAO-Kopf → musicId → music.idx[musicId−1] → OGG` | ✅ Parser + Demo verdrahtet; Endprüfung 1217/1243 = 97,91 % vorhandene OGG gegen 548/1243 = 44,09 % der Altregel |
@@ -77,8 +77,8 @@ Figurengröße) und Menü (6/6).
 | F32 | Field/Hintergrund | **Rückschritt durch F23:** In `sbwy4_6` liegt der Wasserhintergrund über den eigentlichen Texturen. Mein Zeichenpass sortiert nur nach „deckend vor gemischt" und ignoriert Layer und Tiefenschlüssel — eine gemischte Kachel aus Layer 1 landet dadurch über allem, was danach käme. Kujata teilt die Stapel nach **Layer-ID, Z-Index, param, state UND transType** auf; meine Aufteilung ließ Layer und Z weg | Von mir eingeschleppt | 🔧 Aufteilung um Layer-ID und Z-Index ergänzen, Reihenfolge Layer→Z→Mischart |
 | F33 | Kampf | **Party sind blaue Quader** (in Runde 2 zehnmal wörtlich benannt), Gegner zusätzlich „viel zu klein" — dieselbe Größenfrage wie F28, nur im Kampfraum. Ohne Party-Battle-Modelle und ohne Bühne ist die Kategorie nicht sinnvoll bewertbar; 15 von 25 Bildern katastrophal, kein einziges „gut" | Bekannte Lücke, jetzt quantifiziert | 🟡 **teilweise behoben (2026-08-11), s. K1/K2 unten.** Der Lader ist repariert — er rät keine Dateinamen mehr, sondern klassifiziert jeden Eintrag des Präfix-Namensraums über seine **Inhalts-Signatur**: **8979/8979** `.p`-Teile (Kontrolle alter Lader: **2321** = 25,8 %) und **787/787** TEX-Dateien (Kontrolle: **411**; davon Modellpräfixe **201** statt 35) über 11 119 Einträge / 481 Präfixe; kein Präfix ohne Skelett, keines mit 0 Teilen trotz Geometrie (vorher 36). Cloud (`rt`) liefert jetzt **33 Teile / 2 Texturen / 23 Bones** statt 3/0. 🔴 **Die Party bleibt trotzdem aus Quadern**: welcher Party-Platz welches Battle-Präfix trägt, ist im gesamten Baum **nirgends gemessen** — „rt = Cloud" ist eine Behauptung, für die übrigen Plätze existiert nicht einmal eine. Eine geratene Tabelle wäre ein Regel-3-Verstoß; was fehlt, ist eine Messung, nicht Code. **⇒ Diese Messung liegt seit Welle 2 vor (K4, s. u.), die Quader sind weg.** Die Party lädt jetzt über `savemap.party` → `partyModelPrefix` → `loadBattleModel`/`buildBattleActor`. Die Größenfrage ist mit Kontrolle beantwortet: **Faktor 1, kein Umrechnungsfaktor** (`BATTLE_MODEL_SCALE = 1`) — der Feldfaktor 4 aus F37 gilt im Kampf NICHT. Belegt über Bindpose-Höhen (Spieler Median 852, Gegner Median 1370) gegen einen Sweep 1/4/8/16: schon bei 4 füllt ein Party-Unterarm ein Drittel des Bildes. 🔴 Bindpose und Kamera bleiben offen, s. F26 |
 | F34 | Weltkarte | Unverändert „Farbe falsch, 3D-Modelle gut". Referenzwunsch bleibt **ff7-landscaper**; aus dem README ließen sich keine Formatdetails ziehen, die Texturzuordnung steckt im Quellcode (`src/`, `src-tauri/`) und in `docs/map-state.md` | Bekannte Lücke | ✅ Farbteil gelöst — **ohne** Fremdcode: die Zuordnung wurde aus der Spiel-EXE des Nutzers GEMESSEN, nicht aus ff7-landscaper übernommen; seit Welle 2 auch in der Demo sichtbar (s. F25). 🔜 **Der Nebenbefund „bei 3× Tab kein Fahrzeugmodell erkennbar" ist unangetastet** — das ist Weltmodell-Rendering, nicht Terrain, und wurde in Welle 2 nicht bearbeitet |
-| F35 | Field/Modelle | **Fehlende 3D-Objekte:** In `junonr2` fehlt die Gondel, in `bigwheel` fehlen Tür und Gondel in allen drei Animationsphasen. Das sind Script-gesteuerte Feldobjekte, keine Hintergrundkacheln — sie hängen an Opcodes, die die Demo noch nicht ausführt | Spielbarkeit/Sichtqualität | 🔜 messen, welche Opcodes diese Objekte sichtbar schalten |
-| F35-1 | Field/Hintergrund | **Teilbefund, vermessen (2026-08-11).** Die „Gondel" von `junonr2` ist **kein** 3D-Modell: Die Entitäten `door` (Index 0) und `lift` (Index 3) tragen `modelIndex = null` — es sind Hintergrundgruppen (Layer 1 param 16, Layer 2 param 17/18). Zwei Ursachen wurden geprüft: (a) **Bankbyte-Aufteilung ausgeschlossen** — alle **46** BG-Instruktionen von `junonr2` tragen Bankbyte 0, bei Literaloperanden ist `banks>>4`/`banks&0xf` wirkungslos. (b) **Anfangszustand eingeführt** (🔵): `berechneAnfangsBgStates` belegt je Parameter das niedrigste vorkommende Zustandsbit vor. Gemessen über 702 Fields: von 1256 animierten Kachelgruppen sind nach 300 Ticks **542 leer ohne** und **329 leer mit** Vorbelegung — **213 Gruppen mit 9682 Kacheln** werden wieder sichtbar. 🔴 **`junonr2` ist NICHT darunter**: Vorbelegung `{16:1, 17:1, 18:1}`, nach 300 Ticks ohne wie mit `{16:0, 17:0, 18:1}` — das Skript räumt die Parameter selbst wieder ab | Interpreter-seitig erledigt, Restursache liegt woanders | 🔜 **Zeichenseite/Kontrollfluss:** entweder erreicht der Wirt die Animationsunterroutine schon beim Field-Start (im Original läuft sie erst beim Benutzen des Lifts), oder die Zeichenregel muss bei leerer Maske auf den Anfangszustand zurückfallen statt alles auszublenden |
+| F35 | Field/Modelle | **Fehlende 3D-Objekte:** In `junonr2` fehlt die Gondel, in `bigwheel` fehlen Tür und Gondel in allen drei Animationsphasen. Das sind Script-gesteuerte Feldobjekte, keine Hintergrundkacheln — sie hängen an Opcodes, die die Demo noch nicht ausführt | Spielbarkeit/Sichtqualität | ✅ **vermessen und ohne Codeänderung geschlossen (Welle 4)** — die Zeichenregel ist richtig (Median des fehlenden Bildanteils **0,0 %**; drei Gegendeutungen scheitern an ihrer eigenen Vorhersage), und `junonr2`s `lift` trägt **weder Modell noch Hintergrundparameter**: seine Animationsspannen hängen an Story-`REQSW`, die in einer freilaufenden Demo nicht ablaufen. 🔴 Rest: was `lift` zeichnet, und ein Ausläufer von 27 Fields — s. unten |
+| F35-1 | Field/Hintergrund | **Teilbefund, vermessen (2026-08-11).** Die „Gondel" von `junonr2` ist **kein** 3D-Modell: Die Entitäten `door` (Index 0) und `lift` (Index 3) tragen `modelIndex = null` — es sind Hintergrundgruppen (Layer 1 param 16, Layer 2 param 17/18). Zwei Ursachen wurden geprüft: (a) **Bankbyte-Aufteilung ausgeschlossen** — alle **46** BG-Instruktionen von `junonr2` tragen Bankbyte 0, bei Literaloperanden ist `banks>>4`/`banks&0xf` wirkungslos. (b) **Anfangszustand eingeführt** (🔵): `berechneAnfangsBgStates` belegt je Parameter das niedrigste vorkommende Zustandsbit vor. Gemessen über 702 Fields: von 1256 animierten Kachelgruppen sind nach 300 Ticks **542 leer ohne** und **329 leer mit** Vorbelegung — **213 Gruppen mit 9682 Kacheln** werden wieder sichtbar. 🔴 **`junonr2` ist NICHT darunter**: Vorbelegung `{16:1, 17:1, 18:1}`, nach 300 Ticks ohne wie mit `{16:0, 17:0, 18:1}` — das Skript räumt die Parameter selbst wieder ab | Interpreter-seitig erledigt, Restursache liegt woanders | ✅ **beantwortet (Welle 4), und die Alternative war eine Scheinalternative.** Die Zeichenregel bleibt: Der deutungsfreie Bildanteil-Test gibt ihr recht (Median 0,0 %), und alle drei Gegendeutungen fallen. ⚠️ **Die Zuordnung in dieser Zeile ist falsch** — der Kontrollflusslauf zeigt param 16 = `door`, **17/18 = `smoke0`/`smoke1`**; `lift` hat **gar keinen** Hintergrundparameter. Der Fehler entstand durch Erschließen statt Messen: zwei modelllose Entitäten, drei Parameter, im selben Field |
 
 ### Quellenlage der Fremdrecherche
 
@@ -830,3 +830,171 @@ Gateways (Median 1107 ⇒ Radius < 553).
 **Sichtnachweis:** `md1stin` → `md1_1` läuft in der Demo, Ankunft exakt auf
 (1049, 400), Protokollzeile „Zielpunkt aus dem Record". `md1_1` führt weiter
 nach `md1_2` — die Kette des Demo-Ziels steht.
+
+## Welle 4, zweiter Teil — F35 vermessen, F07 gelöst, Wellenabnahme (2026-08-15)
+
+### F35 — die Zeichenregel bleibt, und das ist ein Messergebnis
+
+F35-1 hatte die Frage offen gelassen: Heißt eine leere Hintergrundmaske
+„unsichtbar" (geltende Regel) oder „zurück zum Anfangszustand"? Die Antwort
+schien eine Geschmacksfrage. Sie ist keine.
+
+**Ausgangsbefund** (`junonr2-bgfluss-probe`, Vollerhebung über 508 Fields mit
+animierten Kachelgruppen): Von 1256 Gruppen stehen nach 300 Ticks **340** auf
+Maske 0 — und **keine einzige davon unberührt**. Jede wurde vom Field-Script
+selbst abgeschaltet.
+
+**Drei Deutungen, drei Vorhersagen, drei Fehlschläge** (`bg-endzustand-probe`):
+
+| Vorhersage | erwartet | gemessen | |
+|---|---|---|---|
+| **H1** Es sind Einmal-Effekte ⇒ die Gruppen sind **klein** | deutlich kleiner als die belegt endenden | Median **36** gegen **25** — sie sind eher *größer* | ✗ |
+| Kontrolle: dieselbe Rechnung mit **vertauschten** Endmasken | Unterschied verschwindet | **35 gegen 27** — praktisch derselbe Split | ⇒ H1 ist nicht widerlegt, sondern **entwertet**: die Endmaske sagt über die Größe nichts |
+| **H2** Maske 0 heißt Anfangszustand | große Dauerobjekte enden auf 0 | s. o. — kein Signal | ✗ |
+| **H3** BGCLR (Auswahl aufheben) ≠ BGOFF (Bit löschen) ⇒ nur-BGCLR-Gruppen sind **groß** | größer | **31 gegen 48** — genau umgekehrt | ✗ |
+
+**Der deutungsfreie Test entscheidet.** Alle drei Vorhersagen setzen voraus, man
+wüsste, was eine Kachelgruppe *darstellt*. Die vierte Messung tut das nicht —
+sie fragt nur, welchen **Bildanteil** die geltende Regel nach 300 Ticks
+wegnimmt, gemessen gegen den Anfangszustand:
+
+| Größe | Wert |
+|---|---|
+| Median des fehlenden Bildanteils | **0,0 %** |
+| Fields über 10 % | 27/508 |
+| Fields über 25 % | 10/508 |
+| Fields über 50 % | **1/508** (`junin7`, 61,7 %) |
+
+⚠️ **Ein erster Anlauf dieser Messung war falsch** und wies Anteile bis 83 %
+aus. Er zählte alle Kacheln ohne gesetztes Bit — also auch die sieben von acht
+Animationsphasen, die zu Recht ausgeblendet sind. Die Zahl hätte den Verdacht
+bestätigt, ohne ihn zu messen. Gezählt wird jetzt nur der Fall Endmaske 0.
+
+**Folge: keine Regeländerung.** Der typische Field verliert nichts; eine
+Umstellung auf „leere Maske ⇒ Anfangszustand" würde die 169 Gruppen zerstören,
+die das Script absichtlich abschaltet. Der Rest ist ein **begrenzter Ausläufer**,
+und er ist als Dauerprobe eingezäunt: Wächst er über 3 Fields mit mehr als 50 %
+oder über 40 mit mehr als 10 %, schlägt der Test an.
+
+**Eine Zuordnung aus F35-1 war falsch.** Dort steht, `door` (Entity 0) und
+`lift` (Entity 3) seien die Hintergrundgruppen mit param 16 bzw. 17/18. Der
+Kontrollflusslauf zeigt: param 16 gehört `door`, **17 und 18 gehören `smoke0`
+und `smoke1`** — und `lift` trägt **weder Modell noch Hintergrundparameter**.
+Seine Animationsspannen (ab ip 1976) werden in 300 Ticks nie betreten; sie
+hängen an `REQSW`-Aufrufen aus `cloud/slot5`, `tifa/slot5`, `cid/slot5` und
+`hyde/slot10`, also an Story-Szenen. 🔵 **Damit ist F35 an der untersuchten
+Stelle kein Defekt der Engine**, sondern die richtige Folge davon, dass diese
+Szenen in einer freilaufenden Demo nicht ablaufen. Was `lift` überhaupt
+zeichnet, bleibt 🔴 offen.
+
+### F07 — das Menü handelt: Ausrüsten und Speichern
+
+Bis Welle 3 stand in `model.ts`: „Es gibt keinen Schreibpfad." Das war richtig,
+solange es keine Handlung gab, und es hatte den Preis, dass „Ausrüsten" und
+„Speichern" in der Kommandospalte standen und nichts taten.
+
+**Drei Schichten, strikt getrennt** — die Trennung ist der eigentliche Inhalt
+dieses Postens:
+
+| Schicht | Ort | Aufgabe |
+|---|---|---|
+| Bytes | `formats-save/src/write.ts` (neu) | schreibt in den 4340-B-Slot, gibt **immer einen neuen Slot** zurück |
+| Ablauf | `menu/src/actions.ts` (neu) + `session.ts` | Auswahllisten, Zeigerlogik, Rückmeldungen — kennt keine Bytes |
+| Verdrahtung | `apps/demo/src/game-demo.ts` | hält die Bytes, deutet sie mit `readSavemap` |
+
+**Abnahme des Schreibpfads: die Bytedifferenz.** Neben der Rückleseprobe prüft
+jeder Test, **welche** Bytes des Slots sich bewegt haben. Ein Schreibfehler, der
+nebenbei ein fremdes Feld trifft, überlebt jede Rückleseprobe und stirbt hier.
+Zwei Testerwartungen waren dabei zunächst falsch gedacht: Wer 200 nach 12345
+schreibt, ändert von vier u32-Bytes nur zwei — identische Bytes sind kein
+Unterschied. Die Prüfung fragt deshalb nach der Gegenrichtung: **außerhalb** des
+erlaubten Fensters darf sich nichts bewegen.
+
+**Erhaltung statt Buchhaltung.** Der Ausrüstungstausch ist der Punkt, an dem
+eine naive Umsetzung Gegenstände erzeugt oder vernichtet. `countItem` zählt eine
+Kennung über Inventar **und** alle Ausrüstungsspalten; der Test verlangt, dass
+diese Summe über zwei Tauschvorgänge konstant bleibt.
+
+🟡 **Was ausdrücklich nicht passiert:** HP-/MP-Maxima (@56/@58) tragen die
+Ausrüstungsboni, und die Formel dafür ist ungemessen — sie bleiben stehen, und
+die Ansicht sagt das. 🔴 Die Materia-Umverteilung beim Waffenwechsel ist
+ebenfalls ungemessen; die Plätze bleiben unverändert, mit Hinweis im Fußfenster.
+🔴 **„Benutzen" fehlt weiterhin** und zwar mit Grund: Der `ItemRecord` trägt
+`attackPower` und `damageCalculationId`, aber keine belegte Wirkungsangabe. Ein
+Trank, der Punkte verbraucht und nichts heilt, wäre schlechter als kein Trank.
+
+### Save/Load — Schemaversion 2
+
+`SaveSlot` führt jetzt die Savemap mit (4340 B). Version 1 kannte sie nicht,
+weil es keine veränderliche gab; `acceptSlot` **migriert** solche Stände, statt
+sie abzulehnen, und `savemap` bleibt dabei `undefined` — es wird nichts
+erfunden, und die Warnung steht im Ergebnis.
+
+In der laufenden Demo geprüft (F6 speichern, F7 laden, Platz 1):
+
+| Schritt | Cloud, Waffenindex |
+|---|---|
+| Start | 7 |
+| ausgerüstet (Auswahlliste, zweite Zeile) | **32** |
+| gespeichert (F6) | — |
+| noch einmal ausgerüstet | 87 |
+| geladen (F7) | **32** |
+
+Der Inventarplatz belegt den Tausch mit: Kennung 160 (= 128 + 32) wird zu 135
+(= 128 + 7) — das neue Stück kam heraus, das alte ging zurück, auf denselben
+Platz gestapelt. Field und Takt (471) werden mitgeladen.
+
+### Wellenabnahme: sechs Fields am Stück, gelaufen statt gerechnet
+
+`field-transition.rdtest.ts` rechnet **Kanten**. Die Wellenabnahme verlangt
+etwas anderes: dass eine Figur, die **läuft**, durchkommt. Dazwischen liegen die
+Auslöseregel, der Walkmesh-Solver mit seinem Gleiten an Wänden und der
+Sitzungstakt. `feldkette-probe.rdtest.ts` läuft deshalb wirklich.
+
+| Wechsel | Takte | Ankunft | Quelle |
+|---|---|---|---|
+| `md1stin` → `md1_1` | 460 | 1049/400 | Record |
+| `md1_1` → `md1_2` | 247 | 3560/30579 | Record |
+| `md1_2` → `nrthmk` | 781 | 832/−3051 | Record |
+| `nrthmk` → `md8_4` | 706 | 82/267 | Record |
+| `md8_4` → `nrthmk` | 40 | −916/−3028 | Record |
+| `nrthmk` → `nmkin_1` | 602 | −697/1277 | Record |
+
+**6/6, sechs verschiedene Fields, 2836 Takte, alle Ankünfte aus dem Record.**
+Die Kontrolle trägt: dieselben sechs Ankünfte mit Bewegungseingabe **null**,
+1200 Takte lang — **0 Übertritte**. Ohne diese Gegenprobe wäre der Erfolg
+wertlos; eine Regel, die jeden Takt feuert, käme auch durch sechs Fields.
+
+**Drei Fehlschläge beim Bau dieses Tests, alle lehrreich, keiner ein Enginefehler:**
+
+1. **0/6.** Die Figur stand auf der Austrittsstelle selbst. Der Übertritt feuerte
+   nie — richtig so: Die Regel ist der **Eintritt** in den Kreis. Der Test hatte
+   seine eigene Aufstellung widerlegt, nicht die Kette.
+2. **2/6.** Nach jedem Wechsel landet die Figur im Kreis des Gateways, durch das
+   sie kam. Sie muss ihn erst verlassen — genau das tut ein Spieler auch. Der
+   Lauf hat seitdem zwei Beine.
+3. **4/6.** Schnurgerader Zielkurs bleibt an der ersten Wand stehen; dann misst
+   der Test die Wand. Der Walkmesh trägt seine Nachbarschaft selbst
+   (`adjacency`), eine Breitensuche darüber liefert begehbare Wegpunkte.
+
+**Warum nicht sieben verschiedene Fields:** `md8_4` hat nur **einen**
+Gateway-Ausgang — im Original geht es dort per Script weiter, und Scripte laufen
+in diesem Test bewusst nicht. Die Kette nimmt deshalb bekannte Ziele, wenn kein
+unbekanntes bleibt; das prüft die Strecke zusätzlich in der Gegenrichtung. Der
+Sollwert ist **fünf** verschiedene Fields, nicht sieben — das ist eine Aussage
+über den Bestand, nicht über die Engine.
+
+### Läufe
+
+| Lauf | Ergebnis |
+|---|---|
+| `npx vitest run` | **72 Dateien / 893 Tests grün** (vorher 854 — neu: 21 Schreibpfad, 16 Menü-Handlungen, 2 Schemamigration) |
+| `npx vitest run --config vitest.realdata.config.ts` | **105 Dateien, 183 grün / 88 übersprungen, 0 Fehler** |
+| `npx tsc -b` | grün |
+| Replay-Digests | unverändert (`digestStabil: true`) — das Menü schreibt die Savemap, nicht die Spielwelt |
+
+⚠️ Zwei `ERR_INVALID_STATE`-Meldungen (`FileHandle … closed during garbage
+collection`) aus `menu-savemap-probe.rdtest.ts` laufen als „unhandled errors"
+mit. Sie sind **nicht** von dieser Welle verursacht und kein Testfehlschlag —
+die Probe schließt ihre Dateihandles nicht ausdrücklich. Als eigener Posten
+notiert, statt stillschweigend übergangen.

@@ -12,9 +12,11 @@ import { barFill, formatDuration, formatNumber, formatRatio } from './format.js'
  * gemessen, was der Strukturvergleich nicht schärfer misst, wäre aber von
  * Schriftrendering und Grafikkarte abhängig.
  *
- * **Es gibt keinen Schreibpfad.** S21 ist ausdrücklich Anzeige: kein Sortieren,
- * kein Benutzen, kein Ausrüsten. Was nicht da ist, kann auch nicht versehentlich
- * einen Spielstand verändern.
+ * **Dieses Modul hat keinen Schreibpfad** — und behält ihn auch nicht. Seit
+ * Welle 4 kann das Menü ausrüsten und speichern (F07), aber nicht hier: Die
+ * Handlungen liegen in `actions.ts` und laufen über einen Wirt, der die Bytes
+ * schreibt. Ein View-Model, das nebenbei den Spielstand ändert, wäre genau die
+ * Bauform, die diese Trennung verhindern soll.
  */
 
 /** Quellen des Menüs. Alles, was es braucht, kommt als Daten herein. */
@@ -76,7 +78,11 @@ export type MenuViewId =
   | 'magic'
   | 'limit'
   | 'phs'
-  | 'config';
+  | 'config'
+  /** Auswahlliste einer Handlung (Ausrüsten) — F07, Welle 4. */
+  | 'pick'
+  /** Spielstandsplätze. */
+  | 'save';
 
 export interface MenuRow {
   /** Stabile Kennung der Zeile — Anker für Tests und für die Darstellung. */

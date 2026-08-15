@@ -215,10 +215,35 @@ describe('acceptSlot', () => {
     }
   });
 
-  it('lehnt eine falsche Schemaversion ab', () => {
-    const bad: unknown = { ...makeSlot(), schemaVersion: 2 };
+  it('lehnt eine unbekannte Schemaversion ab', () => {
+    const bad: unknown = { ...makeSlot(), schemaVersion: 99 };
     const outcome = acceptSlot(bad);
-    expect(outcome).toEqual({ ok: false, reason: 'Schemaversion 2 wird nicht unterstützt' });
+    expect(outcome).toEqual({ ok: false, reason: 'Schemaversion 99 wird nicht unterstützt' });
+  });
+
+  /**
+   * Version 1 kannte keinen Spielstandsinhalt — das Menü war lesend. Ein
+   * solcher Stand bleibt ladbar; was fehlt, bleibt `undefined`, statt aus der
+   * laufenden Installation still ergänzt zu werden. Der Unterschied ist
+   * sichtbar: Er steht als Warnung im Ergebnis.
+   */
+  it('migriert einen Stand der Version 1 und sagt, was ihm fehlt', () => {
+    const alt: unknown = { ...makeSlot(), schemaVersion: 1 };
+    const outcome = acceptSlot(alt);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.slot.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(outcome.slot.savemap).toBeUndefined();
+    expect(outcome.warnings.join(' ')).toContain('migriert');
+  });
+
+  it('führt den Spielstandsinhalt eines Standes der Version 2 mit', () => {
+    const slot = { ...makeSlot(), savemap: new Uint8Array([1, 2, 3]) };
+    const outcome = acceptSlot(slot);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(Array.from(outcome.slot.savemap ?? [])).toEqual([1, 2, 3]);
+    expect(outcome.warnings).toEqual([]);
   });
 
   it('lehnt einen Slot mit fehlenden Pflichtfeldern ab', () => {

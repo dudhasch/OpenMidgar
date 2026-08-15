@@ -9,10 +9,20 @@
  * steht drin; alles Ableitbare bewusst nicht.
  */
 
-export const SAVE_SCHEMA_VERSION = 1;
+/**
+ * **Version 2 (Welle 4).** Neu ist `savemap` — die 4340 Byte des
+ * Spielstandsinhalts. Bis Version 1 gab es keinen Grund dafür: Das Menü war
+ * lesend, die Savemap kam bei jedem Start unverändert aus der Installation.
+ * Mit dem Ausrüsten (F07) ist sie veränderlich, und ein Stand, der sie nicht
+ * mitführt, verlöre genau die Änderung, für die der Spieler gespeichert hat.
+ */
+export const SAVE_SCHEMA_VERSION = 2;
+
+/** Versionen, die {@link acceptSlot} noch migrieren kann. */
+export const SAVE_SCHEMA_MIGRATABLE: readonly number[] = [1];
 
 export interface SaveSlot {
-  schemaVersion: typeof SAVE_SCHEMA_VERSION;
+  schemaVersion: number;
   /** Fingerprint der Quellinstallation — ein Stand gehört zu seinen Daten. */
   sourceFingerprint: string;
   /** Zeitstempel der Erstellung (ms seit Epoche), vom Aufrufer gesetzt. */
@@ -26,6 +36,15 @@ export interface SaveSlot {
   tickCounter: number;
   /** Anzeigename des Standes (Nutzereingabe, kein Originalinhalt). */
   label: string;
+  /**
+   * Spielstandsinhalt (4340 B) — ab Schemaversion 2.
+   *
+   * `undefined` in einem migrierten Stand der Version 1 und **nur** dort. Der
+   * Wirt fällt dann auf die Savemap der Installation zurück; das ist genau der
+   * Zustand, den Version 1 hatte, und deshalb eine ehrliche Migration und kein
+   * Datenverlust.
+   */
+  savemap?: Uint8Array | undefined;
 }
 
 export interface SaveSlotMeta {
@@ -57,22 +76,36 @@ export type SaveLoadOutcome =
 /**
  * Prüft und migriert einen geladenen Stand.
  *
- * Zwei Fälle werden streng getrennt: Eine **unbekannte Schemaversion** wird
- * abgelehnt (lieber sichtbar scheitern als stillschweigend falsch laden), ein
- * **abweichender Quell-Fingerprint** dagegen nur gewarnt — der Nutzer darf
- * seinen Stand auch nach einer Neuinstallation öffnen, muss aber wissen, dass
- * die Daten nicht dieselben sind.
+ * Drei Fälle werden streng getrennt: Eine **unbekannte** Schemaversion wird
+ * abgelehnt (lieber sichtbar scheitern als stillschweigend falsch laden), eine
+ * **ältere, migrierbare** Version wird angehoben und gewarnt, und ein
+ * **abweichender Quell-Fingerprint** wird ebenfalls nur gewarnt — der Nutzer
+ * darf seinen Stand auch nach einer Neuinstallation öffnen, muss aber wissen,
+ * dass die Daten nicht dieselben sind.
+ *
+ * Die Migration 1 → 2 ist ein Weglassen: Ein Stand der Version 1 führt keine
+ * Savemap mit, weil es damals keine veränderliche gab. Er bleibt gültig, und
+ * `savemap` bleibt `undefined` — es wird nichts erfunden.
  */
 export function acceptSlot(raw: unknown, expectedFingerprint?: string): SaveLoadOutcome {
   if (typeof raw !== 'object' || raw === null) return { ok: false, reason: 'Kein Objekt' };
   const slot = raw as Partial<SaveSlot>;
-  if (slot.schemaVersion !== SAVE_SCHEMA_VERSION) {
-    return { ok: false, reason: `Schemaversion ${String(slot.schemaVersion)} wird nicht unterstützt` };
+  const version = slot.schemaVersion;
+  if (version !== SAVE_SCHEMA_VERSION && !SAVE_SCHEMA_MIGRATABLE.includes(version as number)) {
+    return { ok: false, reason: `Schemaversion ${String(version)} wird nicht unterstützt` };
   }
   if (typeof slot.fieldId !== 'string' || !Array.isArray(slot.globalState)) {
     return { ok: false, reason: 'Pflichtfelder fehlen' };
   }
   const warnings: string[] = [];
+  if (version !== SAVE_SCHEMA_VERSION) {
+    warnings.push(
+      `Stand der Schemaversion ${String(version)} migriert — er führt keinen Spielstandsinhalt mit, ` +
+        'die Savemap kommt aus der Installation',
+    );
+    slot.schemaVersion = SAVE_SCHEMA_VERSION;
+    slot.savemap = undefined;
+  }
   if (expectedFingerprint && slot.sourceFingerprint !== expectedFingerprint) {
     warnings.push(
       `Stand stammt von einer anderen Installation (${String(slot.sourceFingerprint).slice(0, 12)}…)`,
