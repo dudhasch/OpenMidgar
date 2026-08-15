@@ -2468,3 +2468,96 @@ im X-Platz eines YXZ-Tripels) 🟡 — sie ist exakt nur bei Wurzel-Y = 0.
 *Umrechnung: `packages/render-battle/src/composition.ts` · Abspielen:
 `battle-actor.ts` · Fixtures: `battle-anim-clip.test.ts` (5 Fälle) · Probe:
 `tools/realdata-scan/src/k9-wiedergabe.rdtest.ts`.*
+
+---
+
+## Zahlengleiche Schadensformeln — die physische und die magische Kette (2026-08-15)
+
+Der Posten stand seit S31 als *versperrt*, mit Verweis auf Zusatzregel 4.
+ADR-028 hat die Regel aufgehoben; drei Dokumente führten sie danach noch als
+geltend, das ist im selben Zug richtiggestellt. Was folgte, war Arbeit — keine
+Verhandlung.
+
+### Was jetzt zahlengleich ist
+
+Formel `0x01` (physisch, 14 Schritte in bindender Reihenfolge), Formel `0x02`
+(magisch), die vier gemeinsamen Nachbearbeiter, das Dekodieren des
+Schadensbytes, der Kritisch-Wurf und die Nachklemmung.
+
+**Die fünf Rundungen sind der eigentliche Gegenstand.** Das Original ist
+32-Bit-x86 aus MSVC und mischt im Schadenspfad *Kürzen zur Null hin*
+(`CDQ; AND; ADD; SAR`) mit *Abrunden* (`SAR` ohne Korrektur). Der Unterschied
+zeigt sich **nur bei negativen Werten** — und `damage` darf zwischendurch
+negativ werden, weil vor der Nachklemmung nichts auf ≥ 0 klemmt. Genau dort
+laufen Portierungen auseinander. Beide Formen stehen deshalb nebeneinander im
+Modul, mit Testfall.
+
+### Zwei Tabellen am Abbild nachgeschlagen
+
+| | Adresse | Bytes |
+|---|---|---|
+| `g_abDamageCalcClassFlags` | `0x008FF068` | `01 01 00 01 00 00 03 02 00 00 05 01 00 00 00 00` |
+| Sondereffekt-IDs | `0x007B7720` | `0a 0b 0c 0d 1e 1f 20 21 22 00 00 00` + `00 00 80 3b` |
+
+⚠️ **Abweichung zur Vorlage.** Die Spezifikation führt die Einträge 9…15 der
+zweiten Tabelle sämtlich als `0`. Im Abbild liegt ab Versatz 12 die
+**Fließkommakonstante `1/256`** (`00 00 80 3B`) — die Tabelle ist 12 Byte lang,
+nicht 16. Erreichbar wären 14/15 nur über ein Schadensbyte `0xAE`/`0xAF`, das
+im Bestand nicht vorkommt. Nachgebildet ist das **Abbild**.
+
+### Die Testvektoren treffen — aber das ist kein Beleg
+
+Vektor 11.1 (122 vor der Streuung → **118**) und 11.2 (kritisch, → **236**)
+werden Zwischenwert für Zwischenwert reproduziert. **Das zeigt nur, dass wir
+richtig abgeschrieben haben** — Formel und Vektoren stammen aus derselben
+Quelle. Ein Beleg braucht eine Aussage über etwas, das wir selbst zählen
+können.
+
+### Der unabhängige Beleg — und ein Nebengewinn
+
+Der Bestand nennt ein **vollständiges Nibble-Histogramm je Container**, für
+**beide** Locale-Fassungen getrennt. Sie unterscheiden sich um **fünf
+Datensätze**. Gemessen an unseren Dateien:
+
+```
+scene.bin   0:386  1:1157  2:638  5:35  6:34  8:15  B:4  F:5923
+Kernel §1   0:2    1:9     2:91   5:8   6:3   8:2   B:7  F:6
+```
+
+Beide Histogramme treffen den Zensus **auf den Datensatz genau** — über 8320
+Datensätze, aus einer Quelle, die unsere Dateien nie gesehen hat. Damit sitzt
+der Versatz `+0x0E` richtig **und** unser Recordraster stimmt.
+
+🟢 **Der Nebengewinn:** Die Zählung sagt zugleich, **welche** `scene.bin` wir
+lesen. Unsere Werte sind Korpus **B** (`data/lang-en/battle/scene.bin`), nicht
+Korpus A — genau das, was die Locale-Auflösung (F-LOC) tun soll. Das ist ein
+Nachweis der Locale-Wahl **aus dem Inhalt**, ohne die Dateien zu vergleichen.
+
+🟢 **Gegenprobe zur Klassenflagtabelle:** Die hohen Nibbles `0xC`…`0xE` führt
+die Vorlage als strukturelle Auffüllung. Im Bestand kommen sie **nie** vor
+(0 von 8320), und `0xF` erscheint ausschließlich als ganzes Byte `0xFF`.
+
+🟢 **Rückenangriffsfaktor:** `SceneEnemy + 0xA2` als Achtel gelesen, über 352
+Gegnertypen: **340 × 16** (also ×2 — der Regelfall „von hinten trifft es
+doppelt"), dazu je einmal 32, 40, 64. Läge eine andere Einheit vor, läge der
+Schwerpunkt anderswo. Das Feld ist dasselbe, das wir als `backAttackScale`
+selbst gemessen hatten.
+
+🟡 **Neun Gegnertypen tragen `255`** — als Achtelfaktor ×31,9, unplausibel als
+Absicht, aber `0xFF` ist in diesen Datensätzen sonst der Leermarker. An den
+Daten allein nicht entscheidbar; festgehalten, nicht gedeutet.
+
+### Was ausdrücklich NICHT zahlengleich ist
+
+Der Eigenentwurf in `formulas.ts` bleibt bestehen — er trägt Kämpfe auch ohne
+Kenntnis der Originalzahlen. Die neue Kette steht **daneben**, nicht an seiner
+Stelle; die Kampfsitzung benutzt sie noch nicht.
+
+🔴 Offen bleiben: die Formeln `0x00`, `0x03`…`0x0A` und die Trickhälfte
+`0x10`…`0x1D`, der Elementarschritt, die Trefferwürfe, die Statusanwendung und
+die abgeleitete Statuskette — dazu das ATB-Timing, das mit den Formeln nur den
+Posten teilt.
+
+*Modul: `packages/battle-runtime/src/ff7-schaden.ts` · Fixtures:
+`ff7-schaden.test.ts` (23 Fälle) · Probe:
+`tools/realdata-scan/src/schadensbyte.rdtest.ts` (2 Fälle).*

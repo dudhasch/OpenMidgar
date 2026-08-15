@@ -105,12 +105,13 @@
 <div class="hinweis">
   <strong>Wie die Balken zu lesen sind.</strong> Sie zählen <em>Posten</em>, nicht Spielinhalt.
   Ein Haken bei „Szenenformat gelesen“ und einer bei „Minigames“ wiegen hier gleich viel,
-  in Arbeit aber um Größenordnungen verschieden — und die 17 offenen Posten sind im Schnitt
+  in Arbeit aber um Größenordnungen verschieden — und die 16 offenen Posten sind im Schnitt
   deutlich dicker als die 32 erledigten.
   Drei davon sind als <em>versperrt</em> ausgewiesen: Sie bleiben Ziel, aber der Weg dorthin ist
   heute durch fehlendes Vergleichsmaterial oder einen noch nicht eröffneten Arbeitsbogen
   blockiert. <strong>Eine vierte Sperre ist am 15.08.2026 gefallen</strong> — sie berief sich auf
-  eine Projektregel, die <a href="ADR-028-EIGENE-CODEANALYSE.md">ADR-028</a> aufgehoben hat. Sie stehen deshalb in derselben Spalte wie alles andere Offene und
+  eine Projektregel, die <a href="ADR-028-EIGENE-CODEANALYSE.md">ADR-028</a> aufgehoben hat; der
+  Posten dahinter steht seitdem zur Hälfte. Sie stehen deshalb in derselben Spalte wie alles andere Offene und
   nicht in einer Ausnahmespalte, in der sie aus dem Blick geraten.
   Eine Gesamtprozentzahl „bis 100 % Klon“ steht deshalb bewusst <strong>nicht</strong> auf dieser
   Seite: Sie wäre geraten, und geratene Zahlen sind genau das, was in diesem Projekt nicht gemacht wird.
@@ -138,7 +139,7 @@
 
 <h2>Kampf</h2>
 <div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:23.1%"></span><span class="b-offen" style="width:30.8%"></span><span class="b-sperre" style="width:7.6%"></span></div>
-<p class="zaehler">13 Posten — 5 steht · 4 teilweise · 4 offen</p>
+<p class="zaehler">13 Posten — 5 steht · 5 teilweise · 3 offen</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -154,7 +155,7 @@
 <tr class="offen"><td class="was">Zauber, Limitbrüche, Beschwörungen</td><td class="status">offen</td><td class="notiz">Als Kommandos vorhanden, als Wirkung nicht — die Wirkungsdaten sind ungemessen</td></tr>
 <tr class="teil"><td class="was">Statuseffekte</td><td class="status">teilweise</td><td class="notiz">K10 hat hier ein <strong>Vorzeichen korrigiert</strong>: u32@0xB0 sind die <em>erlaubten</em> Zustände, nicht die Immunitäten (26,2 von 32 Bits gesetzt, ein Drittel aller Gegner <code>0xFFFFFFFF</code> — als Immunitätsmaske absurd). Feld heißt jetzt <code>statusesAllowed</code>. Die Wirkung im Kampf ist weiter nicht umgesetzt</td></tr>
 <tr class="teil"><td class="was">z-Spiegelung des Kampfraums</td><td class="status">teilweise</td><td class="notiz">Aus den Daten allein nicht entscheidbar; gewählt ist die händigkeitserhaltende Variante</td></tr>
-<tr class="offen"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">offen</td><td class="notiz"><strong>Nicht mehr versperrt.</strong> Die Sperre berief sich auf Zusatzregel 4 („Kein Disassemblieren der Original-EXE") — <a href="ADR-028-EIGENE-CODEANALYSE.md">ADR-028</a> hat sie aufgehoben, ausdrücklich „nicht abgeschwächt, nicht präzisiert". Drei Dokumente führten die Regel danach noch als geltend; das ist am 15.08.2026 richtiggestellt. Die Quelle liegt vor: <code>spec/spec-battle-formulas.md</code> mit der Pro-Treffer-Kette (§5.0), Formel <code>0x01</code> (§5.3), den vier gemeinsamen Nachbearbeitern <em>in Reihenfolge</em> (§5.8), dem Schadensbyte (§4) und <strong>Testvektoren</strong> (§11). Wie bei K9 gilt: Das Dekompilat ist ein <em>Bauplan</em>, belegt wird er erst durch eine Abrechnung an unseren Daten</td></tr>
+<tr class="teil"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">teilweise</td><td class="notiz"><strong>Die Sperre ist gefallen, und der Kern steht.</strong> Zahlengleich sind: Formel <code>0x01</code> (physisch, 14 Schritte in bindender Reihenfolge), Formel <code>0x02</code> (magisch), die vier gemeinsamen Nachbearbeiter, das Dekodieren des Schadensbytes, der Kritisch-Wurf und die Nachklemmung. Der eigentliche Gegenstand sind die <strong>fünf Rundungen</strong>: Das Original mischt Kürzen zur Null hin mit Abrunden, und der Unterschied zeigt sich nur bei negativen Zwischenwerten — genau dort laufen Portierungen auseinander. Testvektoren 11.1 (→ <strong>118</strong>) und 11.2 (kritisch → <strong>236</strong>) werden zwischenwertgenau reproduziert; weil die aber aus derselben Quelle stammen wie die Formel, entscheidet ein <strong>unabhängiger Beleg</strong>: Das Nibble-Histogramm über 8320 Angriffsdatensätze trifft den Zensus des Bestands <em>auf den Datensatz genau</em> — und sagt nebenbei, dass wir die <code>lang-en</code>-Fassung lesen (die beiden Locale-Fassungen unterscheiden sich um fünf Datensätze). Zwei Tabellen am Abbild nachgeschlagen, eine Abweichung zur Vorlage gefunden und vermerkt. Der Eigenentwurf in <code>formulas.ts</code> bleibt daneben stehen; die Kampfsitzung benutzt die neue Kette noch nicht. Offen: die übrigen Formelschlitze, Elementarschritt, Trefferwürfe, Statusanwendung — und das ATB-Timing.</td></tr>
 </tbody>
 </table>
 
@@ -253,7 +254,7 @@
 <h2>Zusammen</h2>
 <div class="gesamt">
   <div class="balken"><span class="b-ok" style="width:51.6%"></span><span class="b-teil" style="width:19.4%"></span><span class="b-offen" style="width:22.6%"></span><span class="b-sperre" style="width:6.4%"></span></div>
-  <p class="zaehler"><strong>62 Posten — 32 steht · 13 teilweise · 17 offen (davon 3 versperrt)</strong></p>
+  <p class="zaehler"><strong>62 Posten — 32 steht · 14 teilweise · 16 offen (davon 3 versperrt)</strong></p>
   <p class="zaehler" style="margin-top:.7rem">
     Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
     ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend

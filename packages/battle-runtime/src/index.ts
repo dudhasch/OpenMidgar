@@ -1,5 +1,11 @@
 export * from './ai-vm.js';
 export * from './formulas.js';
+/**
+ * Die zahlengleiche Schadensrechnung steht NEBEN dem Eigenentwurf in
+ * `formulas.js`, nicht an seiner Stelle: Der Eigenentwurf traegt Kaempfe auch
+ * ohne Kenntnis der Originalzahlen, dieser Satz trifft sie.
+ */
+export * from './ff7-schaden.js';
 export * from './session.js';
 export * from './rewards.js';
 export * from './mode.js';
