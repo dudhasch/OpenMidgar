@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMidgar — Modellcheck: Lage, Seitigkeit, Blickrichtung</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin:0; padding:16px; background:#14161a; color:#dde1e6; font:13px/1.55 system-ui,sans-serif; }
+      h1 { font-size:17px; margin:0 0 4px; }
+      .hint { color:#97a0ab; margin:0 0 12px; max-width:78ch; }
+      .layout { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+      .col { display:flex; flex-direction:column; gap:12px; }
+      canvas#view { background:#000; border:1px solid #333a44; border-radius:4px; display:block; }
+      fieldset { border:1px solid #333a44; border-radius:6px; margin:0; padding:10px 12px; }
+      legend { color:#9fb4cc; font-weight:600; padding:0 5px; }
+      label { display:block; margin:6px 0; }
+      label > span.l { display:inline-block; min-width:150px; color:#b6bec8; }
+      select, textarea { background:#1c2027; color:#dde1e6; border:1px solid #3a424d; border-radius:4px; padding:4px 6px; font:inherit; min-width:220px; }
+      textarea { width:100%; min-height:60px; }
+      button { background:#2b6cb0; color:#fff; border:0; border-radius:4px; padding:7px 14px; font:inherit; font-weight:600; cursor:pointer; }
+      button.ghost { background:#2a3038; color:#dde1e6; }
+      button:disabled { opacity:.5; cursor:default; }
+      #status { color:#9fb4cc; margin:0 0 10px; }
+      #json { width:100%; min-height:170px; font-family:ui-monospace,monospace; font-size:12px; }
+      .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+      .val { color:#7f8a96; font-variant-numeric:tabular-nums; }
+      .note { color:#97a0ab; font-size:12px; margin:3px 0 0 150px; }
+      .sheet { max-width:100%; border:1px solid #333a44; border-radius:4px; }
+      .warn { color:#f0b429; }
+    </style>
+  </head>
+  <body>
+    <h1>Modellcheck — Lage, Seitigkeit, Blickrichtung</h1>
+    <p class="hint">
+      Drei Fragen, die sich gegenseitig verdecken, hier einzeln aufgetrennt.
+      <b>Blickrichtung:</b> Bei Kurs 0 muss die Figur nach Walkmesh <b>−Y</b> schauen
+      (grüner Pfeil). <b>Seitigkeit:</b> Sieht man durch den Hinterkopf auf das
+      Gesicht, wird die falsche Hälfte weggeschnitten — dann ist die Modellmatrix
+      gespiegelt und <span class="warn">DoubleSide wäre keine Behebung, sondern
+      Tarnung</span>. Bitte unten bewerten, JSON kopieren, im Chat einfügen.
+    </p>
+    <p id="status">lädt …</p>
+
+    <div class="layout">
+      <div class="col">
+        <canvas id="view" width="560" height="560"></canvas>
+        <fieldset>
+          <legend>Modell</legend>
+          <label><span class="l">Field</span><select id="field"></select></label>
+          <label><span class="l">Modell</span><select id="model"></select></label>
+        </fieldset>
+        <fieldset>
+          <legend>Einzelansicht</legend>
+          <label><span class="l">Kurs (Figur)</span>
+            <select id="heading">
+              <option value="0">0° — muss nach −Y schauen</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+            </select>
+          </label>
+          <label><span class="l">Seitigkeit</span>
+            <select id="side">
+              <option value="front">FrontSide (unser Zustand)</option>
+              <option value="back">BackSide</option>
+              <option value="double">DoubleSide (nur Diagnose)</option>
+            </select>
+          </label>
+          <label><span class="l">Vorderseiten-Versatz</span>
+            <select id="offset">
+              <option value="-90">−90° (unser Zustand, per Auge gesetzt)</option>
+              <option value="0">0° (ohne Versatz)</option>
+              <option value="90">+90°</option>
+              <option value="180">180°</option>
+            </select>
+          </label>
+          <label><span class="l">Kamera</span>
+            <select id="cam">
+              <option value="mY">von −Y (Walkmesh-Süd)</option>
+              <option value="pY">von +Y</option>
+              <option value="pX">von +X</option>
+              <option value="mX">von −X</option>
+              <option value="top">von oben</option>
+            </select>
+          </label>
+          <div class="note">Achsen: rot = FF7 +X, grün = −Y (Kurs 0), blau = +Z (oben).</div>
+        </fieldset>
+      </div>
+
+      <div class="col" style="flex:1; min-width:400px">
+        <fieldset>
+          <legend>Vergleichsblätter</legend>
+          <div class="row">
+            <button id="sheetHeading">Blatt: Kurs 0/90/180/270</button>
+            <button id="sheetSide">Blatt: Seitigkeit</button>
+            <button id="sheetOffset">Blatt: Versatz</button>
+          </div>
+          <div class="note" style="margin-left:0">Jedes Blatt wird zusätzlich als Datei abgelegt.</div>
+          <img id="sheet" class="sheet" alt="" />
+        </fieldset>
+
+        <fieldset>
+          <legend>Bewertung</legend>
+          <label><span class="l">Kurs 0 zeigt …</span>
+            <select id="q_kurs" data-q>
+              <option value="">—</option>
+              <option value="minusY">nach −Y (richtig)</option>
+              <option value="plusY">nach +Y (180° verdreht)</option>
+              <option value="plusX">nach +X (90° verdreht)</option>
+              <option value="minusX">nach −X (90° andersherum)</option>
+              <option value="unklar">nicht erkennbar</option>
+            </select>
+          </label>
+          <label><span class="l">Hoch/Runter vs. Links/Rechts</span>
+            <select id="q_spiegel" data-q>
+              <option value="">—</option>
+              <option value="ok">alle vier Richtungen stimmen</option>
+              <option value="hochrunter">hoch und runter vertauscht, links/rechts richtig</option>
+              <option value="linksrechts">links und rechts vertauscht</option>
+              <option value="alle">alle vier falsch</option>
+            </select>
+          </label>
+          <label><span class="l">Durch den Hinterkopf?</span>
+            <select id="q_kopf" data-q>
+              <option value="">—</option>
+              <option value="nein">nein — Hinterkopf ist geschlossen</option>
+              <option value="ja">ja — Gesicht scheint durch</option>
+              <option value="loecher">Löcher/fehlende Flächen</option>
+            </select>
+          </label>
+          <label><span class="l">Beste Seitigkeit</span>
+            <select id="q_side" data-q>
+              <option value="">—</option>
+              <option value="front">FrontSide</option>
+              <option value="back">BackSide</option>
+              <option value="double">DoubleSide</option>
+              <option value="keine">keine sieht richtig aus</option>
+            </select>
+          </label>
+          <label><span class="l">Bester Versatz</span>
+            <select id="q_offset" data-q>
+              <option value="">—</option>
+              <option value="-90">−90°</option>
+              <option value="0">0°</option>
+              <option value="90">+90°</option>
+              <option value="180">180°</option>
+            </select>
+          </label>
+          <label><span class="l">Gesicht/Kopf allgemein</span>
+            <select id="q_gesicht" data-q>
+              <option value="">—</option>
+              <option value="ok">sieht richtig aus</option>
+              <option value="verdreht">Gesichtsteile sitzen verdreht</option>
+              <option value="verschoben">Aufkleber an der falschen Stelle</option>
+              <option value="innen">Gesicht liegt innen / falsche Seite</option>
+              <option value="zerrissen">Flächen zerrissen</option>
+            </select>
+          </label>
+          <textarea id="q_text" placeholder="Was genau stimmt nicht? Womit verglichen?"></textarea>
+        </fieldset>
+
+        <fieldset>
+          <legend>Rückmeldung</legend>
+          <div class="row">
+            <button id="add" class="ghost">Befund merken</button>
+            <button id="gen">JSON erzeugen</button>
+            <button id="copy" class="ghost" disabled>kopieren</button>
+            <span class="val" id="count">0 gemerkt</span>
+          </div>
+          <textarea id="json" placeholder="… erscheint hier"></textarea>
+        </fieldset>
+      </div>
+    </div>
+    <script type="module" src="./src/modellcheck.ts"></script>
+  </body>
+</html>

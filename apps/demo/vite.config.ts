@@ -54,7 +54,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: Object.fromEntries(
-        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'colorprobe', 'farbcheck', 'menu', 'license', 'world', 'game', 'window-skin', 'battle-hud'].map(
+        ['index', 'calibration', 'walkmesh', 'actor', 'background', 'field', 'field-model', 'nfr', 'beta', 'r9', 'mathprobe', 'colorprobe', 'farbcheck', 'modellcheck', 'menu', 'license', 'world', 'game', 'window-skin', 'battle-hud'].map(
           (name) => [name, r(`./${name}.html`)],
         ),
       ),

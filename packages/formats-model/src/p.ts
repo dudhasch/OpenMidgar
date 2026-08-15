@@ -209,7 +209,25 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
         break;
       }
 
-      for (let corner = 0; corner < 3; corner++) {
+      // **Umlaufsinn: 0, 2, 1 statt 0, 1, 2.**
+      //
+      // 🟡 Herkunft (ADR-028): Das Original zeichnet die Vorderseite im
+      // UHRZEIGERSINN und schneidet die Rückseite weg — im GL-Zweig gesetzt
+      // über `cfg[0] = 1` in `Gl_InitConfigDefaults` (0x006A6AE6, Bytes bei
+      // 0x006A6AFA `C7 01 01 00 00 00`), im D3D-Zweig über
+      // `D3DRENDERSTATE_CULLMODE = D3DCULL_CW`. three erwartet umgekehrt die
+      // Vorderseite GEGEN den Uhrzeigersinn.
+      //
+      // Diese eine Zeile ist die ganze Brücke zwischen beiden Konventionen.
+      // Sie gehört hierher — an die Daten —, nicht in den Renderzustand:
+      // `frontFace(CW)` oder `side: DoubleSide` würden dasselbe Bild erzeugen,
+      // aber die Ursache verstecken und jede spätere Flächennormale,
+      // Kollisions- oder Exportrechnung mit dem falschen Vorzeichen versorgen.
+      //
+      // Ecke 0 bleibt zuerst — die FLAT-Schattierung unten nimmt weiterhin
+      // deren Farbe und Normale, wie D3DSHADE_FLAT es tut.
+      const CORNER_ORDER = [0, 2, 1] as const;
+      for (const corner of CORNER_ORDER) {
         const absV = vertexStart + relV[corner]!;
         const uvIdx = textured ? texCoordStart + relV[corner]! : -1;
         // FLAT-Gruppen: Direct3D nimmt für das ganze Dreieck die Farbe der

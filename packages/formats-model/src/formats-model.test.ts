@@ -143,10 +143,15 @@ describe('.p', () => {
     expect(mesh.droppedGroups).toBe(0);
 
     // Verlustfreiheit: Ecke für Ecke gegen die Spezifikation prüfen.
+    // Ausgegeben wird in der Reihenfolge 0, 2, 1 — die Brücke zwischen dem
+    // Uhrzeigersinn des Originals und three (s. CORNER_ORDER in p.ts). Hier
+    // wird die VERLUSTFREIHEIT geprüft, nicht die Reihenfolge; die hat einen
+    // eigenen Test.
+    const EMIT = [0, 2, 1] as const;
     let corner = 0;
     for (const g of spec.groups) {
       for (const poly of g.polys) {
-        for (let k = 0; k < 3; k++) {
+        for (const k of EMIT) {
           const unified = mesh.indices[corner]!;
           const absV = g.vertexStart + poly.v[k]!;
           expect([
@@ -269,7 +274,7 @@ describe('.p', () => {
         return [mesh.positions[u * 3], mesh.positions[u * 3 + 1], mesh.positions[u * 3 + 2]];
       });
       expect(positionen).toEqual(
-        gruppe.polys[0]!.v.map((rel) => spec.vertices[gruppe.vertexStart + rel]!.map((c) => c)),
+        [0, 2, 1].map((k) => spec.vertices[gruppe.vertexStart + gruppe.polys[0]!.v[k]!]!.map((c) => c)),
       );
     }
   });
@@ -286,9 +291,44 @@ describe('.p', () => {
       return mesh.normals[u * 3]!;
     };
     // Normalenindex 1 = (1,0,0), Index 0 = (0,0,1) → x-Komponente trennt sie.
+    // Ausgegeben wird 0, 2, 1: Platz 1 trägt Ecke 2 (Normale 0), Platz 2 trägt
+    // Ecke 1 (Normale 1).
     expect(normaleVon(0)).toBeCloseTo(0);
-    expect(normaleVon(1)).toBeCloseTo(1);
-    expect(normaleVon(2)).toBeCloseTo(0);
+    expect(normaleVon(1)).toBeCloseTo(0);
+    expect(normaleVon(2)).toBeCloseTo(1);
+  });
+
+  /**
+   * Der Umlaufsinn selbst — die Regel, die die drei Tests oben nur nebenbei
+   * berühren. Das Original zeichnet die Vorderseite im UHRZEIGERSINN und
+   * schneidet die Rückseite weg; three erwartet die Vorderseite GEGEN den
+   * Uhrzeigersinn. Der Parser dreht die Ecken deshalb um.
+   */
+  it('Umlaufsinn: die Ecken kommen als 0, 2, 1 heraus — die Brücke zu three', () => {
+    const spec = meshSpec();
+    // Eindeutige Vertexpositionen je Ecke, damit die Reihenfolge ablesbar ist.
+    spec.groups[0]!.polys[0]!.v = [0, 1, 2];
+    const { value } = parseP(composeP(spec), 'fix.p');
+    const mesh = value!;
+    const sub = mesh.submeshes[0]!;
+    const xVon = (k: number): number => mesh.positions[mesh.indices[sub.start + k]! * 3]!;
+    // Fixture-Vertices 0,1,2 haben x = 0, 1, 0.5 (s. meshSpec).
+    expect(xVon(0)).toBeCloseTo(spec.vertices[0]![0]);
+    expect(xVon(1)).toBeCloseTo(spec.vertices[2]![0]);
+    expect(xVon(2)).toBeCloseTo(spec.vertices[1]![0]);
+
+    // Gegenprobe über das VORZEICHEN der Flächennormale: Bei einem Dreieck in
+    // der xy-Ebene mit den Fixture-Ecken zeigt (b−a)×(c−a) nach −z, wenn die
+    // Ausgabe umgedreht ist, und nach +z, wenn sie es nicht wäre. Ohne diese
+    // Zelle bliebe der Test grün, wenn jemand die Reihenfolge zu 0,1,2
+    // zurückdreht und die drei Erwartungen oben mitzieht.
+    const p = (k: number): [number, number, number] => {
+      const u = mesh.indices[sub.start + k]! * 3;
+      return [mesh.positions[u]!, mesh.positions[u + 1]!, mesh.positions[u + 2]!];
+    };
+    const [a, b, c] = [p(0), p(1), p(2)];
+    const zKreuz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    expect(zKreuz).toBeLessThan(0);
   });
 });
 

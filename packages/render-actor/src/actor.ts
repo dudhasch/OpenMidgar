@@ -58,22 +58,57 @@ const yawScratch = new THREE.Quaternion();
  * Drehung um FF7-z ist also dieselbe Drehung wie zuvor um Scene-y.
  */
 /**
- * 🟡 Modell-Vorderseiten-Versatz: Die Feldmodelle schauen im Modellraum nicht
- * entlang der Achse, die die erste Fassung annahm — Sichtbefund (Runde 3):
- * „runter" blickte nach rechts, „hoch" nach links, konsistent 90° verdreht.
- * Der Wert wird per Sichtsweep gegen Original-Screenshots kalibriert.
+ * Modell-Vorderseiten-Versatz — **hergeleitet, nicht mehr per Auge gesetzt.**
+ *
+ * Die Vorgängerfassung stand auf −90° mit dem Vermerk „per Sichtsweep gegen
+ * Original-Screenshots kalibriert". Sie war doppelt falsch, und der zweite
+ * Fehler konnte durch keinen Wert dieser Konstante behoben werden.
+ *
+ * 🟡 **Herkunft** (ADR-028), zwei unabhängig aus dem Abbild gelesene Stücke:
+ *
+ *  1. **Kurs 0 ist −Y.** `Field_StepEntityOnWalkmesh` (0x00636C41) bildet den
+ *     Schritt als `(+sin(h)·sx, −cos(h)·sy)` — das `NEG EAX` bei 0x00636FBE
+ *     sitzt allein auf dem Kosinus-/Y-Term. Die Tabelle bei 0x00908E30 ist
+ *     stride-4 `{sin, cos}`: Eintrag 64 (= 90°) liest `(+4096, 0)`, Eintrag 0
+ *     liest `(0, +4096)`. Kurs 0 ergibt also `(0, −Schritt)`.
+ *  2. **Die Drehung läuft PLUS.** `BuildRotationZColVec` (0x0067BFE6) schreibt
+ *     `m[0]=cos, m[1]=−sin, m[4]=sin, m[5]=cos` — eine gewöhnliche
+ *     Linksdrehung um +θ. Der Feldzeichenpfad reicht den Kurs direkt hinein
+ *     und addiert **keinen** Versatz.
+ *
+ * Unsere Blickrichtung zählt dagegen ab **+X** (`richtungGrad` in
+ * field-runtime, `atan2(dy, dx)`). Aus `Kurs = Blickrichtung + 90°` und der
+ * Modellvorderseite −Y folgt der Versatz **+90°** — und ein **positives**
+ * Vorzeichen der Drehung.
+ *
+ * Das alte `−(Blickrichtung + Versatz)` war der eigentliche Defekt: Es kehrt
+ * die Abbildung Winkel → Weltrichtung um. Der Actor selbst blieb dabei eine
+ * echte Drehung (det = +1, nichts war gespiegelt), aber +X/−X kamen richtig
+ * heraus und +Y/−Y vertauscht — „hoch und runter falsch, links und rechts
+ * richtig". Kein additiver Versatz kann das heilen; nur das Vorzeichen.
  */
-export let MODEL_FRONT_OFFSET_DEG = -90;
+export let MODEL_FRONT_OFFSET_DEG = 90;
 
 /** Nur für die Sichtkalibrierung der Demo — kein Spielzustand. */
 export function setModelFrontOffset(deg: number): void {
   MODEL_FRONT_OFFSET_DEG = deg;
 }
 
+/**
+ * Blickrichtung einer Figur setzen, OHNE die Scene-Basis zu verlieren.
+ *
+ * `root.quaternion` trägt die zentrale FF7→Scene-Basis (s. buildActor,
+ * ADR-009). Wer stattdessen `root.rotation.y` schreibt, ersetzt das Quaternion
+ * vollständig und löscht die Basis — die Figur steht dann im rohen
+ * FF7-Modellraum, also flach auf dem Boden (F20, 2026-08-10).
+ *
+ * Deshalb wird der Gierwinkel um die FF7-Hochachse **auf** die Basis
+ * multipliziert: `root.quaternion = Basis ∘ R_z(+(Blickrichtung + 90°))`.
+ */
 export function setActorFacing(actor: Actor, degrees: number): void {
   actor.root.quaternion
     .setFromRotationMatrix(sceneBasisMatrix())
-    .multiply(yawScratch.setFromAxisAngle(FF7_UP, (-(degrees + MODEL_FRONT_OFFSET_DEG) * Math.PI) / 180));
+    .multiply(yawScratch.setFromAxisAngle(FF7_UP, ((degrees + MODEL_FRONT_OFFSET_DEG) * Math.PI) / 180));
 }
 
 const PLACEHOLDER_COLOR = 0xff00ff; // Magenta-Platzhalter (Debug-Konvention)
@@ -148,6 +183,28 @@ export let MODEL_TEXTURE_LINEAR = false;
 /** Nur für die Sichtkalibrierung der Demo — kein Spielzustand. */
 export function setModelTextureFilter(linear: boolean): void {
   MODEL_TEXTURE_LINEAR = linear;
+}
+
+/**
+ * Seitigkeit der Modellflächen — **Diagnoseschalter, keine Vorgabe.**
+ *
+ * `null` = three-Vorgabe `FrontSide` (Vorderseite gegen den Uhrzeigersinn).
+ * Das ist unser Zustand; wir kompensieren an keiner Stelle mit `frontFace`
+ * oder `DoubleSide`.
+ *
+ * Der Schalter existiert, um eine bestimmte Frage BEANTWORTEN zu können, statt
+ * sie zu übertünchen: Sieht man durch den Hinterkopf auf die Gesichtsflächen,
+ * dann wird die falsche Hälfte weggeschnitten — und dann ist die Ursache eine
+ * gespiegelte Modellmatrix, nicht die Seitigkeit. `DoubleSide` „behebt" das
+ * nur scheinbar: Es erzeugt ein anderes falsches Bild und versteckt die
+ * eigentliche Ursache. Deshalb ist der Schalter Diagnose und darf NIE zur
+ * Vorgabe werden.
+ */
+export let MODEL_SIDE_OVERRIDE: THREE.Side | null = null;
+
+/** Nur für die Sichtkalibrierung der Demo — kein Spielzustand. */
+export function setModelSideOverride(side: THREE.Side | null): void {
+  MODEL_SIDE_OVERRIDE = side;
 }
 
 function buildTexture(tex: TextureSource): THREE.DataTexture {
@@ -424,7 +481,9 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
   const set = licht ? buildLightSet(licht) : null;
   const lichtUniforms: { matrix: { value: THREE.Matrix3 } }[] = [];
   const basisMaterial = (opts: THREE.MeshBasicMaterialParameters): THREE.MeshBasicMaterial => {
-    const material = new THREE.MeshBasicMaterial(opts);
+    const material = new THREE.MeshBasicMaterial(
+      MODEL_SIDE_OVERRIDE === null ? opts : { ...opts, side: MODEL_SIDE_OVERRIDE },
+    );
     if (set && opts.vertexColors) lichtUniforms.push(applyLightShader(material, set));
     return material;
   };

@@ -282,33 +282,66 @@ describe('Animationsbindung & Meshes', () => {
     }
   });
 
-  it('Blickrichtung dreht in der Bodenebene um Scene-y (inkl. Vorderseiten-Versatz)', () => {
+  /**
+   * Blickrichtung gegen die WELTRICHTUNG, nicht gegen sich selbst.
+   *
+   * Die Vorgängerfassung dieses Tests baute die Referenz aus derselben Formel,
+   * die sie prüfen sollte (`−(grad + MODEL_FRONT_OFFSET_DEG)`) — eine
+   * Tautologie. Sie blieb grün, während +Y und −Y vertauscht gerendert wurden,
+   * und hat den Defekt über Monate gedeckt. Jede Zelle hier nennt deshalb eine
+   * Richtung, die aus dem Original hergeleitet ist, und keine Formel.
+   *
+   * Herleitung (🟡 ADR-028): Kurs 0 zeigt im Original nach −Y
+   * (`Field_StepEntityOnWalkmesh` 0x00636C41, `NEG` allein auf dem Kosinusterm),
+   * die Modellvorderseite ist Modell-−Y, und gedreht wird um **+**Kurs
+   * (`BuildRotationZColVec` 0x0067BFE6). Unsere Blickrichtung zählt ab +X, also
+   * Kurs = Blickrichtung + 90°.
+   */
+  it('Blickrichtung zeigt in die WELTrichtung — alle vier Himmelsrichtungen', () => {
     const sk = skeleton();
-    const vorne = new THREE.Vector3(0, 1, 0); // FF7-Grundriss: +y
     const actor = buildActor(sk, () => []);
-    const referenz = buildActor(sk, () => []);
+    // Modellvorderseite im FF7-Raum: −Y.
+    const vorne = new THREE.Vector3(0, -1, 0);
 
-    for (const grad of [0, 30, 90, 200]) {
-      setActorFacing(actor, grad);
-      // Referenzabbildung: Drehung um Scene-y um −(facing + Versatz),
-      // angewandt auf die Basis. Der Versatz ist sichtkalibriert (Runde 3:
-      // ohne ihn blickte „runter" nach rechts, „hoch" nach links).
-      referenz.root.quaternion.setFromRotationMatrix(
-        new THREE.Matrix4().makeRotationY((-(grad + MODEL_FRONT_OFFSET_DEG) * Math.PI) / 180),
-      );
-      const a = vorne.clone().applyQuaternion(actor.root.quaternion);
-      const b = vorne
-        .clone()
-        .applyMatrix4(new THREE.Matrix4().makeBasis(
-          new THREE.Vector3(1, 0, 0),
-          new THREE.Vector3(0, 0, -1),
-          new THREE.Vector3(0, 1, 0),
-        ))
-        .applyQuaternion(referenz.root.quaternion);
-      expect(a.x).toBeCloseTo(b.x, 6);
-      expect(a.y).toBeCloseTo(b.y, 6);
-      expect(a.z).toBeCloseTo(b.z, 6);
+    // Blickrichtung (ab +X, gegen den Uhrzeigersinn) → erwartete Weltrichtung
+    // im FF7-Grundriss. In Scene-Koordinaten: FF7 (x, y) → Scene (x, −y) auf
+    // der Bodenebene, die Hochachse bleibt Scene-y.
+    const faelle: { grad: number; ff7: [number, number]; name: string }[] = [
+      { grad: 0, ff7: [1, 0], name: '+X' },
+      { grad: 90, ff7: [0, 1], name: '+Y' },
+      { grad: 180, ff7: [-1, 0], name: '−X' },
+      { grad: 270, ff7: [0, -1], name: '−Y' },
+    ];
+
+    for (const f of faelle) {
+      setActorFacing(actor, f.grad);
+      const richtung = vorne.clone().applyQuaternion(actor.root.quaternion);
+      // Erwartung in Scene-Koordinaten über die zentrale Basis.
+      const sollX = f.ff7[0];
+      const sollZ = -f.ff7[1];
+      expect(richtung.x).toBeCloseTo(sollX, 6);
+      expect(richtung.z).toBeCloseTo(sollZ, 6);
+      expect(richtung.y).toBeCloseTo(0, 6); // bleibt in der Bodenebene
     }
+  });
+
+  it('Gegenprobe: +Y und −Y sind NICHT vertauscht — der Defekt, den die Tautologie deckte', () => {
+    // Die alte Formel −(grad + Versatz) lieferte für +X und −X das Richtige und
+    // für +Y und −Y das Gegenteil. Diese Zelle fixiert genau den Unterschied:
+    // Blickrichtung 90 und 270 müssen ENTGEGENGESETZTE Weltrichtungen ergeben,
+    // und 90 muss auf FF7 +Y zeigen — nicht auf −Y.
+    const sk = skeleton();
+    const actor = buildActor(sk, () => []);
+    const vorne = new THREE.Vector3(0, -1, 0);
+
+    setActorFacing(actor, 90);
+    const a = vorne.clone().applyQuaternion(actor.root.quaternion);
+    setActorFacing(actor, 270);
+    const b = vorne.clone().applyQuaternion(actor.root.quaternion);
+
+    expect(a.z).toBeCloseTo(-1, 6); // FF7 +Y → Scene −z
+    expect(b.z).toBeCloseTo(1, 6); // FF7 −Y → Scene +z
+    expect(a.z).toBeCloseTo(-b.z, 6);
   });
 
   it('texturierte Flächen bekommen Farbschlüssel und Aufkleber-Versatz', () => {
