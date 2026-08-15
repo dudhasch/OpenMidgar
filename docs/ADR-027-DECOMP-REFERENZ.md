@@ -1,6 +1,7 @@
 # ADR-027 — Dekompilierte Originalquellen als Referenz zugelassen
 
-**Status:** Akzeptiert
+**Status:** Akzeptiert — für die **eigene** PC-EXE-Analyse ergänzt durch
+[ADR-028](ADR-028-EIGENE-CODEANALYSE.md)
 **Entscheidungsdatum:** 2026-08-15
 **Entscheider:** Projektinhaber
 **Löst ab:** die Clean-Room-Klausel in [WEBMIDGAR-MASTERPLAN.md](WEBMIDGAR-MASTERPLAN.md)

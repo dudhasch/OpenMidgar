@@ -728,8 +728,9 @@ Referenzdialog (`20260810223255_1.jpg`, „Follow me. ”") zeigt genau denselbe
 breiten Abstand hinter dem Punkt, stützt die additive Regel also. Offen bleibt,
 ob das Original zusätzlich einen **linken Versatz** aus den oberen Bits
 anwendet; das entscheidet erst eine Aufnahme mit Ziffern in Dialogschrift oder
-die Textroutine des Originals (jetzt nach [ADR-027](ADR-027-DECOMP-REFERENZ.md)
-zulässig).
+die Textroutine des Originals (nach
+[ADR-028](ADR-028-EIGENE-CODEANALYSE.md) zulässig — die PC-EXE zu lesen ist
+eigene Codeanalyse, nicht der Fremdquellenfall aus ADR-027).
 
 ### Rückfall
 
