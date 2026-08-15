@@ -2871,3 +2871,74 @@ Verhalten der Demo und gehört dem Eigentümer.
 
 *Erweitert: `packages/formats-battle/src/{types,scene}.ts` · Probe:
 `schadensbyte.rdtest.ts` (3 Fälle).*
+
+---
+
+## Der Elementarschritt — und wo er in der Kette sitzt (2026-08-15)
+
+Er läuft **zweimal** je Treffer: einmal vor dem Schadensprogramm, einmal
+unmittelbar danach. Dazwischen liegt die Formel. Wer ihn als einen Block
+hinter die Formel schiebt, verliert die Trefferquoten-Skalierung und den
+Soforttod-Wurf.
+
+### Die Asymmetrie, auf die der Bestand eigens hinweist
+
+⚠️ **Schwäche verdoppelt mit glatter Schiebung** (`d << 1`), **Halbierung
+rundet AUF** (`(d + 1) >> 1`). Jede andere Halbierung im System kürzt zur
+Null hin — diese eine nicht. Aus 5 wird verdoppelt 10 und halbiert **3**,
+nicht 2.
+
+### Die Kennung ist zwei Felder in einem Byte
+
+Der Gegnerrecord trägt acht Paare: Kennung bei `+0x28+i`, Affinitätscode bei
+`+0x30+i`. Die Kennung ist **kein Bitindex** — `id >> 5` wählt die Hälfte
+(0 = Element, 1 = Status), `id & 0x1F` das Bit. Wer sie glatt liest, schreibt
+jede Statusaffinität in die Elementhälfte.
+
+🟢 **Am Bestand nachgerechnet** über 352 Gegnertypen, 2816 Paare, davon 422
+belegt:
+
+```
+größte Kennung 38  (< 64, wie die Zerlegung verlangt)   Kennung ≥ 64: 0
+Statushälfte    8                                        Code > 7:     0
+```
+
+Zwei Feldversätze sitzen damit richtig **und** die Zerlegung ist bestätigt:
+Wäre `id` ein glatter Bitindex, gäbe es keinen Grund für die scharfe Grenze
+bei 64.
+
+### Ein Nebenbefund, der eine offene Frage schließt — indem er sie erledigt
+
+Die Affinitätscodes 1 und 3 habe ich im Modul bewusst **unbenannt** gelassen:
+Ihre Wirkung geht aus dem gelesenen Abschnitt nicht hervor, und ein
+erfundener Name wäre schlimmer als keiner. Die Messung sagt nun, welche Codes
+der Bestand überhaupt benutzt:
+
+```
+0×5   1×3   2×115   4×41   5×187   6×71
+```
+
+🟢 **Code 3 kommt gar nicht vor.** Die Lücke ist also keine unsere, sondern
+eine des Bestands — es gibt kein Beispiel, an dem sich etwas deuten ließe.
+Code 7 (volle Wiederherstellung) erreicht ein Gegner nur über den Umweg von
+Formel `0x08`. Eingefroren; taucht Code 3 je auf, gibt es zum ersten Mal
+etwas zu deuten.
+
+### Und eine Wirkungsprobe über den ganzen Gegnerbestand
+
+**207 von 352** Gegnern reagieren auf einen Angriff, der alle Elemente trägt —
+die Tabelle ist also nicht leer. Und **ohne Sonderflag `0x0080` reagiert kein
+einziger**: Der Angriff ignoriert Affinitäten dann vollständig, genau wie
+beschrieben.
+
+### Eine eigene Erwartung, wieder gefallen
+
+⚠️ Der Test zur Giftkopplung setzte `statusChangeMask = 0xFFFF` und erwartete,
+die Immunität bleibe stehen. Sie fällt weg — die Regel verlangt, dass die
+Immunität die **ganze** angeforderte Statusänderung abdeckt, und `0xFFFF`
+kann sie nie ganz abdecken. Der Fall ist umgebaut, und der Grund steht als
+Kommentar daneben.
+
+*Modul: `packages/battle-runtime/src/ff7-elementar.ts` · Fixtures:
+`ff7-elementar.test.ts` (20 Fälle) · Probe:
+`tools/realdata-scan/src/affinitaet.rdtest.ts` (2 Fälle).*
