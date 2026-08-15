@@ -246,9 +246,26 @@ derselben Zeichenreihenfolge.
   eigenen Realdatenbefund (das Kopffeld 0x08 stimmt in 695/695 Dateien mit
   „Paletteneintrag 0 trägt Alpha 0" überein), ist aber nicht derselbe
   Mechanismus.
-- **Kampfmodelle.** Alles hier Beschriebene ist am Feldpfad gemessen. Der
-  Kampfpfad teilt zwar `buildMeshObject`, übergibt aber kein Licht — dort ist
-  die Beleuchtung noch gar nicht angeschlossen.
+- **Kampfmodelle — geprüft und BEWUSST unbeleuchtet, kein offener Posten.**
+  Der Kampfpfad teilt `buildMeshObject`, übergibt aber kein Licht. Das ist
+  richtig so: Ein Lichtsatz kann nur aus `Gfx_CreateLightSet` (0x0069CA53)
+  stammen, und die Funktion hat im ganzen Abbild **vier** Aufrufer —
+  `Field_InstantiateModels`, zwei Stellen unter `World_LoadStageAssets`
+  (Weltkarte) und `FUN_0069CAC6`, das selbst **keinen** Aufrufer hat, also tot
+  ist. Kein Kampfcode ist darunter.
+
+  Der Satz reist über `LoadOptions+0x30` nach `polygon_set+0x44`, und
+  `Anim_DrawSkeletonFrame` (0x006840DA) beleuchtet nur, wenn dieses Feld belegt
+  ist; `Pfile_InitLoadOptions` lässt den Block genullt. Kampfmodelle zeigen im
+  Original also die rohen Vertexfarben mal Textur — genau das, was wir tun.
+  Eine Beleuchtung nachzurüsten würde vom Original **weg**führen; ein Test in
+  `render-battle` hält das mitsamt Gegenprobe fest.
+
+  *(Der naheliegende Verdacht, Flag `0x02000000` in `LoadOptions+0x00` sei der
+  Lichtschalter, trägt nicht: Der Kampf setzt es ebenfalls — `battle-lmd-mesh`
+  zeigt `opt.flags |= 0x02000000`. Es ist ein Renderstate-Bit für
+  `GfxLoadPolygonSet`, das über `skel+0x0C` nur zusätzlich die Lichtabfrage
+  freischaltet. Entscheidend ist der Lichtsatz selbst.)*
 
 ---
 

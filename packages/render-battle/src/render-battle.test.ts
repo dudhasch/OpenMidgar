@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BattleAiAsm, composeAiScript, composeBattleSkeleton, composeScene } from '@webmidgar/fixture-gen';
+import * as THREE from 'three';
+import { BattleAiAsm, composeAiScript, composeBattleSkeleton, composeP, composeScene } from '@webmidgar/fixture-gen';
 import { parseBattleSkeleton, parseScene } from '@webmidgar/formats-battle';
+import { parseP } from '@webmidgar/formats-model';
 import { BattleSession, NEUTRAL_BATTLE_INPUT, battleConfigFromScene, type BattleTickInput } from '@webmidgar/battle-runtime';
 import {
   assignPartsToBones,
@@ -10,6 +12,8 @@ import {
   placeFormation,
   placeParty,
 } from './composition.js';
+import { buildActor } from '@webmidgar/render-actor';
+import { buildBattleActor } from './battle-actor.js';
 import { BattleViewModel } from './view-model.js';
 
 /**
@@ -185,5 +189,85 @@ describe('Kompositionsregeln', () => {
     expect(padOk).toBe(true);
     expect(cameras[0]!.position).toEqual([100, -900, 4000]);
     expect(cameras[0]!.target).toEqual([0, -300, 0]);
+  });
+});
+
+/**
+ * Kampfmodelle sind im Original UNBELEUCHTET — und das ist eine Entscheidung,
+ * keine Lücke.
+ *
+ * 🟡 **Herkunft** (ADR-028): Ein Lichtsatz kann nur aus `Gfx_CreateLightSet`
+ * (0x0069CA53) stammen. Die Funktion hat im ganzen Abbild **vier** Aufrufer:
+ * `Field_InstantiateModels` (Feld), zwei Stellen unter `World_LoadStageAssets`
+ * (Weltkarte) und `FUN_0069CAC6`, das selbst **keinen** Aufrufer hat, also tot
+ * ist. Kein Kampfcode ist darunter.
+ *
+ * Der Satz reist danach über `LoadOptions+0x30` in `polygon_set+0x44`, und
+ * `Anim_DrawSkeletonFrame` (0x006840DA) beleuchtet nur, wenn dieses Feld
+ * belegt ist. Für den Kampf ist es null — `Pfile_InitLoadOptions` lässt den
+ * Block genullt und niemand füllt ihn nach. Kampfmodelle zeigen also die
+ * rohen Vertexfarben mal Textur.
+ *
+ * Dieser Test hält das fest, damit die fehlende Beleuchtung nicht später als
+ * Versäumnis „behoben" wird — das würde vom Original WEGführen.
+ */
+const FELDLICHT_SCHLUESSEL = 'ff7-field-light';
+
+describe('Kampfmodelle bleiben unbeleuchtet', () => {
+  it('kein Material trägt den Feldlicht-Shader', () => {
+    const skelett = parseBattleSkeleton(
+      composeBattleSkeleton([
+        { parent: -1, length: 0, hasGeometry: false },
+        { parent: 0, length: -10, hasGeometry: true },
+      ]),
+      'probe',
+    ).skeleton;
+    expect(skelett).not.toBeNull();
+
+    const mesh = parseP(
+      composeP({
+        vertices: [
+          [0, 0, 0],
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        normals: [[0, 0, 1]],
+        groups: [{ vertexStart: 0, vertexCount: 3, polys: [{ v: [0, 1, 2], n: [0, 0, 0] }] }],
+      }),
+      'probe.p',
+    ).value;
+    expect(mesh).not.toBeNull();
+
+    const { actor } = buildBattleActor('probe', {
+      skeleton: skelett!,
+      parts: [mesh!],
+      textures: [],
+      animations: null,
+    });
+
+    const schluessel = (a: { root: THREE.Object3D }): string[] => {
+      const out: string[] = [];
+      a.root.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (!m) return;
+        for (const einzeln of Array.isArray(m) ? m : [m]) out.push(einzeln.customProgramCacheKey());
+      });
+      return out;
+    };
+
+    const kampf = schluessel(actor);
+    expect(kampf.length).toBeGreaterThan(0); // sonst sagte der Test nichts aus
+    for (const k of kampf) expect(k).not.toBe(FELDLICHT_SCHLUESSEL);
+
+    // **Gegenprobe.** Dasselbe Mesh MIT Lichtblock gebaut muss den Schlüssel
+    // tragen. Ohne diese Zelle bliebe der Test auch dann grün, wenn der
+    // Feldlichtpfad seinen Schlüssel umbenennt oder gar nichts mehr setzt —
+    // er hätte über den Kampf dann nichts ausgesagt.
+    const beleuchtet = buildActor(
+      battleSkeletonToSkeleton(skelett!, 'probe'),
+      (b) => (b === 1 ? [{ mesh: mesh!, textures: [] }] : []),
+      { lights: [{ color: [255, 255, 255], direction: [0, 4096, 0] }], ambient: [32, 32, 32] },
+    );
+    expect(schluessel(beleuchtet)).toContain(FELDLICHT_SCHLUESSEL);
   });
 });
