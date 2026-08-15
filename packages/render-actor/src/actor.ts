@@ -128,8 +128,38 @@ const ALPHA_TEST = 0.5;
 const DECAL_OFFSET_FACTOR = -1;
 const DECAL_OFFSET_UNITS = -1;
 
+/**
+ * 🟡 **Offen: Punktabtastung oder lineare Filterung?**
+ *
+ * Wir tasten punktgenau ab. Das Dekompilat spricht dagegen: `D3D5ApplyRenderState`
+ * (0x006A3D30) setzt unter Maskenbit `0x4` `D3DFILTER_LINEAR` — und Bit `0x4`
+ * steht in jedem texturierten Block (`stateBits` 0x3820E). **Entschieden ist
+ * damit nichts**, denn die `changedMask` der Blöcke ist 0x20002 und enthält
+ * 0x4 nicht: Der Filter wird vom Block nie ausgegeben, es gilt der globale
+ * Gerätezustand, und den hat niemand vermessen. Zusätzlich zwingt das Original
+ * auf Nearest zurück, sobald `forceSoftwareDevice` gesetzt ist.
+ *
+ * Das Auge entscheidet, was die Messung nicht kann — deshalb ein Schalter statt
+ * einer Vorgabe. Nur für die Sichtkalibrierung (`farbcheck.html`), kein
+ * Spielzustand.
+ */
+export let MODEL_TEXTURE_LINEAR = false;
+
+/** Nur für die Sichtkalibrierung der Demo — kein Spielzustand. */
+export function setModelTextureFilter(linear: boolean): void {
+  MODEL_TEXTURE_LINEAR = linear;
+}
+
 function buildTexture(tex: TextureSource): THREE.DataTexture {
   const texture = new THREE.DataTexture(texToRgba(tex), tex.width, tex.height, THREE.RGBAFormat);
+  if (MODEL_TEXTURE_LINEAR) {
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
   texture.magFilter = THREE.NearestFilter; // authentischer Look, keine Palettensäume
   texture.minFilter = THREE.NearestFilter;
   // F41: Gespiegelte Aufkleber (das zweite Auge nutzt UVs außerhalb von
@@ -321,6 +351,57 @@ function applyLightShader(material: THREE.MeshBasicMaterial, set: ActorLightSet)
  * deckkraft multiplizieren und Vertices ausbleichen, die im Original voll
  * deckend sind.
  */
+/**
+ * FF7-Blendmodus (`p_hundred+0x44`) → Materialzustand.
+ *
+ * 🟡 **Herkunft** (ADR-028): `Pfile_SetHundredBlendMode` (0x00694C80) setzt je
+ * Modus ein Faktorenpaar UND das erzwungene Vertexalpha `+0x5C`, das
+ * `ApplyGlobalColorModulate` danach in jeden Vertex schreibt:
+ *
+ * | Modus | src / dest | erzwungenes Alpha | Wirkung |
+ * |---|---|---|---|
+ * | 0 | SRCALPHA / INVSRCALPHA | 0x80 | normales Alpha, halb |
+ * | 1 | SRCALPHA / ONE | 0x80 | additiv, halb |
+ * | 2 | INVSRCCOLOR / ONE | 0xFF | additiv, nach Helligkeit gedämpft |
+ * | 3 | SRCALPHA / ONE | 0x40 | additiv, ein Viertel |
+ * | 4 | ONE / ZERO | 0xFF | deckend (löscht zusätzlich das Blend-Bit) |
+ *
+ * Weil das Alpha je Gruppe KONSTANT ist, trägt es hier `opacity` statt eines
+ * Vertexattributs — dasselbe Ergebnis, ohne den Puffer aufzublähen.
+ *
+ * `depthWrite` bleibt an: Das Original schaltet ZWRITEENABLE nie ab (Bit
+ * 0x10000 steht in jedem Block), und die Modi 0..3 sind dort keine
+ * Sortierklasse, sondern nur ein anderes Faktorenpaar in derselben Reihenfolge.
+ *
+ * 🟢 **Am Bestand gemessen** (`model-shading-probe`): 4852 der 4875
+ * `char.lgp`-Blöcke sind Modus 4. Die 23 übrigen — 10× Modus 0, 2× Modus 1,
+ * 11× Modus 3, kein Modus 2 — sitzen in 23 verschiedenen Dateien, jeweils als
+ * Gruppe 0 oder 1. Modus 2 ist damit im Feldbestand unbelegt und hier
+ * Vorsorge.
+ */
+function blendState(mode: number): { params: THREE.MeshBasicMaterialParameters; alpha: number } {
+  const mit = (alpha: number, rest: THREE.MeshBasicMaterialParameters) => ({
+    params: { transparent: true, opacity: alpha, ...rest },
+    alpha,
+  });
+  switch (mode) {
+    case 0:
+      return mit(0x80 / 255, { blending: THREE.NormalBlending });
+    case 1:
+      return mit(0x80 / 255, { blending: THREE.AdditiveBlending });
+    case 2:
+      return mit(1, {
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.OneMinusSrcColorFactor,
+        blendDst: THREE.OneFactor,
+      });
+    case 3:
+      return mit(0x40 / 255, { blending: THREE.AdditiveBlending });
+    default:
+      return { params: {}, alpha: 1 }; // Modus 4: deckend, three-Vorgaben
+  }
+}
+
 function vertexColorsRgb(colors: Uint8Array): Uint8Array {
   const anzahl = Math.floor(colors.length / 4);
   const out = new Uint8Array(anzahl * 3);
@@ -351,11 +432,19 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
   const materials: THREE.Material[] = [];
   bundle.mesh.submeshes.forEach((sub, s) => {
     geometry.addGroup(sub.start, sub.count, s);
+    const blend = blendState(sub.blendMode);
+    // Der Farbschlüssel muss die Gruppendeckkraft überleben. three prüft den
+    // Alphatest gegen `opacity · Texelalpha`; bei einer Vierteldeckkraft läge
+    // das Produkt (0,25) unter der festen Schwelle 0,5 und JEDES Fragment
+    // fiele weg. Die Schwelle wandert deshalb mit — das Texelalpha ist binär
+    // (0 oder ~1), die halbe Deckkraft trennt beide Fälle sauber.
+    const alphaTest = ALPHA_TEST * blend.alpha;
     if (sub.textured) {
       const tex = bundle.textures[sub.textureIndex];
       materials.push(
         tex
           ? basisMaterial({
+              ...blend.params,
               map: buildTexture(tex),
               // Textur × Vertexfarbe. 🟡 Beleg (ADR-028):
               // `D3D5ApplyRenderState` (0x006A3D30) setzt für Modellgeometrie
@@ -364,7 +453,7 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
               // (`*2`) oder eine 128-=-1,0-Halbskala, wie sie PSX-Pipelines
               // kennen, gibt es im PC-Build an keiner Stelle.
               vertexColors: true,
-              alphaTest: ALPHA_TEST,
+              alphaTest,
               // Nur echte Aufkleber (flach schattiert) — s. DECAL_OFFSET_*.
               polygonOffset: sub.flatShaded,
               polygonOffsetFactor: sub.flatShaded ? DECAL_OFFSET_FACTOR : 0,
@@ -373,7 +462,7 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
           : new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR }),
       );
     } else {
-      materials.push(basisMaterial({ vertexColors: true }));
+      materials.push(basisMaterial({ ...blend.params, vertexColors: true }));
     }
   });
   const mesh = new THREE.Mesh(geometry, materials);

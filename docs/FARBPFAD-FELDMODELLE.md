@@ -6,8 +6,8 @@ eigene Ghidra-Analyse von `ff7_en.exe` samt der Notizensammlung unter
 `decomp/` — genau der Bestand, den ADR-028 benennt
 
 Dieses Dokument hält fest, wie im Original aus einer `.p`-Datei und einer
-`.tex`-Palette ein Pixel wird — und an welchen fünf Stellen unsere Umsetzung
-davor danebenlag.
+`.tex`-Palette ein Pixel wird — und an welchen Stellen unsere Umsetzung davor
+danebenlag.
 
 Jede Aussage nennt die Funktion, aus der sie stammt. Das ist seit ADR-028
 **keine Auflage mehr**, sondern gute Praxis: Der Quellvermerk ist der Beleg,
@@ -52,7 +52,7 @@ Bildspeicher.
 
 ---
 
-## 2. Die fünf Befunde, die unsere Darstellung verändert haben
+## 2. Die Befunde, die unsere Darstellung verändert haben
 
 ### 2.1 Die Ausgabe wurde aufgehellt (größter Einzelbetrag)
 
@@ -195,12 +195,50 @@ Der Befund daneben betraf die Gelenke: „Knie und Übergänge zwischen Bones
   `textured && flatShaded`. `beec.hrc` ist nicht betroffen, der Sichtbefund
   hatte also eine andere Ursache als dieser Fehler.
 
+## 2.7 Blendmodi angeschlossen
+
+`p_hundred+0x44` wird nicht mehr nur mitgeführt, sondern ausgewertet.
+`Pfile_SetHundredBlendMode` (0x00694C80) setzt je Modus ein Faktorenpaar **und**
+das erzwungene Vertexalpha `+0x5C`, das `ApplyGlobalColorModulate` danach in
+jeden Vertex schreibt — weil dieses Alpha je Gruppe konstant ist, trägt es bei
+uns `opacity`:
+
+| Modus | src / dest | Alpha | three |
+|---|---|---|---|
+| 0 | SRCALPHA / INVSRCALPHA | 0x80 | `NormalBlending`, Deckkraft 128/255 |
+| 1 | SRCALPHA / ONE | 0x80 | `AdditiveBlending`, Deckkraft 128/255 |
+| 2 | INVSRCCOLOR / ONE | 0xFF | `CustomBlending`, `OneMinusSrcColor` / `One` |
+| 3 | SRCALPHA / ONE | 0x40 | `AdditiveBlending`, Deckkraft 64/255 |
+| 4 | ONE / ZERO | 0xFF | deckend (unverändert) |
+
+🟢 **Am Bestand gemessen:** 4852 der 4875 Blöcke sind Modus 4. Die 23 übrigen
+(10× Modus 0, 2× Modus 1, 11× Modus 3, **kein** Modus 2) liegen in 23
+verschiedenen Dateien, je als Gruppe 0 oder 1 — unter anderem `ancd`, `hbca`,
+`ggif`, `ggje`, `haha`, `fibc`. Modus 2 ist im Feldbestand unbelegt und bleibt
+Vorsorge.
+
+**Eine Falle steckte darin.** Unser `alphaTest` vertritt den Farbschlüssel, und
+three prüft ihn gegen `opacity · Texelalpha`. Bei Modus 3 läge das Produkt
+(0,25) unter der festen Schwelle 0,5 — **jedes** Fragment wäre verworfen und die
+Gruppe unsichtbar geworden. Die Schwelle wandert deshalb mit der Deckkraft; das
+Texelalpha ist binär, die halbe Deckkraft trennt beide Fälle sauber. Ein Test
+hält den Fall fest.
+
+`depthWrite` bleibt an: Das Original schaltet ZWRITEENABLE nie ab, und die Modi
+0…3 sind dort keine Sortierklasse, sondern nur ein anderes Faktorenpaar in
+derselben Zeichenreihenfolge.
+
 ## 3. Was offen bleibt
 
-- **Blendmodi.** `p_hundred+0x44` wird jetzt mitgeführt, aber nicht ausgewertet.
-  Für Feldfiguren ist das fast folgenlos (4852/4875 deckend, und der Feldlader
-  übergibt Modus 6 = „behalte den gespeicherten", plättet also nichts); die
-  restlichen 23 Gruppen rendern wir deckend statt additiv bzw. alphablendend.
+- **Texturfilter — die einzige offene Renderfrage.** Wir tasten punktgenau ab.
+  `D3D5ApplyRenderState` setzt unter Maskenbit `0x4` `D3DFILTER_LINEAR`, und
+  Bit `0x4` steht in jedem texturierten Block — nur enthält die `changedMask`
+  der Blöcke (0x20002) dieses Bit **nicht**. Der Filter wird also vom Block nie
+  ausgegeben; es gilt der globale Gerätezustand, und der ist nicht vermessen.
+  Zusätzlich erzwingt das Original Nearest, sobald `forceSoftwareDevice` steht.
+  Die Messung kann das nicht entscheiden, deshalb steht es als Schalter in
+  `farbcheck.html` (Variante „Texturfilter"), sichtbar vor allem an Augen und
+  Mund.
 - **Farbschlüssel.** Das Original schaltet die Durchsichtigkeit über
   `COLORKEYENABLE` beim Texturbinden, nicht über einen Alphatest — bei
   deckenden Blöcken wird `ALPHATESTENABLE` nie ausgegeben. Unser `alphaTest`

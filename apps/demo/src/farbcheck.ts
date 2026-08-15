@@ -24,6 +24,7 @@ import {
   bindPoseFrame,
   buildActor,
   setActorFacing,
+  setModelTextureFilter,
   type Actor,
   type ActorLighting,
   type ActorMeshBundle,
@@ -52,6 +53,7 @@ const modelSel = $<HTMLSelectElement>('model');
 const animSel = $<HTMLSelectElement>('anim');
 const farbraumSel = $<HTMLSelectElement>('farbraum');
 const lichtSel = $<HTMLSelectElement>('licht');
+const filterSel = $<HTMLSelectElement>('filter');
 const azimut = $<HTMLInputElement>('azimut');
 const hoehe = $<HTMLInputElement>('hoehe');
 const facing = $<HTMLInputElement>('facing');
@@ -323,6 +325,11 @@ fieldSel.addEventListener('change', () => void loadField(fieldSel.value));
 modelSel.addEventListener('change', () => void loadModel(Number(modelSel.value)));
 animSel.addEventListener('change', () => void loadAnim(Number(animSel.value)));
 lichtSel.addEventListener('change', rebuildActor);
+filterSel.addEventListener('change', () => {
+  // Der Filter sitzt in der Texturerzeugung — der Actor muss neu gebaut werden.
+  setModelTextureFilter(filterSel.value === 'linear');
+  void loadModel(Number(modelSel.value));
+});
 farbraumSel.addEventListener('change', () => {
   renderer.outputColorSpace = farbraumSel.value === 'srgb' ? SRGBColorSpace : LinearSRGBColorSpace;
 });
@@ -355,7 +362,7 @@ interface Befund {
   modellIndex: number;
   modellDatei: string;
   ambient: [number, number, number] | null;
-  einstellungen: { farbraum: string; licht: string; azimut: number; hoehe: number; figur: number; frame: number };
+  einstellungen: { farbraum: string; licht: string; filter: string; azimut: number; hoehe: number; figur: number; frame: number };
   bewertung: Record<string, string>;
   anmerkung: string;
 }
@@ -375,6 +382,7 @@ function aktuellerBefund(): Befund {
     einstellungen: {
       farbraum: farbraumSel.value,
       licht: lichtSel.value,
+      filter: filterSel.value,
       azimut: Number(azimut.value),
       hoehe: Number(hoehe.value),
       figur: Number(facing.value),
@@ -465,7 +473,7 @@ void (async () => {
     compositor.render(scene, camera);
     return canvas.toDataURL('image/png');
   },
-  setze: (o: Partial<{ farbraum: string; licht: string; azimut: number; hoehe: number; figur: number }>): void => {
+  setze: (o: Partial<{ farbraum: string; licht: string; filter: string; azimut: number; hoehe: number; figur: number }>): void => {
     if (o.farbraum) {
       farbraumSel.value = o.farbraum;
       farbraumSel.dispatchEvent(new Event('change'));

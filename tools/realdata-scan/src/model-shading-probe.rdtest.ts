@@ -50,6 +50,8 @@ describe.skipIf(!available)('Realdaten: Schattierung der Feldmodelle', () => {
       submeshesFlachTexturiert: 0,
       submeshesGouraudTexturiert: 0,
       blendModeHistogramm: {} as Record<number, number>,
+      /** Welche Meshes sind NICHT deckend? Sie sind der offene Rest. */
+      nichtDeckend: [] as string[],
     };
     const zaehle = (h: Record<number, number>, k: number): void => {
       h[k] = (h[k] ?? 0) + 1;
@@ -94,6 +96,7 @@ describe.skipIf(!available)('Realdaten: Schattierung der Feldmodelle', () => {
         zaehle(stat.shadeModeHistogramm, shade);
         zaehle(stat.materialKlasseHistogramm, klasse);
         zaehle(stat.blendModeHistogramm, blend);
+        if (blend !== 4) stat.nichtDeckend.push(`${eintrag.name}#${g} Modus ${blend}`);
         if (klasse >= 0 && klasse <= 4) {
           if (isFlatShaded(klasse) === (shade === 1)) stat.klasseUndBlockEinig++;
           else stat.klasseUndBlockUneinig++;

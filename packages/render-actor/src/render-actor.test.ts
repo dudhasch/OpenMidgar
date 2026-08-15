@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { composeA, composeHrc, composeP, composeTex } from '@webmidgar/fixture-gen';
-import { parseA, parseHrc, parseP, parseTex, type AnimationFrame, type Skeleton } from '@webmidgar/formats-model';
+import { parseA, parseHrc, parseP, parseTex, type AnimationFrame, type MeshSource, type Skeleton } from '@webmidgar/formats-model';
 import { bindClip } from './binding.js';
 import { bindPoseFrame, computePose } from './pose.js';
 import {
@@ -10,6 +10,7 @@ import {
   buildActor,
   buildFallbackActor,
   buildLightSet,
+  buildMeshObject,
   MODEL_FRONT_OFFSET_DEG,
   setActorFacing,
   type ActorLighting,
@@ -484,5 +485,100 @@ describe('Feldlicht', () => {
   it('unnormierte Richtungen bleiben unnormiert — der Betrag ist Helligkeit', () => {
     const halb = licht([{ color: [255, 255, 255], direction: [0, 2048, 0] }]);
     expect(intensity(halb, [0, 0, 1])[0]).toBeCloseTo(0.5);
+  });
+});
+
+/**
+ * Blendmodi des Renderstate-Blocks (🟡 ADR-028, `Pfile_SetHundredBlendMode`
+ * 0x00694C80). Im Feldbestand sind 4852 von 4875 Gruppen deckend; die 23
+ * uebrigen sind genau das, was diese Faelle abdecken.
+ */
+describe('Blendmodi', () => {
+  const meshMit = (blendMode: number, textured = false): MeshSource => {
+    const { value } = parseP(
+      composeP({
+        vertices: [
+          [0, 0, 0],
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        normals: [[0, 0, 1]],
+        texCoords: [
+          [0, 0],
+          [1, 0],
+          [0, 1],
+        ],
+        groups: [
+          {
+            vertexStart: 0,
+            vertexCount: 3,
+            polys: [{ v: [0, 1, 2], n: [0, 0, 0] }],
+            blendMode,
+            textured,
+            textureIndex: 0,
+            texCoordStart: 0,
+            materialClass: textured ? 4 : 1,
+          },
+        ],
+      }),
+      'blend.p',
+    );
+    if (!value) throw new Error('Fixture unparsbar');
+    return value;
+  };
+
+  const materialFuer = (blendMode: number, textured = false): THREE.MeshBasicMaterial => {
+    const tex = textured
+      ? parseTex(
+          composeTex({ width: 2, height: 2, palettes: [[[0, 0, 0, 0], [200, 40, 40, 255]]], pixels: [0, 1, 0, 0] }),
+          'blend.tex',
+        ).value
+      : null;
+    const objekt = buildMeshObject({ mesh: meshMit(blendMode, textured), textures: tex ? [tex] : [] });
+    return (objekt.material as THREE.MeshBasicMaterial[])[0]!;
+  };
+
+  it('Modus 4 ist deckend — kein Blending, volle Deckkraft', () => {
+    const m = materialFuer(4);
+    expect(m.transparent).toBe(false);
+    expect(m.opacity).toBe(1);
+    expect(m.blending).toBe(THREE.NormalBlending); // three-Vorgabe, ungenutzt
+  });
+
+  it('Modus 0 blendet normal mit halbem Alpha (erzwungenes 0x80)', () => {
+    const m = materialFuer(0);
+    expect(m.transparent).toBe(true);
+    expect(m.blending).toBe(THREE.NormalBlending);
+    expect(m.opacity).toBeCloseTo(128 / 255, 5);
+  });
+
+  it('Modi 1 und 3 sind additiv — halb bzw. ein Viertel', () => {
+    const eins = materialFuer(1);
+    const drei = materialFuer(3);
+    expect(eins.blending).toBe(THREE.AdditiveBlending);
+    expect(drei.blending).toBe(THREE.AdditiveBlending);
+    expect(eins.opacity).toBeCloseTo(128 / 255, 5);
+    expect(drei.opacity).toBeCloseTo(64 / 255, 5);
+    // Gegenprobe: die beiden duerfen sich NICHT gleichen, sonst waere das
+    // erzwungene Alpha aus dem Block gar nicht ausgewertet.
+    expect(drei.opacity).toBeLessThan(eins.opacity);
+  });
+
+  it('Modus 2 nutzt die Faktoren INVSRCCOLOR / ONE', () => {
+    const m = materialFuer(2);
+    expect(m.blending).toBe(THREE.CustomBlending);
+    expect(m.blendSrc).toBe(THREE.OneMinusSrcColorFactor);
+    expect(m.blendDst).toBe(THREE.OneFactor);
+  });
+
+  it('Der Farbschluessel ueberlebt die Gruppendeckkraft', () => {
+    // Ohne mitwandernde Schwelle waere alphaTest 0,5 groesser als die
+    // Vierteldeckkraft — three verwuerfe JEDES Fragment und die Gruppe
+    // verschwaende vollstaendig. Genau das prueft dieser Fall.
+    const deckend = materialFuer(4, true);
+    const viertel = materialFuer(3, true);
+    expect(deckend.alphaTest).toBeCloseTo(0.5, 5);
+    expect(viertel.alphaTest).toBeLessThan(viertel.opacity);
+    expect(viertel.alphaTest).toBeGreaterThan(0);
   });
 });

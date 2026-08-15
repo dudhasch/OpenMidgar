@@ -111,6 +111,17 @@
               <option value="aus">ganz aus — nur Vertexfarben</option>
             </select>
           </label>
+          <label><span class="l">Texturfilter</span>
+            <select id="filter">
+              <option value="nearest">Punktabtastung (unsere Vorgabe)</option>
+              <option value="linear">linear (D3DFILTER_LINEAR)</option>
+            </select>
+          </label>
+          <div class="note">
+            Ungeklärt: Der Renderstate-Block nennt LINEAR, gibt den Filter aber nie
+            aus — es gilt ein globaler Gerätezustand, den niemand vermessen hat.
+            Sichtbar vor allem an Gesicht und Augen.
+          </div>
         </fieldset>
 
         <fieldset>
