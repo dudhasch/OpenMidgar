@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { composeScriptSection, ScriptAssembler } from '@webmidgar/fixture-gen';
 import { parseScriptSection, type FieldDiagnostic } from '@webmidgar/formats-field';
+import { byteAngleToDegrees, degreesToByteAngle } from './angles.js';
 import { CMP, IMPL_OPERAND_LEN, OP_KAWAI, SKIP_OPERAND_LEN } from './opcodes.js';
 import { FieldRuntime } from './runtime.js';
 import { prepareScript, type PreparedScript } from './prepared.js';
@@ -1024,5 +1025,56 @@ describe('Kampf-Opcodes (S17)', () => {
     rt.tick();
     const req = rt.state.hostRequests.find((r) => r.kind === 'battle');
     expect(req).toMatchObject({ kind: 'battle', encounterId: 300 });
+  });
+});
+
+/**
+ * Byte-Winkel des Feldskripts.
+ *
+ * 🟡 Herkunft (ADR-028): `Script_OpSetDirection` (0x00618062) legt den
+ * 8-Bit-Operanden unveraendert als `char` in `model+0x38` (`displayHeading`)
+ * ab. Dessen Null zeigt nach −Y — aus `Field_StepEntityOnWalkmesh`
+ * (0x00636C41, `(+sin·sx, −cos·sy)`, `NEG` allein auf dem Kosinusterm) und der
+ * Tabelle bei 0x00908E30 (stride-4 {sin,cos}; Eintrag 0 = (0,+4096), Eintrag
+ * 64 = (+4096,0)).
+ */
+describe('Byte-Winkel ↔ Grad', () => {
+  it('die vier Himmelsrichtungen der Rose treffen', () => {
+    // 0x00 −Y, 0x40 +X, 0x80 +Y, 0xC0 −X; unsere Grad zaehlen ab +X.
+    expect(byteAngleToDegrees(0x00)).toBeCloseTo(270, 6);
+    expect(byteAngleToDegrees(0x40)).toBeCloseTo(0, 6);
+    expect(byteAngleToDegrees(0x80)).toBeCloseTo(90, 6);
+    expect(byteAngleToDegrees(0xc0)).toBeCloseTo(180, 6);
+  });
+
+  it('Schrittweite ist 360/256, nicht 1 — der gestauchte Kreis', () => {
+    // Gegenprobe zur alten Fassung, die den Rohwert als Grad uebernahm: dort
+    // waere 0x01 gleich 1 Grad gewesen.
+    expect(byteAngleToDegrees(0x41) - byteAngleToDegrees(0x40)).toBeCloseTo(360 / 256, 9);
+    expect(byteAngleToDegrees(0x41)).not.toBeCloseTo(1, 3);
+  });
+
+  it('bleibt im Kreis und ist umkehrbar', () => {
+    for (const b of [0, 1, 63, 64, 127, 128, 200, 255]) {
+      const grad = byteAngleToDegrees(b);
+      expect(grad).toBeGreaterThanOrEqual(0);
+      expect(grad).toBeLessThan(360);
+      expect(degreesToByteAngle(grad)).toBe(b);
+    }
+    // Ueberlauf wird gefaltet, nicht verworfen.
+    expect(byteAngleToDegrees(256)).toBeCloseTo(byteAngleToDegrees(0), 9);
+    expect(byteAngleToDegrees(-1)).toBeCloseTo(byteAngleToDegrees(255), 9);
+  });
+
+  it('DIR setzt die Blickrichtung in Grad, nicht als Rohbyte', () => {
+    // 0xB3 = DIR, Operanden: Bankbyte 0x00 (Literal) + Byte-Winkel 0x80.
+    const { bytes } = new ScriptAssembler().raw(0xb3, 0x00, 0x80).ret().assemble();
+    const rt = new FieldRuntime(prepare([{ name: 'held', entries: [0] }], bytes), { mainLoop: false });
+    rt.start();
+    rt.tick();
+    // 0x80 = +Y = 90 Grad in unserer Zaehlung. Roh uebernommen waeren es 128.
+    const richtung = rt.state.actors[0]!.direction;
+    expect(richtung).toBeCloseTo(90, 6);
+    expect(richtung).not.toBe(0x80);
   });
 });

@@ -1,3 +1,4 @@
+export * from './angles.js';
 export * from './opcodes.js';
 export * from './state.js';
 export * from './prepared.js';

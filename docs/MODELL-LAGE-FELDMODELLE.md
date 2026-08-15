@@ -105,11 +105,7 @@ sonst zöge ein Rückbau die Erwartungen einfach mit.
 
 ## 4. Offen
 
-- **`OP.DIR` (0xB3) rechnet nicht um.** Der Skriptoperand ist ein
-  **Byte-Winkel 0…255** (`Script_OpFaceEntity` 0x0061698A schnappt dasselbe
-  Feld), wir legen ihn in `packages/interpreter/src/vm.ts` direkt als **Grad**
-  ab. Es fehlen der Faktor 360/256 **und** der 90°-Ursprungsversatz. Betrifft
-  jede Figur, deren Blickrichtung ein Skript setzt.
+- ~~**`OP.DIR` (0xB3) rechnet nicht um.**~~ **Behoben** — siehe § 5.
 - **Rotationsreihenfolge wird gelesen, aber nicht benutzt.** `anim.ts` parst
   das Tripel aus dem `.a`-Kopf und exportiert es; der Renderer verdrahtet
   `YXZ` fest. Im Bestand tragen alle 3209 Dateien `[1,0,2]` = YXZ, es ist also
@@ -122,3 +118,51 @@ sonst zöge ein Rückbau die Erwartungen einfach mit.
   `Field_ByteAngleSin` (0x006364EB) liest `+0`, `Field_ByteAngleCos`
   (0x00636500) liest `+2`. Die Schlussfolgerung stimmt trotzdem — nur die
   Begründung zielt auf einen älteren Stand des Dossiers.
+
+---
+
+## 5. `OP.DIR` (0xB3): Byte-Winkel, nicht Grad
+
+**Original, im Abbild nachgelesen.** `Script_OpSetDirection` (0x00618062) liest
+den Operanden mit `Script_ReadOperand8` und legt ihn **unverändert als `char`**
+in `model+0x38` ab; die Drehzustandsbytes `+0x3A`/`+0x3B` werden dabei
+genullt. Keine Umrechnung, keine Skalierung.
+
+Die Feldentität führt **zwei** Winkel im selben Maß:
+
+| Offset | Feld | Bedeutung |
+|---|---|---|
+| `+0x36` | `heading` | Bewegungsrichtung |
+| `+0x37` | `lockFacing` | ≠ 0: `displayHeading` folgt `heading` **nicht** |
+| `+0x38` | `displayHeading` | **das, wonach das Modell gedreht wird** |
+
+`displayHeading` ist im Regelfall an `heading` gekoppelt, teilt also dessen
+Einheit und Nullpunkt: **256 Schritte auf den Vollkreis, 0 = −Y**
+(`0x40` = +X, `0x80` = +Y, `0xC0` = −X). `FieldModel+0x1C` übernimmt genau
+dieses Byte.
+
+**Vorher bei uns.** `vm.ts` legte den Rohwert als Grad ab
+(`((value % 360) + 360) % 360`). Zwei Fehler in einem: der Kreis war auf
+256/360 gestaucht, und der Ursprung lag 90° daneben. Betroffen war jede Figur,
+deren Blickrichtung ein Skript setzt — im Dialog also praktisch jede.
+
+**Behebung.** Neu `packages/interpreter/src/angles.ts` mit
+`byteAngleToDegrees` / `degreesToByteAngle` als **einziger** Umrechnungsstelle
+(dieselbe Regel wie für die Achsen in `@webmidgar/convert`, ADR-009):
+
+```
+Grad = ((Byte − 0x40) · 360/256) mod 360
+```
+
+Geprüft wird an der Rose (`0x00`→270°, `0x40`→0°, `0x80`→90°, `0xC0`→180°),
+an der Schrittweite (360/256, ausdrücklich **nicht** 1 — die Gegenprobe zur
+alten Fassung), an der Umkehrbarkeit und einmal durch die VM hindurch.
+
+**Geprüft, aber nicht betroffen:** Unsere Blickrichtung aus Bewegung
+(`richtungGrad`, `atan2(dy, dx)`) rechnet durchgehend in Grad ab +X und war nie
+ein Byte-Winkel; die Gateway-Rückrichtung wird geometrisch bestimmt, nicht aus
+einem gespeicherten Winkelbyte. `OP.DIR` war die einzige Eintrittsstelle.
+
+**Noch offen:** Der Getter `0xB7` und die Drehopcodes (`TURA` u. a.) sind bei
+uns Stubs. Sobald sie Verhalten bekommen, müssen sie durch dieselben zwei
+Funktionen — sonst entsteht die Ungleichheit an anderer Stelle neu.

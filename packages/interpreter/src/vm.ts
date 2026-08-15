@@ -1,3 +1,4 @@
+import { byteAngleToDegrees } from './angles.js';
 import { CMP, evalComparison, IMPL_OPERAND_LEN, OP, OP_KAWAI, SKIP_OPERAND_LEN, type OpCategory } from './opcodes.js';
 import type { PreparedScript } from './prepared.js';
 import {
@@ -317,9 +318,20 @@ export function stepInstruction(
     case OP.DIR: {
       // Operanden: Bank-Byte + u8 Richtung (Referenzstruktur { banks,
       // direction }; Länge 2 auch aus den Realdaten abgeleitet).
+      //
+      // Der Operand ist ein **Byte-Winkel**, kein Gradwert:
+      // `Script_OpSetDirection` (0x00618062) liest ihn mit
+      // `Script_ReadOperand8` und legt ihn als `char` in `model+0x38`
+      // (`displayHeading`) ab — ohne jede Umrechnung. Dasselbe Feld speist die
+      // Modelldrehung, und seine Null zeigt nach −Y (s. `angles.ts`).
+      //
+      // Bis hierher haben wir den Rohwert als Grad übernommen. Das verdrehte
+      // jede vom Skript gesetzte Figur um 90° und stauchte den Kreis auf
+      // 256/360 — sichtbar an NPCs, die im Dialog in die falsche Richtung
+      // schauen.
       const bankPair = u8(0);
       const value = srcValue(bankPair & 0xf, u8(1), false);
-      actor(rt, ctx).direction = ((value % 360) + 360) % 360;
+      actor(rt, ctx).direction = byteAngleToDegrees(value);
       ctx.ip = next;
       return { kind: 'continue' };
     }
