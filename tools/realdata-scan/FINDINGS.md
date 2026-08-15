@@ -2098,3 +2098,71 @@ kein Korrekturabschnitt) — von dort kommt kein besseres Urteil als eine
 Hypothese.
 
 *Probe: `tools/realdata-scan/src/k9-anim-probe.rdtest.ts` (2 Fälle).*
+
+---
+
+## K9, zweiter Anlauf — der erste Byte-Fakt des Kampf-Animationsformats (2026-08-15)
+
+Der erste Anlauf hat das Field-`.a`-Format ausgeschlossen (0 von 872). Dieser
+sucht die Grammatik in den Dateien selbst — und zwar über eine **externe
+Prüfgröße**, nicht über Plausibilität.
+
+### Die Prüfgröße steht in einer anderen Datei
+
+Die Knochenzahl eines Modells liegt im **Skelett** (`<präfix>aa`, `n = u32@12`,
+481/481 belegt). Trägt die Animationsdatei desselben Präfixes diese Zahl an
+fester Stelle, kann das kein Zufall sein: Ein falscher Versatz kennt die Zahl
+nicht. Kontrollniveau ist die **verwürfelte Paarung** — Animation des einen,
+Skelett eines anderen Präfixes.
+
+### Befund 1: `ab` und `da` sind zwei verschiedene Formate
+
+| | Dateien | Größen |
+|---|---:|---|
+| `ab` | 391 (mit Skelett) | **372 … 1.692 B** |
+| `da` | 391 | **68 … 54.584 B** |
+
+Zwei Größenordnungen Unterschied im Umfang. Der Kopftest unten trennt sie
+zusätzlich sauber: 0 % gegen 98 %.
+
+### Befund 2 🟢 — `da`: `u32@4` ist die Knochenzahl **+ 1**
+
+| | Treffer | Kontrolle (verwürfelt) |
+|---|---:|---:|
+| `da` | **383 / 391 = 98,0 %** | 68 = 17,4 % |
+| `ab` | 0 / 391 = 0,0 % | 0 |
+
+**Faktor 5,6** über der Kontrolle, über der Projektschwelle 3. Die „+1" ist der
+Wurzelrahmen: Das Skelett zählt `n` Knochen, die Animation `n` Gelenke plus die
+Wurzel — dieselbe Aufteilung wie im Field-Format (`0x18` Wurzel + `n`·`0x0C`).
+
+⚠ **Der erste Durchlauf fand nichts**, weil er nur `wert === boneCount` prüfte.
+Erst der Lauf über die Verschiebungen −2…+2 traf. **Das ist Fehlertyp 4 aus der
+Methodikliste** (F15: „eine Kandidatenmenge, die den richtigen Wert nicht
+enthält, erzeugt einen sauberen Negativbefund") — hier zum zweiten Mal, und
+diesmal am eigenen Wertebereich statt am Byteversatz.
+
+### Befund 3 🟢 — es gibt **kein** festes Byteraster je Gelenk
+
+Geprüft: `(Länge − Kopf) mod ((n+1)·k) == 0` über Kopfgrößen 8…32 und
+1…12 Byte je Gelenk. **Kein einziger Kandidat kommt über 50 %.**
+
+Das ist der stärkste Hinweis darauf, dass die Rahmendaten **bitgepackt** sind:
+Bei variabler Bitbreite kann kein Byte-Accounting aufgehen. Und es erklärt
+rückwirkend, warum der erste Anlauf scheitern musste — das Field-Format legt
+feste 12 B je Knochen ab, dieses Format offenbar nicht.
+
+### Was jetzt offen ist
+
+🔴 Die übrigen Kopffelder. `u32@0` ist klein (Beispiele: 15 bei 30 Knochen,
+18 bei 48) — plausibel eine Anzahl, aber unbelegt. `u32@8`/`u32@12` tragen
+größere Werte (15/964 bzw. 32/3900), Deutung offen.
+🔴 Die Bitpackung selbst — das ist der eigentliche Rest von K9.
+🔴 Das `ab`-Format vollständig.
+🔴 Die **8 Ausreißer** unter den `da`-Dateien, die `n+1` nicht tragen.
+
+Der Bindpose-Mangel bleibt damit bestehen. Aber K9 ist nicht mehr „872 Dateien
+ungedeutet": Zwei Formate sind getrennt, ein Kopffeld ist belegt, und die
+Bauart der Rahmendaten ist eingegrenzt.
+
+*Probe: `tools/realdata-scan/src/k9-grammatik.rdtest.ts` (4 Fälle).*
