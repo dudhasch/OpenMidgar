@@ -2942,3 +2942,56 @@ Kommentar daneben.
 *Modul: `packages/battle-runtime/src/ff7-elementar.ts` · Fixtures:
 `ff7-elementar.test.ts` (20 Fälle) · Probe:
 `tools/realdata-scan/src/affinitaet.rdtest.ts` (2 Fälle).*
+
+---
+
+## Statusänderung: Laden, Immunität, Erfolgswurf (2026-08-15)
+
+Damit schließt sich der Verweis, den der Elementarschritt offen gelassen
+hatte: Platz 13 der Affinitätstabelle bekommt seine Immunitätsmaske jetzt aus
+einer belegten Funktion statt aus einem Parameter.
+
+### Modus und Rate stecken im selben Byte
+
+`>>> 6` gibt den Eimer (0 zufügen, 1 heilen, 2 umschalten, **3 = keine
+Änderung**), `(& 0x3F) << 2` die Rate 0…252. Ein Datensatz mit
+`modeAndRate === 0xFF` trägt deshalb **keine** Statusänderung — `0xFF >>> 6`
+ist 3. Das ist derselbe Leermarker, der auch im Schadensbyte steht, hier auf
+eine ganz andere Weise wirksam.
+
+⚠️ **Der Fangen-Sonderfall schreibt die Rate nicht.** Trägt die Statusmaske
+Bit 31, wird nur `inflict = 0x80000000` gesetzt und ein globaler Wähler
+belegt; `rate` behält den Vorbelegungswert `0xFF` — ein solcher Datensatz
+gelingt also **automatisch**. Das ist kein Versehen der Nachbildung, sondern
+das Verhalten des Originals, und es steht als Testfall da.
+
+### Die Immunitätsmaske: der letzte Schritt gewinnt
+
+Neun Schritte, mehrere davon schreiben in dieselben Bits — die Reihenfolge ist
+bindend. Der **letzte** löscht alles: Ohne Sonderflag `0x0080` gibt es gar
+keine Immunität. Wer diese Prüfung nach vorn zieht, ändert nichts; wer sie
+vergisst, macht jeden Angriff wirkungslos, der Immunitäten durchbrechen soll.
+
+Weitere Kopplungen, die einzeln leicht untergehen:
+
+* Hast und Verlangsamung sind **immer gemeinsam** immun.
+* Todesimmun heißt automatisch **todesurteilsimmun**.
+* Eine Wiederbelebung schlägt die Todesimmunität — aber **nur in der Party**
+  (`slot < 3`), und „kann nicht sterben" setzt sie danach wieder.
+
+### Der Erfolgswurf: die einzige Ziehung, die wirklich ausbleiben darf
+
+⚠️ Gezogen wird **nur**, wenn die Rate unter 252 liegt. Das ist die eine
+Stelle im ganzen Trefferablauf, an der eine Ziehung tatsächlich unterbleibt —
+überall sonst fällt sie unbedingt, auch wenn das Ergebnis feststeht. Wer hier
+zur Sicherheit zieht, verschiebt den Strom genauso wie wer anderswo faul ist.
+
+Und der Vergleich ist `rate <= r + 1`, nicht `rate < r`: **Eine Rate von 1
+scheitert immer** — dasselbe Muster wie beim physischen Trefferwurf, wo eine
+Quote von 1 nie trifft.
+
+Drei Zustände landen auf einem **Partymitglied** immer, ohne Wurf: Hast,
+Schild und Berserk.
+
+*Modul: `packages/battle-runtime/src/ff7-status.ts` · Fixtures:
+`ff7-status.test.ts` (16 Fälle).*
