@@ -801,3 +801,62 @@ mit Vertauschungskontrolle prüfbar.
 - ⚠️ **`menu-savemap-probe.rdtest.ts`** schließt seine Dateihandles nicht; der
   Realdatenlauf meldet dadurch zwei `ERR_INVALID_STATE`-Fehler außerhalb der
   Tests. Kein Fehlschlag, aber Lärm, der einen echten Fehler verdecken kann.
+
+## K8 — als die richtige Frage eine andere war (Welle 5, 2026-08-15)
+
+Der Posten hieß „Kampfkamera kalibrieren". Vier Gütefunktionen sind daran
+gescheitert, und die fünfte hat gezeigt, **dass der Posten falsch benannt
+war**. Das ist der eigentliche Ertrag und der Grund, warum er hier steht.
+
+**Die vier Fehlschläge, mit ihrer jeweiligen Ursache** — sie sind lehrreicher
+als der Befund:
+
+1. **Bedarfswinkel** (welchen Winkel braucht die Kamera für ihre Formation?):
+   17,65° gegen Kontrollen bei 15,5°, Faktor 1,14. Alle Formationen sind
+   ähnlich groß und alle Kameras ähnlich weit weg — die Größe kann gar nicht
+   trennen.
+2. **Punkt-Fit** gegen zwei im Original vermessene Bodenpunkte: echt 17,51 px,
+   beste **fremde** Kamera **3,50 px**. Vier Messzahlen gegen einen freien
+   Parameter sind zu wenig Überbestimmung; unter ~12 000 Kontrollvarianten
+   passt immer eine besser. Dies ist der Lehrsatz aus F35 in neuer Kleidung:
+   **Ohne Kontrolle wäre 17,51 px als „Treffer" durchgegangen.**
+3. **Bildkorrelation** der Bühne: max 0,14 — rohe Graustufen sind gegen
+   feinkörnige Textur blind.
+4. **Bildfüllung**: flach 90–97 % über 10…58°. Die Bühne ist immer groß genug.
+
+**Was dann getragen hat, war keine bessere Statistik, sondern eine
+Invariante.** Ein Öffnungswinkel skaliert das Bild radial um die Mitte; er
+kann eine **Richtung** nicht ändern. Also ist dy/dx eines Weltpunkts zur
+Bildmitte vom Winkel unabhängig — im gerechneten Test auf 2,7 · 10⁻¹⁵ genau.
+Gemessen am gelben Bühnenschild: Original **1,381**, Blockkamera 0 **0,826**,
+Blockkamera 1 **2,81**. Damit ist ohne jede Kalibrierung entschieden, dass
+keine Blockkamera die Ansicht des Originals zeigt.
+
+**Methodische Merkposten daraus:**
+
+- Eine überbestimmte Rechnung ist nur dann stark, wenn die Kontrollmenge
+  **kleiner** ist als die Überbestimmung. 1 Parameter gegen 4 Messwerte klingt
+  gut — gegen 12 000 Kontrollvarianten ist es nichts.
+- Wenn mehrere Gütefunktionen nacheinander scheitern, lohnt die Frage, ob die
+  **Fragestellung** falsch ist, mehr als die nächste Gütefunktion. Bei R4 hat
+  eine Tafel entschieden, hier eine Invariante — beide Male nach vier
+  Fehlschlägen.
+- Auch ein Nullbeitrag gehört berichtet: Die 🟡 AP-Deutung hat den
+  Formationstrichter **nicht** verengt (alle fünf Formationen mit EXP-Summe 32
+  tragen auch AP-Summe 4). Das ist keine Bestätigung.
+
+**Erledigt nebenbei:** K5 (`Präfixindex = 370 + location`) hatte bisher nur
+die Bereichsausschöpfung als Stütze, weil beide Inhaltsmaße gescheitert waren.
+Das Rendering der Bühne `op` gegen die Referenzaufnahme liefert jetzt den
+**Sichtnachweis**.
+
+**Offen und neu benannt:**
+
+- 🔴 **`camdat` / Kamerabewegungen.** Die Gegnerrecords tragen 16
+  Kamerabewegungs-IDs je Attacke (@0x68) — es gibt nachweislich Kameraskripte.
+  Solange die nicht gedeutet sind, schriebe jede Kalibrierung einen Wert fest,
+  der für die Spielkamera nicht gilt.
+- 🟡 **H-B bleibt offen:** Im 20-B-Setup-Record streuen @8–@15 und @19; ohne
+  Zielgröße ist nicht prüfbar, ob dort ein Zoom steht. Erst nach `camdat`
+  sinnvoll anzugehen.
+

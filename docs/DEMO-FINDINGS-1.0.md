@@ -47,7 +47,7 @@ vermutet.
 | F23 | Field/Hintergrund | **Schwarze Flächen statt Rauch, Wasser, Feuer** (ujunon1 Schornstein, uutai1 Fluss, nrthmk, gonjun1, cosin1). Ursache belegt: der Tile-Shader in `background.ts` kennt nur „undurchsichtig oder verworfen" (`discard` bei a<0.5, `outColor.a = 1.0`, `depthWrite` immer an). Die FF7-Mischmodi (Mittelwert / additiv / subtraktiv / 25 % additiv) fehlen vollständig — additiv gemischte Effekttiles werden dadurch als deckende dunkle Blöcke gezeichnet | Kernfehler — Sichtqualität | ✅ behoben: `blending` (u8@30) und `typeTrans` (u8@32) im Parser belegt; getrennte Zeichenstapel je Mischart mit additivem bzw. gemitteltem Blending und `depthWrite: false`, deckend zuerst. Sichtnachweis: Schornsteinrauch in `ujunon1` und der Fluss in `uutai1` erscheinen statt schwarzer Blöcke |
 | F24 | Menü | Menü-UI **durchgängig als katastrophal bewertet** (10/10): Rahmen, Schrift, Anordnung entsprechen nicht dem Original — die Demo zeigt eine Diagnosetabelle, kein FF7-Menü. Zusätzlich inhaltlich: Materia werden unter „Gegenstände" gelistet, Itemnamen teils falsch (`?307`, `?260`, s. F18) | Ausbaustufe + Datenlesung | 🟡 **F24-B umgesetzt (Welle 2), Aufteilung aber unbelegt.** Die `<table>`-Diagnose in Monospace ist ersatzlos weg; das Menü läuft über `MenuSession.screen()` → `HudBox[]` → `paintBoxes` → `applyWindowSkin`, also durch **dieselbe** Fensterschale wie Dialog und Kampf-HUD. Sechs neue Ansichten (Ausrüstung, Materia, Zauber, Limit, PHS, Konfiguration), Gegenstandsbeschreibungen im Fußfenster, Ortsanzeige aus der Savemap statt vom Wirt geraten. 🔴 **Die Hauptmenü-Aufteilung ist NICHT belegt** — unter den 18 Referenzbildern ist keine Menüaufnahme, und makoureactor dokumentiert nur die FIELD-Fenstergeometrie (320×224), nicht das Menü. Die Zahlen liegen deshalb vollständig in **einem** austauschbaren Objekt `FF7_MAIN_MENU_LAYOUT`; ob die Kommandospalte im Original links oder rechts steht, ist offen. **Datenlesung behoben, s. F18/F24-A** |
 | F25 | Weltkarte | Weltkarte **durchgängig katastrophal** (13/13): „KOMPLETT FALSCHE FARBEN — 3D-Modell an sich plausibel". Das Terrain rendert weiterhin die Klassenfarben-Diagnose (F11). Ausdrücklicher Referenzwunsch des Projektinhabers: **an FF7-Landscaper orientieren**. Nebenbefund: bei „3× Tab" ist kein Fahrzeugmodell erkennbar | Bekannte Lücke, jetzt priorisiert | ✅ **gelöst** — Texturzuordnung gemessen (F11b, WM0 282/282 gegen Kontrolle 0,6028), Atlas gebaut, Sichtnachweis vorhanden; **in der Demo verdrahtet (Welle 2)**: Atlasseite einmalig als `DataTexture` (`flipY=false`, Mipmaps, Anisotropie), Trennung nach `geo.atlasPages`, Dreiecke ohne Atlaszelle (255) fallen auf Klassenfarben zurück; drei Darstellungsarten `textured`/`terrain`/`region`. 🟡 Ozeanfarbe über Ersatzpalette, 🔜 Fahrzeugmodell (F34) |
-| F26 | Kampf | 19/27 katastrophal. Bestätigt und zusammengefasst: **keine Kampfbühne** (schwarzer Hintergrund), **Party wird nicht gerendert** (nur Quader bzw. gar nichts), **Gegnermodelle erscheinen verzögert** (die ersten Takte zeigen Farbflächen) **und sind viel zu klein**, Blickrichtung der Gegner vermutlich gespiegelt, **HUD nicht im Originalstil** (Diagnosekasten statt FF7-Kampfmenü) | Sammelbefund über F05/F19 hinaus | 🟡 **drei von vier Teilen behoben (Welle 2), die Kamera nicht.** ✅ HUD im Originalstil (K6, s. u.) · ✅ echte Bühne statt schwarzer Ersatzscheibe: `stagePrefixForLocation(formation.location)` → `loadBattleStage` → `buildBattleStage`, 1000/1000 Formationen lösen auf · ✅ Party als echte Battle-Modelle statt blauer Quader (K4-Zuordnung, s. u.) · 🔴 **Die Kampfkamera ist falsch kalibriert und ist damit der größte verbleibende Sichtmangel**: bei Encounter 8 (Bühne `pk`) füllt eine Ziegelwand das ganze Bild, bei Encounter 300 (Bühne `op`) sind alle Figuren sichtbar, aber winzig. Bühne, Party und Gegner sind dabei nachweislich geladen (`gameDebug.kampfBuehne`/`battleModelle`) — es ist kein Ladefehler, sondern der 🟡 unkalibrierte Öffnungswinkel bzw. der 12-B-Kamerasatz, der Position und Ziel trägt, aber keinen Zoom. 🔴 Zusätzlich stehen alle Figuren in der **Bindpose** (Arme senkrecht nach oben), weil das Animationsformat der Battle-Modelle (`da`-Dateien, 872 Stück) ungedeutet ist |
+| F26 | Kampf | 19/27 katastrophal. Bestätigt und zusammengefasst: **keine Kampfbühne** (schwarzer Hintergrund), **Party wird nicht gerendert** (nur Quader bzw. gar nichts), **Gegnermodelle erscheinen verzögert** (die ersten Takte zeigen Farbflächen) **und sind viel zu klein**, Blickrichtung der Gegner vermutlich gespiegelt, **HUD nicht im Originalstil** (Diagnosekasten statt FF7-Kampfmenü) | Sammelbefund über F05/F19 hinaus | 🟡 **drei von vier Teilen behoben (Welle 2), die Kamera nicht.** ✅ HUD im Originalstil (K6, s. u.) · ✅ echte Bühne statt schwarzer Ersatzscheibe: `stagePrefixForLocation(formation.location)` → `loadBattleStage` → `buildBattleStage`, 1000/1000 Formationen lösen auf · ✅ Party als echte Battle-Modelle statt blauer Quader (K4-Zuordnung, s. u.) · 🔴 **Die Kampfkamera ist falsch kalibriert und ist damit der größte verbleibende Sichtmangel**: bei Encounter 8 (Bühne `pk`) füllt eine Ziegelwand das ganze Bild, bei Encounter 300 (Bühne `op`) sind alle Figuren sichtbar, aber winzig. Bühne, Party und Gegner sind dabei nachweislich geladen (`gameDebug.kampfBuehne`/`battleModelle`) — es ist kein Ladefehler, sondern der 🟡 unkalibrierte Öffnungswinkel bzw. der 12-B-Kamerasatz, der Position und Ziel trägt, aber keinen Zoom. **⇒ Diese Diagnose ist in Welle 5 vermessen und ERSETZT worden (K8, s. u.):** Der Öffnungswinkel skaliert radial und kann keine Richtung ändern; am gelben Bühnenschild liegt das Richtungsverhältnis der Aufnahme bei **1,381**, das der Blockkameras konstant bei **0,826** bzw. **2,81**. Damit zeigt **keine** Blockkamera die Ansicht des Originals — bei keinem Winkel. Die Frage ist nicht „welcher Zoom", sondern „welche Kamera"; offen ist `camdat`. 🔴 Zusätzlich stehen alle Figuren in der **Bindpose** (Arme senkrecht nach oben), weil das Animationsformat der Battle-Modelle (`da`-Dateien, 872 Stück) ungedeutet ist |
 
 | F27 | Field/Modelle | **Die Gehanimation legt die Figur flach.** Beim Umschalten des Spielers auf Animationsindex 1 (aaaa.hrc, 8316 B ≈ Bewegungszyklus) kippt Cloud um; mit Index 0 steht er. Die Frames der `.a` tragen eine Wurzelrotation, die sich mit der Wurzelrahmen-Korrektur (`ROOT_FRAME_FIX_DEG`) und der von uns gesetzten Blickrichtung beißt. Der Umschalter ist deshalb bewusst nicht aktiv — die Figuren stehen beim Gehen | Sichtqualität — blockiert die Laufanimation | 🔜 Wurzelrotations-Semantik der `.a`-Frames gegen die selbst gesetzte Blickrichtung messen |
 
@@ -998,3 +998,117 @@ collection`) aus `menu-savemap-probe.rdtest.ts` laufen als „unhandled errors"
 mit. Sie sind **nicht** von dieser Welle verursacht und kein Testfehlschlag —
 die Probe schließt ihre Dateihandles nicht ausdrücklich. Als eigener Posten
 notiert, statt stillschweigend übergangen.
+
+## Welle 5, erster Teil — K8: die Kampfkamera (2026-08-15)
+
+F26 nennt die Kampfkamera seit Welle 2 den **größten verbleibenden
+Sichtmangel** und benennt als Ursache den „unkalibrierten Öffnungswinkel".
+Diese Diagnose ist jetzt vermessen — und sie war **falsch gestellt**.
+
+### Woher der Öffnungswinkel kommen könnte: drei Orte, zwei sofort erledigt
+
+| Hypothese | Vorhersage | Gemessen | |
+|---|---|---|---|
+| **H-C** Der Zoom steht in den 12 B „Füllung" des 48-B-Kamerablocks | dort steht etwas anderes als 0xFFFF | **1000/1000** Formationen: ausnahmslos 0xFFFF | ✗ erledigt |
+| **H-B** Er steht im 20-B-Setup-Record (18 B ungedeutet) | eine Byteposition mit passender Streuung | Positionen @5/@6/@7/@17 tragen nur **einen** Wert und scheiden aus; @8–@15 und @19 streuen (bis 76 Werte) | offen — mangels Zielgröße nicht prüfbar |
+| **H-A** Er ist fest, und die Kameras sind darauf abgestimmt | der Winkel, unter dem die Gegnerplätze erscheinen, hat eine scharfe Obergrenze | Median **17,65°** gegen Kontrollen **15,41°** (verschoben) und **15,51°** (verwürfelt) — Faktor **1,14** | ✗ kein Befund (Maßstab: < 3) |
+
+H-A ist dabei nicht nur schwach, sondern in die **falsche Richtung**: Die echte
+Kamera braucht mehr Bild als eine fremde, nicht weniger.
+
+### Die Referenzaufnahme — und ein bestätigter Altbefund
+
+Die drei Kampfaufnahmen in `apps/demo/.shots/ref/` zeigen denselben Kampf.
+Der Abschlussbildschirm nennt **EXP 32p / AP 4p**; damit ist die Formation
+über die Encounter-Tabellen des Bahnhofsbogens auffindbar:
+
+> **Formation 301** — zwei `MP`-Wachen, EXP 32, AP 4, Gil 20, location 9,
+> Plätze −500/0/−1500 und +500/0/−1700, erreichbar aus `md1stin`, `md1_1`
+> und `md1_2`.
+
+⚠️ **Ein erster Anlauf hat die Suchmenge falsch gewählt** und fand 0 von 1000
+Formationen: Er verlangte „genau zwei belegte Slots, gleicher Typ, EXP-Summe
+32" — aber „beide Gegner leben noch" ist eine Annahme über die **Aufnahme**,
+kein Merkmal der Daten. Die Suchmenge kam danach aus den Encounter-Tabellen
+selbst.
+
+🟢 **Nebenbefund, der einen Altposten schließt:** Das Rendering der Bühne
+`op` (= location 9 über die K5-Regel `Präfixindex = 370 + location`) zeigt
+**zweifelsfrei dieselbe Bühne** wie die Aufnahme — gelbes 非常事態-Schild,
+Metallgitter, gestreifter Boden, Betonpfeiler. K5 war bisher nur über die
+exakte Bereichsausschöpfung (0…89 auf 90 Präfixe) gestützt, weil beide
+Inhaltsmaße gescheitert waren. **Jetzt liegt der Sichtnachweis vor.**
+
+🟢 Nebenbei belegt der Trichter auch den Textdekoder an echten Kampfdaten:
+`MP`, `Wachhund`, `Mono Drive` lesen sich sauber aus der deutschen
+Installation. ⚠️ Die 🟡 AP-Deutung (u16@0x9E) trägt dagegen **nichts** zur
+Eindeutigkeit bei — alle fünf Formationen mit EXP-Summe 32 haben auch
+AP-Summe 4. Das ist keine Bestätigung, sondern ein Nullbeitrag, und wird so
+notiert.
+
+### Vier Gütefunktionen, vier Fehlschläge
+
+| Gütefunktion | Ergebnis | Warum sie nicht trägt |
+|---|---|---|
+| Bedarfswinkel gegen Kontrollen (H-A) | 17,65° gegen 15,5° | Formationen sind alle ähnlich groß, Kameras ähnlich weit weg |
+| **Punkt-Fit**: zwei im Original vermessene Schattenmitten, ein freier Winkel | echt **17,51 px**, beste **fremde** Kamera **3,50 px** | 4 Messzahlen gegen 1 Parameter — unter ~12 000 Kontrollvarianten passt immer eine besser |
+| Bild-gegen-Bild-Korrelation der Bühne | max **0,14** | rohe Graustufen sind gegen die feinkörnige Struktur blind |
+| Bildfüllung der Bühne | flach **90–97 %** über 10…58° | die Bühne ist bei jedem Winkel groß genug |
+
+Die Schattenmitten wurden dabei **ohne Augenmaß** bestimmt: Bei einer Ellipse
+liegt die breiteste Zeile genau auf dem Mittelpunkt, und sie ist gegen die
+dunklen Stiefel robust, weil die innerhalb liegen.
+
+### Was tatsächlich entschieden hat: eine Invariante
+
+Ein Öffnungswinkel skaliert das Bild **radial um die Bildmitte**. Er kann
+einen Punkt zur Mitte hin oder von ihr weg schieben — aber niemals in eine
+andere **Richtung**. Das Verhältnis dy/dx eines Weltpunkts zur Bildmitte ist
+damit eine Kamerainvariante. Gemessen am gelben Warnschild (größte
+zusammenhängende gelbe Komponente):
+
+| Ansicht | dy/dx |
+|---|---|
+| Original `20260810223321_1.jpg` | **1,381** |
+| Blockkamera 0, Winkel 22°/30°/38°/46° | 0,825 · 0,826 · 0,827 · **0,826** |
+| Blockkamera 1, Winkel 30°/38°/46° | 2,793 · 2,808 · **2,814** |
+
+Die Konstanz über den Sweep ist die **eingebaute Kontrolle**: Das Verhältnis
+streut über je vier Winkel um weniger als 0,003, im rein gerechneten Test
+sogar um 2,7 · 10⁻¹⁵. Damit ist ausgeschlossen, dass der Unterschied zum
+Original am Öffnungswinkel liegt.
+
+🟢 **Befund: Keine der drei Blockkameras zeigt die Ansicht der
+Originalaufnahme — bei keinem Öffnungswinkel.** Der Wert des Originals liegt
+**zwischen** Kamera 0 und Kamera 1.
+
+### Folge für F26 — die Diagnose wird ausgetauscht
+
+Bisher stand dort: „🟡 unkalibrierter Öffnungswinkel bzw. der 12-B-Kamerasatz,
+der Position und Ziel trägt, aber keinen Zoom." Das ist zu kurz gegriffen.
+Die Frage „welcher Öffnungswinkel?" ist **unbeantwortbar, solange nicht
+geklärt ist, WELCHE Kamera gilt** — und der Formationsblock allein liefert sie
+nachweislich nicht. Verträglich ist der Befund damit, dass die Spielkamera im
+Kampf geführt wird und der Block nur Ausgangslagen trägt; dafür spricht
+unabhängig, dass die Gegnerrecords **16 Kamerabewegungs-IDs je Attacke**
+tragen (@0x68), es also nachweislich Kameraskripte gibt.
+
+🔴 **Damit ist der nächste Schritt benannt und nicht mehr „kalibrieren":**
+Die Kamerabewegungsdaten (`camdat`) müssen gefunden und gedeutet werden. Eine
+Kalibrierung ohne sie würde einen Wert festschreiben, der für die Spielkamera
+gar nicht gilt.
+
+**Keine Codeänderung.** Der Öffnungswinkel der Demo bleibt bei 50° und bleibt
+eine 🟡-Kalibrierung — jetzt aber mit dem Zusatz, dass auch der richtige Wert
+das Bild nicht zur Deckung bringen würde.
+
+### Läufe
+
+| Probe | Inhalt |
+|---|---|
+| `kampfkamera-probe.rdtest.ts` | H-C (Dauerbefund: Füllung konstant), H-B (Setup-Vielfalt), H-A gegen zwei Kontrollen |
+| `kampfkamera-referenz.rdtest.ts` | Formationstrichter über die Encounter-Tabellen |
+| `kampfkamera-kalibrierung.rdtest.ts` | Punkt-Fit; **Dauerbefund als Erwartung**: die Kontrolle schlägt das Original |
+| `kampfkamera-tafel.rdtest.ts` | FOV-Tafel + Radialitäts-Invariante |
+| `battle-sheet.ts` (neu) | gemeinsame Renderkette der Kampf-Bildproben, ausgelagert aus `battle-vollbild` |
+
