@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebMidgar — Projektstand: was bis zum vollständigen Klon fehlt</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #16191d;
+    --dim: #5d646d;
+    --line: #dfe3e8;
+    --karte: #f7f8fa;
+    --ok: #1a7f37;
+    --teil: #9a6700;
+    --offen: #b42318;
+    --nein: #6b6b6b;
+    --balken-bg: #e7eaee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a;
+      --fg: #e6e9ec;
+      --dim: #9aa3ad;
+      --line: #2b3138;
+      --karte: #1b1f24;
+      --ok: #4ac26b;
+      --teil: #d9a441;
+      --offen: #f77066;
+      --nein: #8b939c;
+      --balken-bg: #262c33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.15rem; margin: 2.6rem 0 .5rem;
+    padding-bottom: .35rem; border-bottom: 2px solid var(--line);
+  }
+  .unter { color: var(--dim); margin: 0 0 1.6rem; }
+  .hinweis {
+    background: var(--karte); border: 1px solid var(--line);
+    border-radius: 8px; padding: .85rem 1rem; margin: 1.2rem 0 2rem;
+    color: var(--dim); font-size: .9rem;
+  }
+  .hinweis strong { color: var(--fg); }
+  table { width: 100%; border-collapse: collapse; margin: .5rem 0 0; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+  td.was { width: 30%; font-weight: 600; }
+  td.status { width: 14%; white-space: nowrap; font-weight: 600; }
+  td.notiz { color: var(--dim); font-size: .9rem; }
+  tr.ok    td.status { color: var(--ok); }
+  tr.teil  td.status { color: var(--teil); }
+  tr.offen td.status { color: var(--offen); }
+  tr.nein  td.status { color: var(--nein); }
+  code { font-family: "Cascadia Mono", Consolas, monospace; font-size: .88em; }
+  .balken { height: 8px; border-radius: 4px; background: var(--balken-bg); overflow: hidden; display: flex; margin: .1rem 0 .3rem; }
+  .balken span { display: block; height: 100%; }
+  .b-ok { background: var(--ok); } .b-teil { background: var(--teil); }
+  .b-offen { background: var(--offen); } .b-nein { background: var(--nein); }
+  .zaehler { font-size: .85rem; color: var(--dim); margin: 0; }
+  .legende { display: flex; flex-wrap: wrap; gap: 1.1rem; margin: 0 0 1.4rem; font-size: .88rem; }
+  .legende span::before { content: "\25A0\00A0"; }
+  .l-ok::before { color: var(--ok); } .l-teil::before { color: var(--teil); }
+  .l-offen::before { color: var(--offen); } .l-nein::before { color: var(--nein); }
+  .gesamt { background: var(--karte); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; margin-top: .6rem; }
+  .gesamt .zaehler { font-size: .95rem; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--dim); font-size: .85rem; }
+  @media (max-width: 700px) {
+    td.was, td.status { width: auto; }
+    table, tbody, tr, td, th { display: block; }
+    thead { display: none; }
+    tbody tr { border-bottom: 1px solid var(--line); padding: .5rem 0; }
+    td { border: 0; padding: .15rem .2rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>WebMidgar — was bis zum vollständigen Klon fehlt</h1>
+<p class="unter">Stand 15. August 2026 · Welle 5 (Kampf) läuft · zusammengetragen aus
+<code>DEMO-FINDINGS-1.0.md</code>, <code>ROADMAP-OFFENE-POSTEN.md</code>, <code>ROADMAP-S27-S36.md</code> und <code>README.md</code></p>
+
+<div class="legende">
+  <span class="l-ok">steht &amp; belegt</span>
+  <span class="l-teil">teilweise / Ersatzregel</span>
+  <span class="l-offen">offen / Forschungsfrage</span>
+  <span class="l-nein">bewusst nicht im Ziel</span>
+</div>
+
+<div class="hinweis">
+  <strong>Wie die Balken zu lesen sind.</strong> Sie zählen <em>Posten</em>, nicht Spielinhalt.
+  Ein Haken bei „Szenenformat gelesen“ und einer bei „Minigames“ wiegen hier gleich viel,
+  in Arbeit aber um Größenordnungen verschieden — und die 15 offenen Posten sind im Schnitt
+  deutlich dicker als die 30 erledigten.
+  Eine Gesamtprozentzahl „bis 100 % Klon“ steht deshalb bewusst <strong>nicht</strong> auf dieser
+  Seite: Sie wäre geraten, und geratene Zahlen sind genau das, was in diesem Projekt nicht gemacht wird.
+</div>
+
+<h2>Erkundung — Felder, Bewegung, Hintergrund</h2>
+<div class="balken"><span class="b-ok" style="width:72.7%"></span><span class="b-teil" style="width:18.2%"></span><span class="b-offen" style="width:9.1%"></span></div>
+<p class="zaehler">11 Posten — 8 steht · 2 teilweise · 1 offen</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Field-Container &amp; Sektionen</td><td class="status">steht</td><td class="notiz">702/702 Fields byteexakt zerlegt; Modell- und Animationsreferenzen 100 % gegen <code>char.lgp</code> auflösbar</td></tr>
+<tr class="ok"><td class="was">Walkmesh &amp; Bewegung</td><td class="status">steht</td><td class="notiz">Solver mit Wandgleiten; Richtungswinkel auf die 256 Einheiten des Originals quantisiert (R9)</td></tr>
+<tr class="ok"><td class="was">Feldwechsel / Gateways</td><td class="status">steht</td><td class="notiz">F15: Ankunftsstelle @8/@10 in 978/978; gelaufene Kette über 6 Fields am Stück, Gegenprobe 0 Übertritte</td></tr>
+<tr class="ok"><td class="was">Hintergrundkacheln &amp; Animation</td><td class="status">steht</td><td class="notiz">F22/F23/F30/F31/F32; Mischformeln vollständig, BGON/BGOFF/BGCLR im Interpreter</td></tr>
+<tr class="ok"><td class="was">Feldmodelle: Lage, Maßstab, Blick</td><td class="status">steht</td><td class="notiz">R4 vollständig, F37 (Faktor 4), F38 (−90°), F41 (Auge), F42 (Vertexlicht)</td></tr>
+<tr class="ok"><td class="was">Gehen / Rennen</td><td class="status">steht</td><td class="notiz">F27/F45 — Gehen exakt Faktor 4 langsamer, gemessen statt gesetzt</td></tr>
+<tr class="ok"><td class="was">Zufallskämpfe (Schrittmodell)</td><td class="status">steht</td><td class="notiz">F14/F44: Zählerhierarchie <code>fractions → stepId → danger → offset</code>, vollständig im Snapshot</td></tr>
+<tr class="ok"><td class="was">Talk-Interaktion</td><td class="status">steht</td><td class="notiz">F04, <code>requestEntityScript</code> mit Leerspan-Erkennung</td></tr>
+<tr class="teil"><td class="was">Script-geschaltete Feldobjekte</td><td class="status">teilweise</td><td class="notiz">F35-Rest: Was <code>junonr2</code>s <code>lift</code> zeichnet, ist ungeklärt — weder Modell noch Hintergrundparameter</td></tr>
+<tr class="teil"><td class="was">Kachelverlust-Ausläufer</td><td class="status">teilweise</td><td class="notiz">27 von 508 Fields verlieren &gt;10 % ihrer Kacheln (<code>junin7</code> 61,7 %). Als Dauerprobe eingezäunt, nicht erklärt</td></tr>
+<tr class="offen"><td class="was">Story-Fortschritt durch die Script-Bäume</td><td class="status">offen</td><td class="notiz">F43: Die Fortschrittsvariable liegt bei Slot-Offset 0x0BA4 — wie weit unsere Bäume tatsächlich tragen, ist ungemessen</td></tr>
+</tbody>
+</table>
+
+<h2>Kampf</h2>
+<div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:15.4%"></span><span class="b-offen" style="width:38.5%"></span><span class="b-nein" style="width:7.6%"></span></div>
+<p class="zaehler">13 Posten — 5 steht · 2 teilweise · 5 offen · 1 nicht im Ziel</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Szenenformat &amp; Formationen</td><td class="status">steht</td><td class="notiz">256/256 Szenen byteexakt; Referenzschlüsse Formation→Gegner 2414/2414, Gegner→Attacke 2509/2509</td></tr>
+<tr class="ok"><td class="was">Gegnermodelle &amp; Bühne</td><td class="status">steht</td><td class="notiz">K1/K2: 8979/8979 <code>.p</code>-Teile, 787/787 TEX. K5 hat seit Welle 5 den <strong>Sichtnachweis</strong></td></tr>
+<tr class="ok"><td class="was">Party-Battle-Modelle</td><td class="status">steht</td><td class="notiz">K4 über drei unabhängige Achsen; die naheliegende Regel „460 + charakterId“ fällt (trifft 5 von 9)</td></tr>
+<tr class="ok"><td class="was">ATB, Kommandos, Gegner-KI, Verbuchung</td><td class="status">steht</td><td class="notiz">Voller Ablauf inkl. EXP/AP/Gil und Stufenaufstieg — reproduzierbar, aber <em>nicht zahlengleich</em> mit dem Original</td></tr>
+<tr class="ok"><td class="was">Kampf-HUD</td><td class="status">steht</td><td class="notiz">K6, Originaloptik über dieselbe Fensterschale wie Dialog und Menü</td></tr>
+<tr class="offen"><td class="was">Kampfkamera</td><td class="status">offen</td><td class="notiz"><strong>K8 (Welle 5):</strong> Keine der drei Blockkameras zeigt die Ansicht des Originals — bei keinem Öffnungswinkel. Richtungsinvariante 1,381 gegen 0,826 bzw. 2,81</td></tr>
+<tr class="offen"><td class="was"><code>camdat</code> / Kamerabewegungen</td><td class="status">offen</td><td class="notiz">K11, folgt aus K8: Die Gegnerrecords tragen 16 Kamerabewegungs-IDs je Attacke (@0x68) — es gibt nachweislich Kameraskripte</td></tr>
+<tr class="offen"><td class="was">Battle-Animationen (<code>da</code>/<code>ab</code>)</td><td class="status">offen</td><td class="notiz">K9: 872 Dateien ungedeutet. <strong>Alle Kampffiguren stehen in der Bindpose</strong>, Arme senkrecht nach oben</td></tr>
+<tr class="offen"><td class="was">Magie- und Effektdarstellung</td><td class="status">offen</td><td class="notiz"><code>magic.lgp</code> ist nicht erschlossen — keine Zauber-, Treffer- oder Beschwörungseffekte</td></tr>
+<tr class="offen"><td class="was">Zauber, Limitbrüche, Beschwörungen</td><td class="status">offen</td><td class="notiz">Als Kommandos vorhanden, als Wirkung nicht — die Wirkungsdaten sind ungemessen</td></tr>
+<tr class="teil"><td class="was">Statuseffekte</td><td class="status">teilweise</td><td class="notiz">Immunitätsfeld (u32@0xB0) roh gelesen, Semantik ist Community-Stand</td></tr>
+<tr class="teil"><td class="was">z-Spiegelung des Kampfraums</td><td class="status">teilweise</td><td class="notiz">Aus den Daten allein nicht entscheidbar; gewählt ist die händigkeitserhaltende Variante</td></tr>
+<tr class="nein"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">nicht im Ziel</td><td class="notiz">Ohne EXE-Analyse nicht erreichbar, und die ist per Zusatzregel 4 ausgeschlossen</td></tr>
+</tbody>
+</table>
+
+<h2>Menü, Ausrüstung, Spielstand</h2>
+<div class="balken"><span class="b-ok" style="width:44.4%"></span><span class="b-teil" style="width:22.2%"></span><span class="b-offen" style="width:33.4%"></span></div>
+<p class="zaehler">9 Posten — 4 steht · 2 teilweise · 3 offen</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Savemap lesen</td><td class="status">steht</td><td class="notiz">Feldlage aus den Daten abgeleitet; Original-Saves inkl. CRC-16/CCITT, 8/8 belegte Slots</td></tr>
+<tr class="ok"><td class="was">Menü-Ansichten</td><td class="status">steht</td><td class="notiz">Sechs Ansichten über <code>MenuSession</code>, durch dieselbe Fensterschale wie Dialog und Kampf</td></tr>
+<tr class="ok"><td class="was">Ausrüsten (Schreibpfad)</td><td class="status">steht</td><td class="notiz">F07: Abnahme über die <em>Bytedifferenz</em>; Stückzahlerhaltung über Inventar <em>und</em> Ausrüstungsspalten</td></tr>
+<tr class="ok"><td class="was">Speichern / Laden</td><td class="status">steht</td><td class="notiz">Eigenes Format, Schemaversion 2 mit Savemap; Version-1-Stände werden migriert. Die Originaldateien werden nie geschrieben</td></tr>
+<tr class="offen"><td class="was">„Benutzen“ (Gegenstände)</td><td class="status">offen</td><td class="notiz">Bewusst nicht gebaut: <code>ItemRecord</code> trägt keine belegte Wirkungsangabe. Ein Trank, der verbraucht wird und nichts tut, wäre schlechter als kein Trank</td></tr>
+<tr class="offen"><td class="was">Materia-System</td><td class="status">offen</td><td class="notiz">Umverteilung beim Waffenwechsel ungemessen; Wachstum und AP-Vergabe nicht umgesetzt</td></tr>
+<tr class="offen"><td class="was">Hauptmenü-Aufteilung</td><td class="status">offen</td><td class="notiz">Unter den 18 Referenzbildern ist <em>keine</em> Menüaufnahme. Alle Zahlen liegen in einem austauschbaren Objekt; ob die Kommandospalte links oder rechts steht, ist offen</td></tr>
+<tr class="teil"><td class="was">HP-/MP-Maxima nach Ausrüstungswechsel</td><td class="status">teilweise</td><td class="notiz">@56/@58 tragen die Boni; die Formel ist ungemessen, die Werte bleiben stehen — und die Ansicht sagt das</td></tr>
+<tr class="teil"><td class="was">PHS / Party-Wechsel, Konfiguration</td><td class="status">teilweise</td><td class="notiz">Ansichten vorhanden, Wirkung teils nur anzeigend</td></tr>
+</tbody>
+</table>
+
+<h2>Weltkarte</h2>
+<div class="balken"><span class="b-ok" style="width:50%"></span><span class="b-teil" style="width:50%"></span></div>
+<p class="zaehler">8 Posten — 4 steht · 4 teilweise</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Blockformat &amp; Mesh</td><td class="status">steht</td><td class="notiz">85/85 MAP-Blöcke, Mesh-Accounting 1360/1360 byteexakt, Nahtstetigkeit 828/828</td></tr>
+<tr class="ok"><td class="was">World-Script <code>.ev</code></td><td class="status">steht</td><td class="notiz">Eigene u16-Stack-Grammatik; Sprungziele 732/732 auf Instruktionsgrenzen, unknown-Ops 23,6 % → 0</td></tr>
+<tr class="ok"><td class="was">Terrain-Texturen</td><td class="status">steht</td><td class="notiz">F11a/F11b gelöst und in der Demo verdrahtet</td></tr>
+<tr class="ok"><td class="was">World↔Field-Einstiegspunkte</td><td class="status">steht</td><td class="notiz">F06: <code>field.tbl</code> in <code>world_us.lgp</code>, adressiert über Opcode 0x318</td></tr>
+<tr class="teil"><td class="was">Sichtqualität / Farbgebung</td><td class="status">teilweise</td><td class="notiz">F25/F34: „3D-Modelle gut, Farben falsch“. Die Texturzuordnung steckt im Quellcode von ff7-landscaper, nicht in dessen Doku</td></tr>
+<tr class="teil"><td class="was">Fahrzeuge</td><td class="status">teilweise</td><td class="notiz">Als austauschbare Matrix umgesetzt, nicht gegen das Original vermessen</td></tr>
+<tr class="teil"><td class="was">WM3 (Blockanordnung)</td><td class="status">teilweise</td><td class="notiz"><em>Nicht messbar:</em> 12 Unikate auf 64 Meshes machen die Gütefunktion blind — steht als Annahme, nicht als Befund</td></tr>
+<tr class="teil"><td class="was">Weltkarten-Begegnungen</td><td class="status">teilweise</td><td class="notiz">Ratenmodell vorhanden; der Vertrag läuft noch über den ADR-011-Rückfallpfad</td></tr>
+</tbody>
+</table>
+
+<h2>Text, Dialog, Bildschirmoptik</h2>
+<div class="balken"><span class="b-ok" style="width:60%"></span><span class="b-teil" style="width:20%"></span><span class="b-nein" style="width:20%"></span></div>
+<p class="zaehler">5 Posten — 3 steht · 1 teilweise · 1 nicht im Ziel</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Zeichentabelle &amp; Steuercodes</td><td class="status">steht</td><td class="notiz">F29/F39, zweifach belegt (Rohbytes und Referenzabgleich)</td></tr>
+<tr class="ok"><td class="was">Spielschrift aus <code>WINDOW.BIN</code></td><td class="status">steht</td><td class="notiz">Welle 3: Abdeckung 99,9993 % über 702 Fields; ersetzt die Systemschrift in Dialog, Menü und Kampf-HUD</td></tr>
+<tr class="ok"><td class="was">Dialogfenster-Optik</td><td class="status">steht</td><td class="notiz">F40, pixelvermessen gegen die Referenzaufnahme</td></tr>
+<tr class="teil"><td class="was">Ergebnisbildschirme nach denselben Konstanten</td><td class="status">teilweise</td><td class="notiz">Die Konstanten sind vermessen und notiert, die Umsetzung ist nicht durchgezogen</td></tr>
+<tr class="nein"><td class="was">Automatischer Pixelvergleich gegen Referenzbilder</td><td class="status">nicht im Ziel</td><td class="notiz">Die 18 Referenzbilder sind Originaldaten und liegen bewusst nicht im Repo; ersetzt durch DOM-Kantenmessungen und Eigenschaftsvergleiche</td></tr>
+</tbody>
+</table>
+
+<h2>Audio</h2>
+<div class="balken"><span class="b-ok" style="width:50%"></span><span class="b-offen" style="width:50%"></span></div>
+<p class="zaehler">4 Posten — 2 steht · 2 offen</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was"><code>audio.fmt</code> / <code>audio.dat</code></td><td class="status">steht</td><td class="notiz">Bankweise aufgebaut (26 Bänke), <code>audio.dat</code> zu 100,0000 % adressiert, 0 Lücken</td></tr>
+<tr class="ok"><td class="was">Musikwiedergabe &amp; Schleifenmarken</td><td class="status">steht</td><td class="notiz">F09/F09-B/F09-E: field-lokaler AKAO-Index, echte OGG-Schleifen statt Dateiwiederholung</td></tr>
+<tr class="offen"><td class="was">MS-ADPCM-Dekoder</td><td class="status">offen</td><td class="notiz">Der Prädiktortest besteht 66.332/66.332, aber ein Dekoder fehlt — <strong>es gibt keine Soundeffekte</strong></td></tr>
+<tr class="offen"><td class="was">Musikindex → Dateiname (O2)</td><td class="status">offen</td><td class="notiz">Zielmenge geschlossen (94/94), die Permutation ist offen</td></tr>
+</tbody>
+</table>
+
+<h2>Ganze Spielsysteme, die noch fehlen</h2>
+<div class="balken"><span class="b-offen" style="width:80%"></span><span class="b-nein" style="width:20%"></span></div>
+<p class="zaehler">5 Posten — 4 offen · 1 nicht im Ziel</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="offen"><td class="was">Minigames — Träger &amp; Piloten (S34)</td><td class="status">offen</td><td class="notiz">Kursdaten offen; Physik- und Punktregeln offen und vermutlich <em>nicht in Daten, sondern in Code</em></td></tr>
+<tr class="offen"><td class="was">Storyblockende Minigames (S35)</td><td class="status">offen</td><td class="notiz">Chocobo-Rennen (Gefängnisausbruch), Junon-Parade, U-Boot — <strong>ohne sie ist die Geschichte nicht beendbar</strong></td></tr>
+<tr class="offen"><td class="was">FMV-Wiedergabe (S36)</td><td class="status">offen</td><td class="notiz">Container noch Annahme, <strong>Videocodec offen</strong> und release-abhängig</td></tr>
+<tr class="offen"><td class="was">Chocobo-Zucht, Nebenaufgaben, Sammelinhalte</td><td class="status">offen</td><td class="notiz">Nicht begonnen</td></tr>
+<tr class="nein"><td class="was">Fort Condor, Kampfarena</td><td class="status">nicht im Ziel</td><td class="notiz">Eigenständige Spielsysteme, keine Minigames im Sinne von S34/S35 — eigener Entscheid</td></tr>
+</tbody>
+</table>
+
+<h2>Unterbau</h2>
+<div class="balken"><span class="b-ok" style="width:66.6%"></span><span class="b-teil" style="width:16.7%"></span><span class="b-nein" style="width:16.7%"></span></div>
+<p class="zaehler">6 Posten — 4 steht · 1 teilweise · 1 nicht im Ziel</p>
+<table>
+<thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
+<tbody>
+<tr class="ok"><td class="was">Import, Fingerprint, Fähigkeitsmatrix</td><td class="status">steht</td><td class="notiz">R5-Matrix über 57 Archive, 5 registrierte Release-Fingerprints; Diagnose-Export beweisbar assetfrei</td></tr>
+<tr class="ok"><td class="was">Determinismus &amp; Replay</td><td class="status">steht</td><td class="notiz">Fixed-Tick; Digests identisch über Node 22, Chromium 148 und 151 (R9)</td></tr>
+<tr class="ok"><td class="was">Leistung (NFR)</td><td class="status">steht</td><td class="notiz">Feldwechsel p95 10,12 ms gegen 500 ms Budget; Soak über 500 Wechsel, +1,07 % Heap</td></tr>
+<tr class="ok"><td class="was">Modding-MVP</td><td class="status">steht</td><td class="notiz">Manifest-Validierung, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order</td></tr>
+<tr class="teil"><td class="was">Testhygiene</td><td class="status">teilweise</td><td class="notiz"><code>menu-savemap-probe</code> schließt seine Dateihandles nicht — zwei <code>ERR_INVALID_STATE</code> je Realdatenlauf. Kein Fehlschlag, aber Lärm, der einen echten Fehler verdecken kann</td></tr>
+<tr class="nein"><td class="was">Modding-Zugriff auf Weltkarte, Kampf, Minigames</td><td class="status">nicht im Ziel</td><td class="notiz">Eigener Entscheid nach 2.0</td></tr>
+</tbody>
+</table>
+
+<h2>Zusammen</h2>
+<div class="gesamt">
+  <div class="balken"><span class="b-ok" style="width:49.2%"></span><span class="b-teil" style="width:19.7%"></span><span class="b-offen" style="width:24.6%"></span><span class="b-nein" style="width:6.5%"></span></div>
+  <p class="zaehler"><strong>61 Posten — 30 steht · 12 teilweise · 15 offen · 4 nicht im Ziel</strong></p>
+  <p class="zaehler" style="margin-top:.7rem">
+    Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
+    ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend
+    <strong>Darstellung und ganze Spielsysteme</strong>: Kampfkamera und Kampfanimationen,
+    Effektdarstellung, Soundeffekte, Minigames, FMV. Zwei davon sind harte Sperren für einen
+    Durchlauf bis zum Ende — die <em>storyblockenden Minigames</em> und der
+    <em>Story-Fortschritt durch die Script-Bäume</em>.
+  </p>
+</div>
+
+<footer>
+  Evidenzklassen des Projekts: 🟢 Formatfakt · 🔵 Architekturentscheidung ·
+  🟡 Annahme / zu validieren · 🔴 offene Forschungsfrage.<br>
+  Diese Seite wird von Hand gepflegt und enthält bewusst kein Skript — wer eine Zeile ergänzt,
+  zieht die Zählung darüber mit nach.
+</footer>
+
+</main>
+</body>
+</html>
