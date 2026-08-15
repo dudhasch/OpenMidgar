@@ -58,20 +58,24 @@
   td.was { width: 30%; font-weight: 600; }
   td.status { width: 14%; white-space: nowrap; font-weight: 600; }
   td.notiz { color: var(--dim); font-size: .9rem; }
-  tr.ok    td.status { color: var(--ok); }
-  tr.teil  td.status { color: var(--teil); }
-  tr.offen td.status { color: var(--offen); }
-  tr.nein  td.status { color: var(--nein); }
+  tr.ok     td.status { color: var(--ok); }
+  tr.teil   td.status { color: var(--teil); }
+  tr.offen  td.status { color: var(--offen); }
+  /* Versperrt IST offen — gleiche Farbe, nur mit Zusatz im Statustext. */
+  tr.sperre td.status { color: var(--offen); }
   code { font-family: "Cascadia Mono", Consolas, monospace; font-size: .88em; }
   .balken { height: 8px; border-radius: 4px; background: var(--balken-bg); overflow: hidden; display: flex; margin: .1rem 0 .3rem; }
   .balken span { display: block; height: 100%; }
   .b-ok { background: var(--ok); } .b-teil { background: var(--teil); }
-  .b-offen { background: var(--offen); } .b-nein { background: var(--nein); }
+  .b-offen { background: var(--offen); }
+  /* Versperrt zählt zum Offenen, wird im Balken nur heller abgesetzt. */
+  .b-sperre { background: var(--offen); opacity: .5; }
   .zaehler { font-size: .85rem; color: var(--dim); margin: 0; }
   .legende { display: flex; flex-wrap: wrap; gap: 1.1rem; margin: 0 0 1.4rem; font-size: .88rem; }
   .legende span::before { content: "\25A0\00A0"; }
   .l-ok::before { color: var(--ok); } .l-teil::before { color: var(--teil); }
-  .l-offen::before { color: var(--offen); } .l-nein::before { color: var(--nein); }
+  .l-offen::before { color: var(--offen); }
+  .l-sperre::before { color: var(--offen); opacity: .5; }
   .gesamt { background: var(--karte); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; margin-top: .6rem; }
   .gesamt .zaehler { font-size: .95rem; }
   footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--dim); font-size: .85rem; }
@@ -95,14 +99,18 @@
   <span class="l-ok">steht &amp; belegt</span>
   <span class="l-teil">teilweise / Ersatzregel</span>
   <span class="l-offen">offen / Forschungsfrage</span>
-  <span class="l-nein">bewusst nicht im Ziel</span>
+  <span class="l-sperre">offen, derzeit versperrt</span>
 </div>
 
 <div class="hinweis">
   <strong>Wie die Balken zu lesen sind.</strong> Sie zählen <em>Posten</em>, nicht Spielinhalt.
   Ein Haken bei „Szenenformat gelesen“ und einer bei „Minigames“ wiegen hier gleich viel,
-  in Arbeit aber um Größenordnungen verschieden — und die 15 offenen Posten sind im Schnitt
+  in Arbeit aber um Größenordnungen verschieden — und die 19 offenen Posten sind im Schnitt
   deutlich dicker als die 30 erledigten.
+  Vier davon sind als <em>versperrt</em> ausgewiesen: Sie bleiben Ziel, aber der Weg dorthin ist
+  heute durch eine Projektregel, fehlendes Vergleichsmaterial oder einen noch nicht eröffneten
+  Arbeitsbogen blockiert. Sie stehen deshalb in derselben Spalte wie alles andere Offene und
+  nicht in einer Ausnahmespalte, in der sie aus dem Blick geraten.
   Eine Gesamtprozentzahl „bis 100 % Klon“ steht deshalb bewusst <strong>nicht</strong> auf dieser
   Seite: Sie wäre geraten, und geratene Zahlen sind genau das, was in diesem Projekt nicht gemacht wird.
 </div>
@@ -128,8 +136,8 @@
 </table>
 
 <h2>Kampf</h2>
-<div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:15.4%"></span><span class="b-offen" style="width:38.5%"></span><span class="b-nein" style="width:7.6%"></span></div>
-<p class="zaehler">13 Posten — 5 steht · 2 teilweise · 5 offen · 1 nicht im Ziel</p>
+<div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:15.4%"></span><span class="b-offen" style="width:38.5%"></span><span class="b-sperre" style="width:7.6%"></span></div>
+<p class="zaehler">13 Posten — 5 steht · 2 teilweise · 6 offen (davon 1 versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -145,7 +153,7 @@
 <tr class="offen"><td class="was">Zauber, Limitbrüche, Beschwörungen</td><td class="status">offen</td><td class="notiz">Als Kommandos vorhanden, als Wirkung nicht — die Wirkungsdaten sind ungemessen</td></tr>
 <tr class="teil"><td class="was">Statuseffekte</td><td class="status">teilweise</td><td class="notiz">Immunitätsfeld (u32@0xB0) roh gelesen, Semantik ist Community-Stand</td></tr>
 <tr class="teil"><td class="was">z-Spiegelung des Kampfraums</td><td class="status">teilweise</td><td class="notiz">Aus den Daten allein nicht entscheidbar; gewählt ist die händigkeitserhaltende Variante</td></tr>
-<tr class="nein"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">nicht im Ziel</td><td class="notiz">Ohne EXE-Analyse nicht erreichbar, und die ist per Zusatzregel 4 ausgeschlossen</td></tr>
+<tr class="sperre"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel. Über Datenlesung allein nicht erreichbar, und die EXE-Analyse ist per Zusatzregel 4 ausgeschlossen. Gangbar wäre eine <em>Verhaltensmessung am laufenden Original</em> (Eingabe → Schadenszahl, über viele Fälle) — das umgeht die Regel nicht, sondern misst statt zu disassemblieren</td></tr>
 </tbody>
 </table>
 
@@ -185,8 +193,8 @@
 </table>
 
 <h2>Text, Dialog, Bildschirmoptik</h2>
-<div class="balken"><span class="b-ok" style="width:60%"></span><span class="b-teil" style="width:20%"></span><span class="b-nein" style="width:20%"></span></div>
-<p class="zaehler">5 Posten — 3 steht · 1 teilweise · 1 nicht im Ziel</p>
+<div class="balken"><span class="b-ok" style="width:60%"></span><span class="b-teil" style="width:20%"></span><span class="b-sperre" style="width:20%"></span></div>
+<p class="zaehler">5 Posten — 3 steht · 1 teilweise · 1 offen (versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -194,7 +202,7 @@
 <tr class="ok"><td class="was">Spielschrift aus <code>WINDOW.BIN</code></td><td class="status">steht</td><td class="notiz">Welle 3: Abdeckung 99,9993 % über 702 Fields; ersetzt die Systemschrift in Dialog, Menü und Kampf-HUD</td></tr>
 <tr class="ok"><td class="was">Dialogfenster-Optik</td><td class="status">steht</td><td class="notiz">F40, pixelvermessen gegen die Referenzaufnahme</td></tr>
 <tr class="teil"><td class="was">Ergebnisbildschirme nach denselben Konstanten</td><td class="status">teilweise</td><td class="notiz">Die Konstanten sind vermessen und notiert, die Umsetzung ist nicht durchgezogen</td></tr>
-<tr class="nein"><td class="was">Automatischer Pixelvergleich gegen Referenzbilder</td><td class="status">nicht im Ziel</td><td class="notiz">Die 18 Referenzbilder sind Originaldaten und liegen bewusst nicht im Repo; ersetzt durch DOM-Kantenmessungen und Eigenschaftsvergleiche</td></tr>
+<tr class="sperre"><td class="was">Automatischer Pixelvergleich gegen Referenzbilder</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel — er würde Sichtfehler finden, die keine Kantenmessung findet. Versperrt, weil die 18 Referenzbilder Originaldaten sind und nicht ins Repo dürfen. Nötig wäre ein Ablageort außerhalb des Repos, auf den die Proben zugreifen dürfen (wie <code>WEBMIDGAR_REAL_DIR</code> für die Installation)</td></tr>
 </tbody>
 </table>
 
@@ -212,8 +220,8 @@
 </table>
 
 <h2>Ganze Spielsysteme, die noch fehlen</h2>
-<div class="balken"><span class="b-offen" style="width:80%"></span><span class="b-nein" style="width:20%"></span></div>
-<p class="zaehler">5 Posten — 4 offen · 1 nicht im Ziel</p>
+<div class="balken"><span class="b-offen" style="width:80%"></span><span class="b-sperre" style="width:20%"></span></div>
+<p class="zaehler">5 Posten — 5 offen (davon 1 versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -221,13 +229,13 @@
 <tr class="offen"><td class="was">Storyblockende Minigames (S35)</td><td class="status">offen</td><td class="notiz">Chocobo-Rennen (Gefängnisausbruch), Junon-Parade, U-Boot — <strong>ohne sie ist die Geschichte nicht beendbar</strong></td></tr>
 <tr class="offen"><td class="was">FMV-Wiedergabe (S36)</td><td class="status">offen</td><td class="notiz">Container noch Annahme, <strong>Videocodec offen</strong> und release-abhängig</td></tr>
 <tr class="offen"><td class="was">Chocobo-Zucht, Nebenaufgaben, Sammelinhalte</td><td class="status">offen</td><td class="notiz">Nicht begonnen</td></tr>
-<tr class="nein"><td class="was">Fort Condor, Kampfarena</td><td class="status">nicht im Ziel</td><td class="notiz">Eigenständige Spielsysteme, keine Minigames im Sinne von S34/S35 — eigener Entscheid</td></tr>
+<tr class="sperre"><td class="was">Fort Condor, Kampfarena</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel. Eigenständige Spielsysteme, die in S34/S35 <em>nicht</em> enthalten sind — sie brauchen einen eigenen Arbeitsbogen, der noch nicht eröffnet ist. Die Kampfarena hängt zusätzlich am Kampfsystem</td></tr>
 </tbody>
 </table>
 
 <h2>Unterbau</h2>
-<div class="balken"><span class="b-ok" style="width:66.6%"></span><span class="b-teil" style="width:16.7%"></span><span class="b-nein" style="width:16.7%"></span></div>
-<p class="zaehler">6 Posten — 4 steht · 1 teilweise · 1 nicht im Ziel</p>
+<div class="balken"><span class="b-ok" style="width:66.6%"></span><span class="b-teil" style="width:16.7%"></span><span class="b-sperre" style="width:16.7%"></span></div>
+<p class="zaehler">6 Posten — 4 steht · 1 teilweise · 1 offen (versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -236,14 +244,14 @@
 <tr class="ok"><td class="was">Leistung (NFR)</td><td class="status">steht</td><td class="notiz">Feldwechsel p95 10,12 ms gegen 500 ms Budget; Soak über 500 Wechsel, +1,07 % Heap</td></tr>
 <tr class="ok"><td class="was">Modding-MVP</td><td class="status">steht</td><td class="notiz">Manifest-Validierung, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order</td></tr>
 <tr class="teil"><td class="was">Testhygiene</td><td class="status">teilweise</td><td class="notiz"><code>menu-savemap-probe</code> schließt seine Dateihandles nicht — zwei <code>ERR_INVALID_STATE</code> je Realdatenlauf. Kein Fehlschlag, aber Lärm, der einen echten Fehler verdecken kann</td></tr>
-<tr class="nein"><td class="was">Modding-Zugriff auf Weltkarte, Kampf, Minigames</td><td class="status">nicht im Ziel</td><td class="notiz">Eigener Entscheid nach 2.0</td></tr>
+<tr class="sperre"><td class="was">Modding-Zugriff auf Weltkarte, Kampf, Minigames</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel. Der Studio-Strang und die Modding-Bögen kennen diese Assetklassen noch nicht; die Aufnahme ist für nach 2.0 vorgesehen</td></tr>
 </tbody>
 </table>
 
 <h2>Zusammen</h2>
 <div class="gesamt">
-  <div class="balken"><span class="b-ok" style="width:49.2%"></span><span class="b-teil" style="width:19.7%"></span><span class="b-offen" style="width:24.6%"></span><span class="b-nein" style="width:6.5%"></span></div>
-  <p class="zaehler"><strong>61 Posten — 30 steht · 12 teilweise · 15 offen · 4 nicht im Ziel</strong></p>
+  <div class="balken"><span class="b-ok" style="width:49.2%"></span><span class="b-teil" style="width:19.7%"></span><span class="b-offen" style="width:24.6%"></span><span class="b-sperre" style="width:6.5%"></span></div>
+  <p class="zaehler"><strong>61 Posten — 30 steht · 12 teilweise · 19 offen (davon 4 versperrt)</strong></p>
   <p class="zaehler" style="margin-top:.7rem">
     Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
     ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend
@@ -251,6 +259,12 @@
     Effektdarstellung, Soundeffekte, Minigames, FMV. Zwei davon sind harte Sperren für einen
     Durchlauf bis zum Ende — die <em>storyblockenden Minigames</em> und der
     <em>Story-Fortschritt durch die Script-Bäume</em>.
+  </p>
+  <p class="zaehler" style="margin-top:.7rem">
+    Die vier <em>versperrten</em> Posten sind nicht abgewählt. Bei jedem ist notiert, was ihn
+    heute blockiert und woran sich das ändern würde — eine Projektregel, ein fehlender Ablageort
+    für Vergleichsbilder, ein noch nicht eröffneter Arbeitsbogen. Keiner davon ist eine Aussage
+    darüber, dass die Sache nicht dazugehört.
   </p>
 </div>
 
