@@ -151,10 +151,11 @@ function parseEnemyRecord(bytes: Uint8Array): EnemyRecord {
     itemRaw: bytes.slice(0x88, 0x94),
     mp: view.getUint16(0x9c, true),
     ap: view.getUint16(0x9e, true),
+    backAttackScale: bytes[0xa2]!,
     hp: view.getUint32(0xa4, true),
     exp: view.getUint32(0xa8, true),
     gil: view.getUint32(0xac, true),
-    statusImmunity: view.getUint32(0xb0, true),
+    statusesAllowed: view.getUint32(0xb0, true),
     raw: bytes.slice(0),
   };
 }

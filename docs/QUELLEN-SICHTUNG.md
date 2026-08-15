@@ -1,4 +1,4 @@
-# Quellen-Sichtung — 14 Repositorien, „Gears"-Dokument, eigene EXE-Analyse
+# Quellen-Sichtung — 16 Repositorien, „Gears"-Dokument, eigene EXE-Analyse
 
 Vollständige Auswertung externer Reverse-Engineering-Projekte auf verwertbare
 Befunde für WebMidgar. Erhoben am 2026-08-10, je ein Rechercheauftrag pro Quelle.
@@ -45,6 +45,8 @@ freigegeben, und was damit aufgegeben wurde, steht dort.
 | ff7-coaster | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme** |
 | ff7-decomp (PSX) | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme**, Plattformvorbehalt |
 | gears.pdf | keine Gesamtangabe; Kapitel Battle Mechanics © T. Fergusson 2001–2003 | Fakten ja, Prosa nein |
+| ff7-fenrir | **keine** `LICENSE`; `package.json` sagt `ISC` | **widersprüchlich** — Fakten ja, Quelltext nein |
+| Braver | `LICENSE.txt` **EPL-2.0**; `IrosArchive/` separat **MS-PL** | einzige klare Lizenz im Feld — trotzdem nur Fakten |
 | **`ff7_en.exe` — eigene Ghidra-Analyse** | n/a (eigene Erhebung, kein Dritter) | **ohne Auflagen freigegeben** seit [ADR-028](ADR-028-EIGENE-CODEANALYSE.md); Bestand wird **nicht** eingecheckt |
 
 ### ⛔ Sperrvermerke
@@ -371,7 +373,7 @@ Skript-Wartewerte sind Ticks dieser Rate.
 
 Je Quelle liegt eine ausführliche Notiz (Layouttabellen, Opcodetabellen,
 Fundstellenverweise, offene Fragen) unter [`docs/quellen/`](quellen/)
-— zusammen 11.127 Zeilen:
+— zusammen 11.318 Zeilen:
 
 | Notiz | Zeilen | Notiz | Zeilen |
 |---|---:|---|---:|
@@ -382,7 +384,14 @@ Fundstellenverweise, offene Fragen) unter [`docs/quellen/`](quellen/)
 | [kimeracs.md](quellen/kimeracs.md) | 897 | [ffnx.md](quellen/ffnx.md) | 576 |
 | [elena.md](quellen/elena.md) | 543 | [gaia.md](quellen/gaia.md) | 457 |
 | [aeris.md](quellen/aeris.md) | 422 | [ff7snd.md](quellen/ff7snd.md) | 284 |
-| [workers.md](quellen/workers.md) | 137 | | |
+| [workers.md](quellen/workers.md) | 137 | [ff7-fenrir.md](quellen/ff7-fenrir.md) | 191 |
+
+⚠ [ff7-fenrir.md](quellen/ff7-fenrir.md) (2026-08-15, deckt fenrir, kujata und
+Braver ab) ist **zweiter Hand**: Die Fähigkeitsmatrix stammt aus dem
+Prior-Art-Vergleich des eigenen EXE-Bestands, selbst nachgeprüft wurde nur die
+Lizenzlage. Zwei Behauptungen daraus sind an unseren Daten **entschieden**
+worden (K10): `EnemyRecord +0xB0` heißt „erlaubt", nicht „immun" — wir hatten
+das Vorzeichen falsch —, und `+0xA2` ist der Rückenangriffs-Faktor in Achteln.
 
 Dazu die **eigene** Erhebung, die keine Fremdquelle ist und deshalb außerhalb
 der Tabelle steht:

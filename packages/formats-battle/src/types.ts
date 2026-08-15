@@ -85,14 +85,46 @@ export interface EnemyRecord {
   mp: number;
   /** 🟡 u16@0x9E. */
   ap: number;
+  /**
+   * ✅ u8@0xA2 — **Rückenangriffs-Faktor in Achteln** (`schaden * v >> 3`).
+   *
+   * Hypothese aus dem Prior-Art-Vergleich (Braver: `BackDamageMultiplier =
+   * ReadByte() / 8f`), an unseren Daten entschieden: **592 von 615** belegten
+   * Records tragen exakt `16` = ×2,0 — der bekannte doppelte Rückenschaden.
+   * Die übrigen Werte sind `32` (×4), `40` (×5), `64` (×8) und `255`
+   * (Sentinel, 20 Records).
+   *
+   * Die Gütefunktion ist **nicht** „wenige verschiedene Werte", sondern die
+   * scharfe Vorhersage der Achtel-Deutung: Alle Nicht-Sentinel-Werte müssen
+   * **Vielfache von 8** sein. Kontrolle über alle 184 Byteversätze des
+   * Records: **2 von 184** erfüllen sie (Faktor 92). Der zweite Treffer
+   * `+0x8B` liegt im Dropraten-Block und hat einen eigenen Grund.
+   */
+  backAttackScale: number;
   /** ✅ u32@0xA4 ∈ [1,1e6] in 627/627 (Kontrolle @0xA3: 76 %). */
   hp: number;
   /** ✅ u32@0xA8 — Konkordanz mit Level 0,869 gegen 0,642 verschoben. */
   exp: number;
   /** 🟡 u32@0xAC (strukturgleich zu exp, nicht einzeln belegt). */
   gil: number;
-  /** 🟡 u32@0xB0 Status-Immunitäten. */
-  statusImmunity: number;
+  /**
+   * ✅ u32@0xB0 — **erlaubte** Zustände, nicht Immunitäten. Bit gesetzt =
+   * der Zustand darf wirken.
+   *
+   * Der frühere Name `statusImmunity` war das Gegenteil und lud zu einem
+   * Vorzeichenfehler ein. Entschieden an den Daten, nicht am Namen: Im Mittel
+   * sind **26,2 von 32 Bits gesetzt**, und **201 von 615** belegten Records
+   * tragen `0xFFFFFFFF`. Als Immunitätsmaske gelesen hieße das: Der
+   * Durchschnittsgegner ist gegen 26 Zustände immun und ein Drittel aller
+   * Gegner gegen *alle* — das ist kein Spiel. Als Erlaubnismaske gelesen ist
+   * es der Normalfall.
+   *
+   * Zur Laufzeit gilt `immunitaet = ~statusesAllowed`; das Original legt genau
+   * diese Negation im Aktorrecord ab. Wer eine Immunitätsmaske braucht, muss
+   * invertieren — deshalb heißt das Feld hier nach dem, was auf der Platte
+   * steht.
+   */
+  statusesAllowed: number;
   /** Der vollständige 184-B-Record — maßgeblich für alles Ungedeutete. */
   raw: Uint8Array;
 }

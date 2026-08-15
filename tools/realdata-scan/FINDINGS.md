@@ -1868,3 +1868,68 @@ Nachricht und kein Regressionsschaden.
 
 *Proben: `tools/realdata-scan/src/maxima-sentinel.rdtest.ts` (2 Fälle) ·
 `packages/formats-save/src/maxima.test.ts` (8 Fälle).*
+
+---
+
+## K10 — Zwei Felder des Gegnerrecords, aus einer Fremdquelle geholt und hier entschieden (2026-08-15)
+
+Die Sichtung von `ff7-fenrir`/`Braver`/`kujata`
+([docs/quellen/ff7-fenrir.md](../../docs/quellen/ff7-fenrir.md)) hat zwei
+Behauptungen über unseren `EnemyRecord` geliefert. Eine Fremdquelle liefert in
+diesem Projekt die Hypothese, nie das Urteil.
+
+### A — `+0xB0` heißt „erlaubt", nicht „immun". Wir hatten das Vorzeichen falsch
+
+Unser Feld hieß `statusImmunity`, Braver liest dasselbe Feld als
+`AllowedStatuses`. Kein Namensstreit: Wer die Maske als Immunität liest, dreht
+jede Zustandsprüfung um.
+
+Gemessen über **625** belegte Gegnerrecords:
+
+| | |
+|---|---:|
+| verschiedene Werte | 100 |
+| gesetzte Bits im Mittel | **26,2 von 32** |
+| Records mit `0xFFFFFFFF` | **209 (33,4 %)** |
+
+Entschieden hat keine Statistik, sondern eine **Absurditätsprüfung**: Als
+Immunitätsmaske wäre der Durchschnittsgegner gegen 26 von 32 Zuständen immun
+und ein Drittel aller Gegner gegen **alle**. Ein Spiel, in dem Gift, Schlaf und
+Stopp bei einem Drittel der Gegner grundsätzlich nicht wirken, gibt es nicht —
+und `scene.bin` trägt für genau diese Zustände Angriffsdaten. Die Gegenprobe
+„das Feld ist ohnehin konstant" fällt aus: 100 verschiedene Werte.
+
+✅ Umbenannt in `statusesAllowed`; die Laufzeit-Immunität ist `~statusesAllowed`.
+
+### B — `+0xA2` ist der Rückenangriffs-Faktor in Achteln. Bei uns war das Byte ungedeutet
+
+| Wert | Faktor | Records |
+|---:|---|---:|
+| **16** | **×2,0** | **602 (96,3 %)** |
+| 255 | Sentinel | 20 |
+| 32 / 40 / 64 | ×4 / ×5 / ×8 | je 1 |
+
+**Die Gütefunktion ist bewusst nicht „wenige verschiedene Werte".** Das erfüllt
+in diesem Record fast jedes dünn belegte Byte — der Nachbar `+0xA3` hat sogar
+nur **einen einzigen** Wert und wäre nach diesem Maß der beste Kandidat
+überhaupt. Die Achtel-Deutung sagt etwas Schärferes vorher: Alle
+Nicht-Sentinel-Werte müssen **Vielfache von 8** sein.
+
+**Kontrolle über alle 184 Byteversätze: 2 erfüllen die Vorhersage** — `+0xA2`
+und `+0x8B`. Faktor **92** gegen die volle Kandidatenmenge, weit über der
+Projektschwelle 3. `+0x8B` liegt im Dropraten-Block (`itemRaw` ab `+0x88`) und
+hat dort einen eigenen Grund; es ist kein Gegenbeleg, sondern ein zweites Feld
+derselben Zahlenform.
+
+✅ Ergänzt als `backAttackScale`. Der Modalwert ×2,0 ist der bekannte doppelte
+Rückenschaden — die Deutung sagt also auch etwas Beobachtbares vorher.
+
+### Die Lehre
+
+Beide Befunde standen **jahrelang lesbar** in einer Fremdquelle, und beide
+waren in unter einer Stunde messbar. Was gefehlt hat, war nicht die Messung,
+sondern die **Frage** — und die kam von außen. Das ist der Ertrag einer
+Quellensichtung: nicht Bestätigung, sondern Hypothesen, auf die man selbst
+nicht gekommen wäre.
+
+*Probe: `tools/realdata-scan/src/gegnerrecord-k10.rdtest.ts` (2 Fälle).*
