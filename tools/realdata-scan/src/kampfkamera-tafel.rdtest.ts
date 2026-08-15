@@ -80,6 +80,8 @@ describe.skipIf(!available)('K8/3: FOV-Tafel für die Referenzformation', () => 
       if (!proPraefix.has(pre)) proPraefix.set(pre, []);
       proPraefix.get(pre)!.push(e.name);
     }
+    // Alles Nötige liegt in `bytesOf`; die Archive dürfen zu.
+    await dir.closeAll();
     const praefixe = [...proPraefix.keys()].sort();
     const quelle = {
       listBattleEntries: (p: string) => proPraefix.get(p) ?? [],

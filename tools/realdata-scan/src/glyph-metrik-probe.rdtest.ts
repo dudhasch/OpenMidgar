@@ -170,6 +170,7 @@ describe.skipIf(!available)('Realdaten: Glyphenmetrik aus WINDOW.BIN gegen echte
           }
         }
       }
+      await dir.closeAll();
 
       expect(fields).toBeGreaterThan(600);
       expect(records.length).toBeGreaterThan(2000);

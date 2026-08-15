@@ -69,7 +69,8 @@ describe.skipIf(!available)('Realdaten: Byteversatz der Gateway-Austrittslinie',
     { timeout: 900_000 },
     async () => {
       const index = new IndexService();
-      await index.openSource(new NodeDirectorySource(REAL_DIR, ['data/field']), { deep: false });
+      const dir = new NodeDirectorySource(REAL_DIR, ['data/field']);
+      await index.openSource(dir, { deep: false });
 
       const felder: FeldProbe[] = [];
       for (const eintrag of index.listEntries('flevel')) {
@@ -92,6 +93,7 @@ describe.skipIf(!available)('Realdaten: Byteversatz der Gateway-Austrittslinie',
         const records = b.triggers.gateways.filter((g) => g.used).map((g) => g.raw);
         if (records.length) felder.push({ name: eintrag.name, records, tris });
       }
+      await dir.closeAll();
 
       const i16 = (r: Uint8Array, at: number): number => {
         const v = r[at]! | (r[at + 1]! << 8);

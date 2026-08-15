@@ -58,7 +58,8 @@ describe.skipIf(!available)('Realdaten: Bezugspunkt der Sprungoffsets', () => {
     { timeout: 900_000 },
     async () => {
       const index = new IndexService();
-      await index.openSource(new NodeDirectorySource(REAL_DIR, ['data/field']), { deep: false });
+      const dir = new NodeDirectorySource(REAL_DIR, ['data/field']);
+      await index.openSource(dir, { deep: false });
 
       const rueck = { regel: { treffer: 0, gesamt: 0 }, kontrolle: { treffer: 0, gesamt: 0 } };
       const rueckLang = { regel: { treffer: 0, gesamt: 0 }, kontrolle: { treffer: 0, gesamt: 0 } };
@@ -120,6 +121,7 @@ describe.skipIf(!available)('Realdaten: Bezugspunkt der Sprungoffsets', () => {
           }
         }
       }
+      await dir.closeAll();
 
       console.log(
         JSON.stringify(

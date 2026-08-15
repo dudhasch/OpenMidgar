@@ -116,8 +116,15 @@ async function inventarisiereArchiv(absPath: string, relName: string): Promise<A
   const s = await stat(absPath);
   const source = new NodeSourceFile(absPath, relName, s.size, s.mtimeMs);
   const bytes = await readFile(absPath);
-  const result = await scanLgp(source, relName, { mode: 'fast' });
-  await source.close();
+  // `finally`, weil `scanLgp` bei einem kaputten Archiv wirft — das Handle
+  // muss auch dann zu, sonst meldet es die Speicherbereinigung später als
+  // unbehandelten Fehler in irgendeiner anderen Probe.
+  let result;
+  try {
+    result = await scanLgp(source, relName, { mode: 'fast' });
+  } finally {
+    await source.close();
+  }
   if (!result.ok || !result.archive) return null;
   const entries = resolvableEntries(result.archive);
   const hist = new Map<string, number>();
@@ -1070,6 +1077,7 @@ describe.skipIf(!available)('Realdaten S21: Menü-Grundlagen (Assets, Savemap, K
         }
       }
     }
+    await dir.closeAll();
 
     /**
      * Kennzahl je Operandenspalte: Anzahl verschiedener Werte und der Anteil

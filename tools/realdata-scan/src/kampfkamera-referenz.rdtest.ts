@@ -128,6 +128,7 @@ describe.skipIf(!available)('K8/1: Referenzaufnahme → Formation', () => {
         }
       }
     }
+    await dir.closeAll();
 
     const ausBogen = [...ausField.keys()]
       .map((id) => ({ info: infoZu(szenen, id), fields: ausField.get(id)! }))

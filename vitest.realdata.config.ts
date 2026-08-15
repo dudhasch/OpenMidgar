@@ -44,6 +44,11 @@ export default defineConfig({
   test: {
     include: ['tools/realdata-scan/src/**/*.rdtest.ts'],
     environment: 'node',
+    // Schließt am Ende jeder Testdatei alle Dateihandles, die eine Probe offen
+    // gelassen hat. Ohne das melden die Realdaten-Läufe unbehandelte
+    // `ERR_INVALID_STATE`-Fehler aus der Speicherbereinigung — siehe
+    // `tools/realdata-scan/src/handle-aufraeumer.ts`.
+    setupFiles: [r('./tools/realdata-scan/src/handle-aufraeumer.ts')],
     // `--expose-gc` macht die Heap-Messung der NFR-Läufe erst belastbar:
     // ohne erzwungene Speicherbereinigung ist ein Baselinevergleich nur
     // Rauschen (gemessen: 12,5 % „Abweichung" ohne echtes Leck).

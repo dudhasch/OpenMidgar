@@ -56,7 +56,8 @@ describe.skipIf(!available)('Realdaten: Zielpunkt im Gateway-Record', () => {
     { timeout: 900_000 },
     async () => {
       const index = new IndexService();
-      await index.openSource(new NodeDirectorySource(REAL_DIR, ['data/field']), { deep: false });
+      const dir = new NodeDirectorySource(REAL_DIR, ['data/field']);
+      await index.openSource(dir, { deep: false });
 
       const maplistBytes = await index.readEntry('lgp:flevel/maplist');
       const maplistDiag: Parameters<typeof parseMaplist>[2] = [];
@@ -90,6 +91,7 @@ describe.skipIf(!available)('Realdaten: Zielpunkt im Gateway-Record', () => {
           if (g.used) gateways.push({ von: eintrag.name, ziel: g.destMaplistIndex, raw: g.raw });
         }
       }
+      await dir.closeAll();
 
       const i16 = (r: Uint8Array, at: number): number => {
         const v = r[at]! | (r[at + 1]! << 8);

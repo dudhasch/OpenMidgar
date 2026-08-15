@@ -109,6 +109,7 @@ describe.skipIf(!available)('Realdaten: Klang-ID gegen die Satzzahl aus audio.fm
         }
       }
     }
+    await dir.closeAll();
 
     const unter = (werte: number[], grenze: number): number => werte.filter((v) => v < grenze).length;
     const q = (n: number, d: number): string => `${n}/${d} (${((n / Math.max(1, d)) * 100).toFixed(2)}%)`;

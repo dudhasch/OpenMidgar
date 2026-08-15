@@ -159,6 +159,7 @@ describe.skipIf(!available)('Realdaten S22: Anker-Eindeutigkeit für Script-Patc
         }
       }
     }
+    await dir.closeAll();
 
     const bericht = {
       felder,

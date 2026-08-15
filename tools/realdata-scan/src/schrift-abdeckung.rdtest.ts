@@ -56,7 +56,8 @@ describe.skipIf(!available)('Realdaten: Spielschrift gegen den echten Dialogbest
 
       // --- Dialogbestand einlesen -------------------------------------------
       const index = new IndexService();
-      await index.openSource(new NodeDirectorySource(REAL_DIR, ['data/field']), { deep: false });
+      const dir = new NodeDirectorySource(REAL_DIR, ['data/field']);
+      await index.openSource(dir, { deep: false });
       const felder = index.listEntries('flevel').filter((e) => !e.name.includes('.'));
 
       let zeichen = 0;
@@ -89,6 +90,7 @@ describe.skipIf(!available)('Realdaten: Spielschrift gegen den echten Dialogbest
           }
         }
       }
+      await dir.closeAll();
 
       const abdeckung = mitCode / zeichen;
 
