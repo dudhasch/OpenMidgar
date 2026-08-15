@@ -2176,3 +2176,65 @@ ungedeutet": Zwei Formate sind getrennt, ein Kopffeld ist belegt, und die
 Bauart der Rahmendaten ist eingegrenzt.
 
 *Probe: `tools/realdata-scan/src/k9-grammatik.rdtest.ts` (4 Fälle).*
+
+---
+
+## K9 — `u32@0`: zwei Deutungen geprüft, beide gefallen (2026-08-15)
+
+Nach dem Kopffund (`u32@4` = Knochenzahl + 1, für `n > 1` ausnahmslos) lag
+`u32@0` als **Anzahl der Animationen** nahe: In Stichproben ist der Wert klein
+(15 bei 30 Knochen, 18 bei 48, 32 bei 48). Zwei Prüfungen, beide negativ.
+
+### Deutung A — Anzahl der Animationen: die Prüfung ist **blind**
+
+Prüfgröße aus einer dritten Datei: Jeder Gegnerrecord in `scene.bin` trägt bei
+`+0x38` **16 Animationsindizes**, die in dieses Bündel zeigen. Ist `u32@0` die
+Anzahl, muss jeder belegte Index kleiner sein.
+
+| | Quote |
+|---|---:|
+| alle Indizes < `u32@0` | 312 / 337 = **92,6 %** |
+| verwürfelte Paarung (Kontrolle) | 297 / 337 = **88,1 %** |
+| **Gegenanker `u32@4`** (Gelenkzahl, sachfremd) | 309 / 337 = **91,7 %** |
+
+**Faktor 1,05** — weit unter der Projektschwelle 3. Entschieden hat aber nicht
+die Kontrolle, sondern der **Gegenanker**: `u32@4` ist nachweislich die
+Gelenkzahl und hat mit Animationsindizes nichts zu tun, besteht denselben Test
+aber genauso gut. Ein Test, den ein unbeteiligtes Feld ebenso besteht, misst
+nichts.
+
+Die Ursache steht in den Daten: Die Indizes sind fast alle ≤ 9 (`255` ist die
+Füllung, 4111 von 5632 Bytes), also besteht praktisch **jede** kleine Schranke.
+Der Abstand `u32@0 − (max+1)` hat Median **8** und ist in **0 von 337** Fällen
+bündig — die Zahl sitzt nirgends eng an den Indizes.
+
+⚠ **`u32@0` ist damit weder belegt noch widerlegt.** Eine
+Enthaltensein-Prüfung kann diese Frage prinzipiell nicht entscheiden; es
+braucht eine Größe, die mit der Animationszahl *variiert*. Das ist ein Befund
+über die **Methode**, nicht über die Datei.
+
+### Deutung B — Länge eines Verzeichnisses: **widerlegt**
+
+Dieselbe Frage, die bei `camdat` getragen hat: Führt `u32@0` eine Zeigertabelle
+an? Dann müssten ab festem Kopfende `N` **streng monoton wachsende** Werte
+**innerhalb der Datei** stehen. Geprüft über Kopfenden 8/12/16/20/24 und beide
+Breiten:
+
+```
+Kopf  8/u16: 0/391   Kopf  8/u32: 17/391   Kopf 12/u16: 0/391   Kopf 12/u32: 0/391
+Kopf 16/u16: 17/391  Kopf 16/u32: 0/391    Kopf 20/*  : 0/391   Kopf 24/u16: 1/391
+```
+
+Bestenfalls **17 von 391 (4,3 %)**. Kein Verzeichnis. Der Bauplan, der `camdat`
+aufgeschlossen hat, trägt hier nicht — was zum Bild passt: `camdat` ist eine
+Sammlung getrennter Skripte, eine Animationsdatei ist ein Datenstrom.
+
+### Was das für K9 bedeutet
+
+Der Kopffund von vorhin steht unberührt. Neu ist, was `u32@0` **nicht** ist,
+und vor allem: dass die naheliegendste Prüfung dafür untauglich ist. Beide
+Erwartungen sind als Dauerbefund eingefroren — steigt die Verzeichnisquote je
+über die Hälfte, ist ein Verzeichnis gefunden; trennt die Enthaltensein-Prüfung
+je, hat sich der Wertebereich geändert und die Messung ist neu zu lesen.
+
+*Probe: `tools/realdata-scan/src/k9-animzahl.rdtest.ts` (2 Fälle).*
