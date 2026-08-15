@@ -130,12 +130,45 @@ export interface EnemyRecord {
 }
 
 /** Attack-Record (28 B) — Layout identisch in Szene und kernel-Sektion 1. */
+/**
+ * Angriffsdatensatz (28 B). 🟢 Feldlage aus der eigenen Codeanalyse
+ * (ADR-028) und über das `damageCalc`-Histogramm an 8320 Datensätzen
+ * gegengezählt. `raw` bleibt maßgeblich.
+ */
 export interface AttackRecord {
-  /** 🟡 u16@0x04 MP-Kosten. */
-  mpCost: number;
-  /** 🟡 u8@0x00 Trefferquote. */
+  /** u8@0x00 Trefferquote; `255` heißt „kann nicht danebengehen". */
   accuracy: number;
-  /** 🟡 u8@0x0C? — die Felddeutung ist Community-Stand; roh maßgeblich. */
+  /** u8@0x01 Aufschlageffekt; `0xFF` = den vorigen Wert stehen lassen. */
+  impactEffectId: number;
+  /** u8@0x02 Zielpose. */
+  targetPoseClass: number;
+  /** u16@0x04 MP-Kosten. */
+  mpCost: number;
+  /** i16@0x06 Klang-/Einblendungskennung. */
+  soundOrPopupId: number;
+  /** u16@0x08 bzw. @0x0A Kamerabewegung bei einem bzw. mehreren Zielen. */
+  cameraSingle: number;
+  cameraMulti: number;
+  /** u8@0x0C Zielflags (Reichweite, Aufteilung). */
+  targetFlags: number;
+  /** u8@0x0D Angriffseffekt. */
+  attackEffectId: number;
+  /** u8@0x0E **das Schadensbyte** — hohes Nibble Trefferprogramm, niederes Formel. */
+  damageCalc: number;
+  /** u8@0x0F Stärke; `0` unterdrückt die Formel ganz. */
+  power: number;
+  /** u8@0x11 Statusmodus: Eimer `>>6`, Rate `(&0x3F)<<2`. */
+  statusMode: number;
+  /** u8@0x12 Zusatzeffekt (`0xFF` = keiner) und sein Argument. */
+  addedEffectId: number;
+  addedEffectArg: number;
+  /** u32@0x14 Statusmaske; `0xFFFFFFFF` = keine. */
+  statusMask: number;
+  /** i16@0x18 Elementmaske — `0xFFFF` ist auf **0** normiert („kein Element"). */
+  elementMask: number;
+  /** u16@0x1A Sonderflags; **aktiv-niedrig** außer Bit 2. */
+  specialFlags: number;
+  /** Rohbytes — maßgeblich; die Felder oben sind Bequemlichkeit. */
   raw: Uint8Array;
 }
 

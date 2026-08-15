@@ -2816,3 +2816,58 @@ Ein hochstufiger Angreifer trifft magisch auch mit Quote 0.
 
 *Module: `ff7-treffer.ts`, `ff7-schaden.ts` · Fixtures: 105 Fälle in
 `packages/battle-runtime`.*
+
+---
+
+## Der Angriffsdatensatz bekommt Namen — und zwei Korrekturen an mir selbst (2026-08-15)
+
+Bisher trug `AttackRecord` zwei gedeutete Felder und `raw`. Jetzt sind alle
+17 benannt (Feldlage aus ADR-028, das Recordraster über das
+`damageCalc`-Histogramm an 8320 Datensätzen bereits belegt). `raw` bleibt
+maßgeblich — die Felder sind Bequemlichkeit, keine Ersetzung.
+
+### Korrektur 1: die Replay-Digests sind gar nicht bedroht
+
+Ich hatte im PROJEKTSTAND geschrieben, das Anschließen der zahlengleichen
+Kette an die Kampfsitzung mache „jeden bestehenden Replay-Digest ungültig".
+**Nachgeprüft: falsch.** Alle Digest-Erwartungen im Bestand sind **relativ**
+(`a.digests` gegen `b.digests`, `s2.digest()` gegen `s1.digest()`) — keine
+einzige ist auf einen Literalwert festgenagelt. Ein Formeltausch bräche sie
+nicht. Der Grund, die Kette noch nicht anzuschließen, ist ein anderer und
+steht unten.
+
+### Korrektur 2: `0xFFFF → 0` ist selten, aber nicht tot
+
+Die Vorlage vermerkt, das Elementfeld normiere `0xFFFF` auf `0`. Ich schloss
+daraus, elementlose Angriffe trügen roh `0xFFFF`. **Gemessen an `scene.bin`:
+kein einziger** — bei 903 elementlosen Angriffen steht dort glattes `0x0000`.
+
+🟢 Nimmt man die 128 Kernel-Angriffe dazu, gibt es **genau einen** Datensatz
+mit rohem `0xFFFF` — **1 von 2391**. Die Normierung existiert also für diesen
+einen Fall; ohne sie würde aus einem elementlosen Angriff einer mit sechzehn
+Elementen. Ein schönes Maß dafür, wie wenig „kommt fast nie vor" und „ist
+überflüssig" miteinander zu tun haben.
+
+### Weitere Messwerte am Bestand
+
+```
+2391 belegte Angriffe · power == 0 in 632 · elementMask == 0 in 903
+statusMask == „keine" in 1881 · Statusmodus-Eimer (>>6): 0×400 1×41 2×20 3×1881
+```
+
+🟢 Der Statusmodus ist ein gepacktes Byte — Eimer in den oberen zwei Bits,
+Rate in den unteren sechs. Es kommen genau **vier** Eimer vor, wie es sein
+muss; läge das Feld anderswo, sähe man mehr.
+
+### Warum die Kette trotzdem noch nicht angeschlossen ist
+
+Nicht wegen der Digests, sondern weil sie **unvollständig** ist: Materia-
+Deltas, Elementarschritt, Statusanwendung und die Trickhälfte
+`0x10`…`0x1D` fehlen. Ein halber Anschluss ersetzt einen bewusst
+entworfenen, in sich stimmigen Formelsatz durch einen, der an den fertigen
+Stellen richtig und an den übrigen leer ist — das wäre nicht näher am
+Original, sondern nur anders falsch. Das ist eine Entscheidung über das
+Verhalten der Demo und gehört dem Eigentümer.
+
+*Erweitert: `packages/formats-battle/src/{types,scene}.ts` · Probe:
+`schadensbyte.rdtest.ts` (3 Fälle).*

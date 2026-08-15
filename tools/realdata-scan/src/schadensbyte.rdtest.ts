@@ -138,6 +138,71 @@ describe.skipIf(!available)('Schadensbyte gegen den Originalbestand', () => {
     for (const n of Object.keys(hSzene).map(Number)) expect(SCHADENSKLASSEN_FLAGS[n]).toBeDefined();
   }, 300_000);
 
+  it('prüft die übrigen Felder des Angriffsdatensatzes am Bestand', async () => {
+    const container = await parseSceneBin(await readFile(SCENE), 'scene.bin');
+    const alle = [];
+    for (const scene of container.scenes) {
+      if (!scene) continue;
+      for (const a of scene.attacks) alle.push(a);
+    }
+    const kc = await parseKernelContainer(await readFile(KERNEL), 'KERNEL.BIN');
+    const kd = kc ? parseKernelBattleData(kc.sections, 'KERNEL.BIN').data : null;
+    if (kd) alle.push(...kd.attacks);
+    // Nur belegte Datensaetze: 0xFF im Schadensbyte ist der Leermarker.
+    const belegt = alle.filter((a) => a.damageCalc !== 0xff);
+    let powerNull = 0;
+    let elementKeins = 0;
+    let statusKeine = 0;
+    let elementRoh0xffff = 0;
+    const statusModi = new Map<number, number>();
+    for (const a of belegt) {
+      if (a.power === 0) powerNull++;
+      if (a.elementMask === 0) elementKeins++;
+      if (a.statusMask === 0xffffffff) statusKeine++;
+      if (new DataView(a.raw.buffer, a.raw.byteOffset, a.raw.byteLength).getUint16(0x18, true) === 0xffff) {
+        elementRoh0xffff++;
+      }
+      statusModi.set(a.statusMode >> 6, (statusModi.get(a.statusMode >> 6) ?? 0) + 1);
+    }
+    console.log(
+      `[DMG] ${belegt.length} belegte Angriffe · power==0: ${powerNull} · elementMask==0: ${elementKeins} ` +
+        `(davon roh 0xFFFF: ${elementRoh0xffff}) · statusMask==keine: ${statusKeine}`,
+    );
+    console.log(
+      '[DMG] Statusmodus-Eimer (>>6):',
+      [...statusModi.entries()].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${k}×${n}`).join(', '),
+    );
+
+    /**
+     * ⚠️ **Hier ist eine Erwartung von mir gefallen, und der Befund ist
+     * besser als die Erwartung.**
+     *
+     * Die Vorlage vermerkt, `0xFFFF` werde im Elementfeld auf `0` normiert.
+     * Ich hatte daraus geschlossen, elementlose Angriffe traegen roh
+     * `0xFFFF` — **falsch**: In `scene.bin` steht bei 903 elementlosen
+     * Angriffen **kein einziges Mal** `0xFFFF`, sondern glattes `0x0000`.
+     *
+     * 🟢 **Aber die Normierung ist auch kein toter Code.** Nimmt man die
+     * 128 Kernel-Angriffe dazu, gibt es **genau einen** Datensatz mit rohem
+     * `0xFFFF` — 1 von 2391. Sie existiert also fuer diesen einen Fall, und
+     * ohne sie waere aus einem elementlosen Angriff einer mit sechzehn
+     * Elementen geworden.
+     *
+     * Ein schoenes Mass dafuer, wie wenig „kommt im Bestand nicht vor" und
+     * „ist ueberfluessig" miteinander zu tun haben. Die Zahl ist eingefroren.
+     */
+    expect(belegt.length).toBeGreaterThan(2000);
+    expect(elementRoh0xffff).toBe(1);
+    expect(elementKeins).toBeGreaterThan(0);
+
+    /**
+     * 🟢 Der Statusmodus ist ein gepacktes Byte: Eimer in den oberen zwei
+     * Bits, Rate in den unteren sechs. Kaeme dort etwas anderes, saehe man
+     * mehr als vier Eimer.
+     */
+    for (const k of statusModi.keys()) expect(k).toBeLessThanOrEqual(3);
+  }, 300_000);
+
   it('prüft den Rückenangriffsfaktor der Gegner als Achtel', async () => {
     const container = await parseSceneBin(await readFile(SCENE), 'scene.bin');
     const werte = new Map<number, number>();

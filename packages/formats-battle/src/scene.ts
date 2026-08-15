@@ -123,11 +123,39 @@ export async function parseSceneBin(bytes: Uint8Array, asset: string): Promise<S
 }
 
 /** Attack-Record (28 B) — geteilt zwischen Szene und kernel-Sektion 1. */
+/**
+ * Angriffsdatensatz, 28 Byte. 🟢 Feldlage aus der eigenen Codeanalyse
+ * (ADR-028, `spec-battle-formulas.md` §2) — und an unseren Daten gegengezählt:
+ * Das Histogramm der hohen Nibbles von `damageCalc` (`+0x0E`) trifft den
+ * Zensus des Bestands über 8320 Datensätze auf den Datensatz genau
+ * (`schadensbyte.rdtest.ts`). Das belegt zugleich das ganze Recordraster.
+ *
+ * `raw` bleibt maßgeblich und wird weiterhin mitgeführt: Die gedeuteten
+ * Felder sind eine Bequemlichkeit, keine Ersetzung.
+ */
 export function parseAttackRecord(bytes: Uint8Array): AttackRecord {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return {
     accuracy: bytes[0]!,
+    impactEffectId: bytes[1]!,
+    targetPoseClass: bytes[2]!,
     mpCost: view.getUint16(4, true),
+    soundOrPopupId: view.getInt16(6, true),
+    cameraSingle: view.getUint16(8, true),
+    cameraMulti: view.getUint16(10, true),
+    targetFlags: bytes[0x0c]!,
+    attackEffectId: bytes[0x0d]!,
+    damageCalc: bytes[0x0e]!,
+    power: bytes[0x0f]!,
+    statusMode: bytes[0x11]!,
+    addedEffectId: bytes[0x12]!,
+    addedEffectArg: bytes[0x13]!,
+    statusMask: view.getUint32(0x14, true),
+    // 🟢 `0xFFFF` wird im Original auf 0 normiert — „kein Element", nicht
+    // „alle Elemente". Wer das roh übernimmt, macht aus jedem elementlosen
+    // Angriff einen mit sechzehn Elementen.
+    elementMask: view.getInt16(0x18, true) === -1 ? 0 : view.getUint16(0x18, true),
+    specialFlags: view.getUint16(0x1a, true),
     raw: bytes.slice(0),
   };
 }
