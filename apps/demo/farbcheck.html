@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMidgar — Farbcheck Feldmodelle</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; padding: 16px; background: #14161a; color: #dde1e6;
+        font: 13px/1.55 system-ui, sans-serif;
+      }
+      h1 { font-size: 17px; margin: 0 0 4px; }
+      .hint { color: #97a0ab; margin: 0 0 14px; max-width: 74ch; }
+      .layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+      .col { display: flex; flex-direction: column; gap: 12px; }
+      canvas { background: #000; border: 1px solid #333a44; border-radius: 4px; display: block; }
+      fieldset { border: 1px solid #333a44; border-radius: 6px; margin: 0; padding: 10px 12px; }
+      legend { color: #9fb4cc; font-weight: 600; padding: 0 5px; }
+      label { display: block; margin: 6px 0; }
+      label > span.l { display: inline-block; min-width: 152px; color: #b6bec8; }
+      select, input[type=text], textarea {
+        background: #1c2027; color: #dde1e6; border: 1px solid #3a424d;
+        border-radius: 4px; padding: 4px 6px; font: inherit; min-width: 210px;
+      }
+      textarea { width: 100%; min-height: 62px; }
+      input[type=range] { vertical-align: middle; width: 190px; }
+      button {
+        background: #2b6cb0; color: #fff; border: 0; border-radius: 4px;
+        padding: 7px 14px; font: inherit; font-weight: 600; cursor: pointer;
+      }
+      button.ghost { background: #2a3038; color: #dde1e6; }
+      button:disabled { opacity: .5; cursor: default; }
+      #status { color: #9fb4cc; margin: 0 0 10px; }
+      #json { width: 100%; min-height: 190px; font-family: ui-monospace, monospace; font-size: 12px; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .verdict-ok { border-color: #2f855a !important; }
+      .verdict-bad { border-color: #9b2c2c !important; }
+      .val { color: #7f8a96; font-variant-numeric: tabular-nums; }
+      .note { color: #97a0ab; font-size: 12px; margin: 3px 0 0 152px; }
+      table.lights { border-collapse: collapse; font-size: 12px; }
+      table.lights td { padding: 1px 8px 1px 0; }
+      .sw { display: inline-block; width: 11px; height: 11px; border: 1px solid #555; vertical-align: -1px; }
+    </style>
+  </head>
+  <body>
+    <h1>Farbcheck Feldmodelle</h1>
+    <p class="hint">
+      Vergleiche das Bild mit dem Original und trage unten ein, was passt und was nicht.
+      Die zwei Schalter unter „Varianten" sind die beiden Entscheidungen, die diese Runde
+      geändert hat — schalte hin und her und sag, welche Stellung richtig aussieht.
+      Am Ende „JSON erzeugen", kopieren, hier in den Chat einfügen.
+    </p>
+    <p id="status">lädt …</p>
+
+    <div class="layout">
+      <div class="col">
+        <canvas id="view" width="640" height="480"></canvas>
+
+        <fieldset>
+          <legend>Modell</legend>
+          <label><span class="l">Field</span><select id="field"></select></label>
+          <label><span class="l">Modell</span><select id="model"></select></label>
+          <div class="row">
+            <button id="prev" class="ghost">◀ vorheriges</button>
+            <button id="next" class="ghost">nächstes ▶</button>
+          </div>
+          <div id="lightInfo" style="margin-top:8px"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Ansicht</legend>
+          <label><span class="l">Kamera drehen</span>
+            <input type="range" id="azimut" min="0" max="359" value="270" />
+            <span class="val" id="azimutVal">270°</span>
+          </label>
+          <div class="note">Nur die Kamera, das Licht bleibt stehen. 270° = Blick ins Gesicht, 90° = von hinten.</div>
+          <label><span class="l">Kamera Höhe</span>
+            <input type="range" id="hoehe" min="-60" max="80" value="8" />
+            <span class="val" id="hoeheVal">8°</span>
+          </label>
+          <label><span class="l">Figur drehen</span>
+            <input type="range" id="facing" min="0" max="359" value="0" />
+            <span class="val" id="facingVal">0°</span>
+          </label>
+          <div class="note">
+            Dreht die FIGUR. Die Schattierung muss sich dabei mitdrehen — das Licht steht
+            in der Welt, nicht am Modell. Bleibt sie starr, ist etwas kaputt.
+          </div>
+          <label><span class="l">Animation</span><select id="anim"></select></label>
+          <div class="row">
+            <button id="play" class="ghost">⏸ Pause</button>
+            <input type="range" id="frame" min="0" max="0" value="0" />
+            <span class="val" id="frameVal">0 / 0</span>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="col" style="flex:1; min-width: 380px">
+        <fieldset>
+          <legend>Varianten — was sieht richtig aus?</legend>
+          <label><span class="l">Farbraum</span>
+            <select id="farbraum">
+              <option value="linear">linear — Byte rein, Byte raus (neu)</option>
+              <option value="srgb">sRGB — three-Vorgabe (vorher, heller)</option>
+            </select>
+          </label>
+          <label><span class="l">Beleuchtung</span>
+            <select id="licht">
+              <option value="original">Original-Kern (neu)</option>
+              <option value="alt">alte Lambert-Hypothese (vorher)</option>
+              <option value="aus">ganz aus — nur Vertexfarben</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Bewertung</legend>
+          <label><span class="l">Gesamteindruck</span>
+            <select id="q_gesamt" data-q>
+              <option value="">— bitte wählen —</option>
+              <option value="gut">passt zum Original</option>
+              <option value="leicht">leicht daneben</option>
+              <option value="deutlich">deutlich daneben</option>
+            </select>
+          </label>
+          <label><span class="l">Helligkeit</span>
+            <select id="q_helligkeit" data-q>
+              <option value="">—</option>
+              <option value="ok">passt</option>
+              <option value="zu_dunkel">zu dunkel</option>
+              <option value="zu_hell">zu hell</option>
+            </select>
+          </label>
+          <label><span class="l">Farbton / Sättigung</span>
+            <select id="q_farbton" data-q>
+              <option value="">—</option>
+              <option value="ok">passt</option>
+              <option value="zu_blass">zu blass / ausgewaschen</option>
+              <option value="zu_satt">zu satt / überzeichnet</option>
+              <option value="stich_rot">Farbstich rot</option>
+              <option value="stich_gruen">Farbstich grün</option>
+              <option value="stich_blau">Farbstich blau</option>
+              <option value="vertauscht">Kanäle wirken vertauscht</option>
+            </select>
+          </label>
+          <label><span class="l">Lichtrichtung</span>
+            <select id="q_richtung" data-q>
+              <option value="">—</option>
+              <option value="ok">passt</option>
+              <option value="falsche_seite">beleuchtete Seite ist die falsche</option>
+              <option value="zu_flach">zu flach, kaum Modellierung</option>
+              <option value="zu_hart">zu hart, Kontrast zu stark</option>
+              <option value="dreht_nicht">dreht sich nicht mit der Figur</option>
+            </select>
+          </label>
+          <label><span class="l">Gesicht (Augen/Mund)</span>
+            <select id="q_gesicht" data-q>
+              <option value="">—</option>
+              <option value="ok">sitzt und sieht richtig aus</option>
+              <option value="fehlt">fehlt ganz</option>
+              <option value="zu_dunkel">da, aber zu dunkel</option>
+              <option value="falsche_farbe">falsche Farbe</option>
+              <option value="verschoben">sitzt an der falschen Stelle</option>
+              <option value="flimmert">flimmert / kämpft mit dem Gesicht</option>
+            </select>
+          </label>
+          <label><span class="l">Texturfarben</span>
+            <select id="q_textur" data-q>
+              <option value="">—</option>
+              <option value="ok">Haut/Haar/Kleidung passen</option>
+              <option value="haut">Hautton daneben</option>
+              <option value="haar">Haarfarbe daneben</option>
+              <option value="kleidung">Kleidungsfarbe daneben</option>
+            </select>
+          </label>
+          <label><span class="l">Kanten / Facetten</span>
+            <select id="q_kanten" data-q>
+              <option value="">—</option>
+              <option value="ok">passt</option>
+              <option value="zu_kantig">zu kantig / facettiert</option>
+              <option value="zu_weich">zu weich, Facetten fehlen</option>
+            </select>
+          </label>
+          <label><span class="l">Beste Variante</span>
+            <select id="q_beste" data-q>
+              <option value="">— die eingestellte —</option>
+              <option value="linear_original">linear + Original-Kern</option>
+              <option value="linear_alt">linear + alte Lambert</option>
+              <option value="linear_aus">linear + Licht aus</option>
+              <option value="srgb_original">sRGB + Original-Kern</option>
+              <option value="srgb_alt">sRGB + alte Lambert</option>
+              <option value="srgb_aus">sRGB + Licht aus</option>
+              <option value="keine">keine sieht richtig aus</option>
+            </select>
+          </label>
+          <label><span class="l" style="vertical-align:top">Freitext</span></label>
+          <textarea id="q_text" placeholder="Was genau fällt auf? Womit hast du verglichen (Screenshot, laufendes Spiel, Erinnerung)?"></textarea>
+        </fieldset>
+
+        <fieldset>
+          <legend>Rückmeldung</legend>
+          <div class="row">
+            <button id="add" class="ghost">Befund zu dieser Ansicht merken</button>
+            <button id="gen">JSON erzeugen</button>
+            <button id="copy" class="ghost" disabled>kopieren</button>
+            <span class="val" id="count">0 gemerkte Befunde</span>
+          </div>
+          <textarea id="json" placeholder="… erscheint hier"></textarea>
+        </fieldset>
+      </div>
+    </div>
+
+    <script type="module" src="./src/farbcheck.ts"></script>
+  </body>
+</html>

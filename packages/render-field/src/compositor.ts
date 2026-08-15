@@ -1,4 +1,4 @@
-import type { Camera, Scene, WebGLRenderer } from 'three';
+import { LinearSRGBColorSpace, NoToneMapping, type Camera, type Scene, type WebGLRenderer } from 'three';
 import { computeLetterbox, type LetterboxRect } from './letterbox.js';
 
 /**
@@ -7,10 +7,38 @@ import { computeLetterbox, type LetterboxRect } from './letterbox.js';
  * der Rest bleibt schwarz. Resize verändert ausschließlich die Balken.
  */
 
+/**
+ * Farbpfad auf „Byte rein, Byte raus" stellen.
+ *
+ * Das Original ist eine reine 8-Bit-Kette: Palettenbyte und Vertexfarbbyte
+ * werden multipliziert und das Ergebnis landet unverändert im Bildspeicher. Es
+ * gibt an keiner Stelle eine Gammastufe — weder beim Laden der Textur
+ * (`Gl_ConvertTexturePixels`, `GfxCreateTextureSurfaces`) noch beim Ausgeben.
+ *
+ * three ab r152 rechnet standardmäßig anders herum: `outputColorSpace` steht
+ * auf sRGB, der Renderer **kodiert** also beim Schreiben ins Bild. Ein
+ * gespeichertes 128 verlässt die Kette dann als 187. Das betrifft jedes Pixel —
+ * Modelle wie Hintergrund — und ist der größte Einzelbetrag, um den unsere
+ * Farben bisher neben dem Original lagen.
+ *
+ * `LinearSRGBColorSpace` schaltet genau diese Kodierung ab; die Werte gehen
+ * unverändert durch. Tonemapping wird aus demselben Grund abgeschaltet: das
+ * Original hat keins.
+ *
+ * Die Funktion steht bewusst hier und wird vom Kompositor aufgerufen — er ist
+ * nach ADR-005 die eine Stelle, durch die jede Feldausgabe läuft.
+ */
+export function configureOriginalColorPipeline(renderer: WebGLRenderer): void {
+  renderer.outputColorSpace = LinearSRGBColorSpace;
+  renderer.toneMapping = NoToneMapping;
+}
+
 export class FieldCompositor {
   private lastRect: LetterboxRect = { x: 0, y: 0, width: 0, height: 0 };
 
-  constructor(private readonly renderer: WebGLRenderer) {}
+  constructor(private readonly renderer: WebGLRenderer) {
+    configureOriginalColorPipeline(renderer);
+  }
 
   get viewportRect(): LetterboxRect {
     return this.lastRect;

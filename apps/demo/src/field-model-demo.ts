@@ -11,8 +11,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { IoRequest, IoResponse, IoWorkerInit, OpenSourceResult } from '@webmidgar/io';
+import { IndexService, type IoRequest, type IoResponse, type IoWorkerInit, type OpenSourceResult } from '@webmidgar/io';
 import type { LgpEntry } from '@webmidgar/formats-lgp';
+import { openHttpSource, type HttpDirectorySource } from './game/http-source.js';
 import {
   decodeModelLightBlock,
   parseFieldEntry,
@@ -103,10 +104,58 @@ function request(msg: DistributiveOmit<IoRequest, 'v' | 'requestId'>): Promise<I
   });
 }
 
+/**
+ * Die drei Archivzugriffe dieser Seite, hinter einer Naht.
+ *
+ * Zwei Quellen bedienen sie: der IO-Worker über eine per Picker gewählte
+ * Installation (Produktionspfad, braucht eine Nutzergeste) und — nur im
+ * Entwicklungsbetrieb — der Vite-Endpunkt `/ff7data` über `IndexService`
+ * direkt. Letzterer macht die Seite ohne Nutzergeste automatisierbar, genauso
+ * wie `game.html` es schon tat (s. ff7data-plugin.ts). Ohne gesetzte
+ * `FF7_DATA_DIR`/`ff7data.local.json` ist der Endpunkt still nicht da und es
+ * bleibt beim Picker.
+ */
+interface Quelle {
+  openSource(): Promise<OpenSourceResult>;
+  listEntries(archive: string): Promise<LgpEntry[]>;
+  readEntry(entry: LgpEntry): Promise<Uint8Array>;
+}
+
+let quelle: Quelle | null = null;
+
+function workerQuelle(handle: FileSystemDirectoryHandle): Quelle {
+  worker.postMessage({ v: 1, kind: 'init', directoryHandle: handle } satisfies IoWorkerInit);
+  return {
+    async openSource() {
+      const res = await request({ kind: 'open-source' });
+      if (res.kind !== 'result') throw new Error('Unerwartete Antwort beim Scan');
+      return res.payload as OpenSourceResult;
+    },
+    async listEntries(archive) {
+      const res = await request({ kind: 'list-entries', archiveName: archive });
+      if (res.kind !== 'result') throw new Error(`Unerwartete Antwort beim Auflisten (${archive})`);
+      return res.payload as LgpEntry[];
+    },
+    async readEntry(entry) {
+      const res = await request({ kind: 'read-entry', canonicalId: entry.canonicalId });
+      if (res.kind !== 'bytes') throw new Error('Unerwartete Antwort beim Lesen des Eintrags');
+      return new Uint8Array(res.payload);
+    },
+  };
+}
+
+function devQuelle(source: HttpDirectorySource): Quelle {
+  const index = new IndexService();
+  return {
+    openSource: () => index.openSource(source, { deep: false }),
+    listEntries: (archive) => Promise.resolve(index.listEntries(archive)),
+    readEntry: (entry) => index.readEntry(entry.canonicalId),
+  };
+}
+
 async function readEntryBytes(entry: LgpEntry): Promise<Uint8Array> {
-  const res = await request({ kind: 'read-entry', canonicalId: entry.canonicalId });
-  if (res.kind !== 'bytes') throw new Error('Unerwartete Antwort beim Lesen des Eintrags');
-  return new Uint8Array(res.payload);
+  if (!quelle) throw new Error('Keine Datenquelle — zuerst Verzeichnis wählen.');
+  return quelle.readEntry(entry);
 }
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -224,58 +273,69 @@ let autoPlay = true;
 let lastAdvance = 0;
 const FRAME_INTERVAL_MS = 80;
 
-// --- Verzeichniswahl + Archivscan (Nutzergeste erforderlich) -----------------
+// --- Archivscan: Dev-Endpunkt automatisch, sonst Verzeichniswahl ------------
+
+async function scanne(): Promise<void> {
+  if (!quelle) throw new Error('Keine Datenquelle gesetzt.');
+  setStatus('Scanne Installationsverzeichnis …');
+  const result = await quelle.openSource();
+
+  const flevel = result.archives.find((a) => a.archiveName === 'flevel');
+  if (!flevel) {
+    setStatus('Archiv "flevel" wurde in diesem Verzeichnis nicht gefunden.');
+    return;
+  }
+  if (flevel.fatal) {
+    setStatus('Archiv "flevel" ist unbrauchbar (fataler Scanfehler).');
+    return;
+  }
+  const char = result.archives.find((a) => a.archiveName === 'char');
+
+  fieldEntryByName.clear();
+  for (const e of await quelle.listEntries('flevel')) {
+    if (!e.name.includes('.')) fieldEntryByName.set(e.name, e);
+  }
+  fieldNames = [...fieldEntryByName.keys()].sort((a, b) => a.localeCompare(b));
+  populateFieldSelect();
+
+  charEntryByName.clear();
+  if (char && !char.fatal) {
+    for (const e of await quelle.listEntries('char')) charEntryByName.set(e.name, e);
+  }
+
+  const charNote = !char
+    ? ' — Archiv "char" fehlt, Modelle sind nicht auflösbar.'
+    : char.fatal
+      ? ' — Archiv "char" ist unbrauchbar (fataler Scanfehler), Modelle sind nicht auflösbar.'
+      : ` (${charEntryByName.size} Modell-Assets in char.lgp).`;
+  setStatus(`Fertig — ${fieldNames.length} Fields gefunden${charNote}`);
+}
 
 pickBtn.addEventListener('click', async () => {
   try {
     const handle = await (window as unknown as {
       showDirectoryPicker(opts?: { mode: string }): Promise<FileSystemDirectoryHandle>;
     }).showDirectoryPicker({ mode: 'read' });
-    worker.postMessage({ v: 1, kind: 'init', directoryHandle: handle } satisfies IoWorkerInit);
-
-    setStatus('Scanne Installationsverzeichnis …');
-    const res = await request({ kind: 'open-source' });
-    if (res.kind !== 'result') throw new Error('Unerwartete Antwort beim Scan');
-    const result = res.payload as OpenSourceResult;
-
-    const flevel = result.archives.find((a) => a.archiveName === 'flevel');
-    if (!flevel) {
-      setStatus('Archiv "flevel" wurde in diesem Verzeichnis nicht gefunden.');
-      return;
-    }
-    if (flevel.fatal) {
-      setStatus('Archiv "flevel" ist unbrauchbar (fataler Scanfehler).');
-      return;
-    }
-    const char = result.archives.find((a) => a.archiveName === 'char');
-
-    const fieldEntriesRes = await request({ kind: 'list-entries', archiveName: 'flevel' });
-    if (fieldEntriesRes.kind !== 'result') throw new Error('Unerwartete Antwort beim Auflisten (flevel)');
-    const fieldEntries = fieldEntriesRes.payload as LgpEntry[];
-    fieldEntryByName.clear();
-    for (const e of fieldEntries) {
-      if (!e.name.includes('.')) fieldEntryByName.set(e.name, e);
-    }
-    fieldNames = [...fieldEntryByName.keys()].sort((a, b) => a.localeCompare(b));
-    populateFieldSelect();
-
-    charEntryByName.clear();
-    if (char && !char.fatal) {
-      const charEntriesRes = await request({ kind: 'list-entries', archiveName: 'char' });
-      if (charEntriesRes.kind !== 'result') throw new Error('Unerwartete Antwort beim Auflisten (char)');
-      for (const e of charEntriesRes.payload as LgpEntry[]) charEntryByName.set(e.name, e);
-    }
-
-    const charNote = !char
-      ? ' — Archiv "char" fehlt, Modelle sind nicht auflösbar.'
-      : char.fatal
-        ? ' — Archiv "char" ist unbrauchbar (fataler Scanfehler), Modelle sind nicht auflösbar.'
-        : ` (${charEntryByName.size} Modell-Assets in char.lgp).`;
-    setStatus(`Fertig — ${fieldNames.length} Fields gefunden${charNote}`);
+    quelle = workerQuelle(handle);
+    await scanne();
   } catch (err) {
     setStatus(`Fehler: ${(err as Error).message}`);
   }
 });
+
+/** Bereit-Versprechen für die Automatisierung: erfüllt, sobald gescannt ist. */
+const devBereit: Promise<boolean> = (async () => {
+  try {
+    const source = await openHttpSource();
+    if (!source) return false;
+    quelle = devQuelle(source);
+    await scanne();
+    return true;
+  } catch (err) {
+    setStatus(`Dev-Datenquelle fehlgeschlagen: ${(err as Error).message}`);
+    return false;
+  }
+})();
 
 function populateFieldSelect(): void {
   fieldSelectEl.innerHTML = fieldNames.map((n) => `<option value="${n}">${n}</option>`).join('');
@@ -494,6 +554,10 @@ async function showModel(index: number): Promise<void> {
     currentClipSource = null;
     applyBindPoseIfPossible();
   }
+  // Erst JETZT einrahmen: `replaceActorInScene` hat die Hülle noch aus der
+  // Bindpose gemessen, und die Wurzeltranslation des ersten Animationsframes
+  // verschiebt die Figur — vorher stand sie halb aus dem Bild.
+  frameActorCamera();
 
   updateReadout();
   setStatus(`Modell "${model.modelFile}" angezeigt (${index + 1}/${manifest.models.length}).`);
@@ -531,13 +595,21 @@ function buildActorFromCache(): Actor {
   if (!currentSkeleton) return buildFallbackActor();
   const skeleton = currentSkeleton;
   const swap = swapCheckboxEl.checked;
-  return buildActor(skeleton, (boneIndex): ActorMeshBundle[] => {
-    const bundles = currentBoneBundles.get(boneIndex) ?? [];
-    return bundles.map((b) => ({
-      mesh: b.mesh,
-      textures: b.textures.map((t) => (t ? (swap ? swapPalette(t) : t) : null)),
-    }));
-  });
+  // Das Sektion-2-Licht des Eintrags gehört dazu — ohne es zeigte diese Seite
+  // etwas anderes als die Laufzeit (field-actor.ts) und taugte gerade für den
+  // Farbvergleich mit dem Original nicht.
+  const licht = currentModel ? decodeModelLightBlock(currentModel.blockRaw) : null;
+  return buildActor(
+    skeleton,
+    (boneIndex): ActorMeshBundle[] => {
+      const bundles = currentBoneBundles.get(boneIndex) ?? [];
+      return bundles.map((b) => ({
+        mesh: b.mesh,
+        textures: b.textures.map((t) => (t ? (swap ? swapPalette(t) : t) : null)),
+      }));
+    },
+    licht ?? undefined,
+  );
 }
 
 function replaceActorInScene(actor: Actor): void {
@@ -744,6 +816,18 @@ function manifestToPlain(manifest: FieldModelManifest | null): object {
 }
 
 (window as unknown as { fieldModelDebug: unknown }).fieldModelDebug = {
+  /** true, sobald der Dev-Endpunkt gescannt hat (false ⇒ Picker nötig). */
+  bereit: (): Promise<boolean> => devBereit,
+  /**
+   * Bild des Canvas als Daten-URL. Zeichnet SYNCHRON neu und liest im selben
+   * Lauf zurück: Der Renderer läuft ohne `preserveDrawingBuffer`, der Puffer
+   * wird also beim nächsten Compositing verworfen — ein `toDataURL` aus einem
+   * späteren Takt liefert Schwarz.
+   */
+  schnappschuss: (typ = 'image/jpeg', guete = 0.95): string => {
+    compositor.render(scene, camera);
+    return canvas.toDataURL(typ, guete);
+  },
   listFields: (): string[] => [...fieldNames],
   loadManifest: async (name: string): Promise<void> => {
     if (!fieldEntryByName.has(name)) {

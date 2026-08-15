@@ -1,5 +1,5 @@
 import { mdiag, type ModelDiagnostic } from './diagnostics.js';
-import type { MeshSource, Submesh } from './nam.js';
+import { isFlatShaded, type MaterialClass, type MeshSource, type Submesh } from './nam.js';
 import type { ParseResult } from './hrc.js';
 
 /**
@@ -134,6 +134,35 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
 
   for (let g = 0; g < nGroups; g++) {
     const go = offGroups + g * GROUP_LEN;
+    // `p_group+0x00` — Materialklasse C/G/T/D/H (siehe `MaterialClass`).
+    const rawKind = view.getInt32(go, true);
+    const materialClass = (rawKind >= 0 && rawKind <= 4 ? rawKind : 1) as MaterialClass;
+
+    // Schattierungsmodus. **Maßgeblich ist der Renderstate-Block**, nicht die
+    // Materialklasse: Zur Laufzeit liest das Original `p_hundred+0x24`
+    // (D3DSHADE_FLAT 1 / D3DSHADE_GOURAUD 2) und gibt ihn als
+    // `D3DRENDERSTATE_SHADEMODE` aus; für `p_group+0x00` ist im Dekompilat
+    // **kein** Leser zur Laufzeit belegt — es ist der Eimerschlüssel des
+    // Konverters.
+    //
+    // 🟢 Beide stimmen im Bestand überein — gemessen, nicht übernommen
+    // (`model-shading-probe`): 4180/4180 Dateien tragen genau einen Block je
+    // Gruppe, `+0x24` ist ausnahmslos 1 oder 2, und über alle 4875 Gruppen
+    // sind Block und Klasse **4875-mal einig, 0-mal uneinig**. Gelesen wird
+    // trotzdem die Angabe, die die Engine liest — das hält auch bei von Hand
+    // veränderten `.p`-Dateien.
+    //
+    // Ohne Blöcke (`nHundreds == 0`, so bauen die 16 engine-erzeugten
+    // Primitive) bleibt die Klasse als Rückfall.
+    const hundredShade =
+      g < nHundreds ? view.getUint32(offHundreds + g * HUNDRED_LEN + 0x24, true) : 0;
+    const flat =
+      hundredShade === 1 ? true : hundredShade === 2 ? false : isFlatShaded(materialClass);
+    // `p_hundred+0x44` — FF7-Blendmodus (0…4, 4 = deckend). Wird noch nicht
+    // ausgewertet; für `char.lgp` sind 4852 von 4875 Blöcken deckend, und der
+    // Feldlader übergibt Modus 6 („behalte, was die Datei sagt"), plättet also
+    // nichts. Mitgeführt, damit die verbleibende Lücke sichtbar bleibt.
+    const blendMode = g < nHundreds ? view.getInt32(offHundreds + g * HUNDRED_LEN + 0x44, true) : 4;
     const polyStart = view.getUint32(go + 4, true);
     const polyCount = view.getUint32(go + 8, true);
     const vertexStart = view.getUint32(go + 12, true);
@@ -165,29 +194,43 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
     let broken = false;
     for (let p = polyStart; p < polyStart + polyCount && !broken; p++) {
       const po = offPolys + p * POLY_LEN;
+
+      // 🟡 Vertexindizes relativ zum Gruppen-Vertexstart (dokumentierte
+      // Konvention); Normalenindizes ebenfalls gruppenrelativ zu prüfen —
+      // Realdaten-Sweep entscheidet (E-P-BOUNDS-Rate).
+      const relV = [0, 1, 2].map((c) => view.getUint16(po + 2 + c * 2, true));
+      const relN = [0, 1, 2].map((c) => view.getUint16(po + 8 + c * 2, true));
+      const bad = relV.findIndex((v) => v >= vertexCount);
+      if (bad >= 0) {
+        diagnostics.push(
+          mdiag('E-P-BOUNDS', asset, `Gruppe ${g}, Polygon ${p}: Vertexindex ${relV[bad]} ≥ ${vertexCount}`),
+        );
+        broken = true;
+        break;
+      }
+
       for (let corner = 0; corner < 3; corner++) {
-        // 🟡 Vertexindizes relativ zum Gruppen-Vertexstart (dokumentierte
-        // Konvention); Normalenindizes ebenfalls gruppenrelativ zu prüfen —
-        // Realdaten-Sweep entscheidet (E-P-BOUNDS-Rate).
-        const relV = view.getUint16(po + 2 + corner * 2, true);
-        const relN = view.getUint16(po + 8 + corner * 2, true);
-        if (relV >= vertexCount) {
-          diagnostics.push(mdiag('E-P-BOUNDS', asset, `Gruppe ${g}, Polygon ${p}: Vertexindex ${relV} ≥ ${vertexCount}`));
-          broken = true;
-          break;
-        }
-        const absV = vertexStart + relV;
-        const absN = relN < nNormals ? relN : -1;
-        const uvIdx = textured ? texCoordStart + relV : -1;
-        const key = `${absV}/${absN}/${uvIdx}`;
+        const absV = vertexStart + relV[corner]!;
+        const uvIdx = textured ? texCoordStart + relV[corner]! : -1;
+        // FLAT-Gruppen: Direct3D nimmt für das ganze Dreieck die Farbe der
+        // ERSTEN Ecke. Statt das im Shader nachzubauen (`flat`-Qualifizierer
+        // hätte in GL die LETZTE Ecke genommen, nicht die erste) wird die
+        // Schattierungsquelle hier eingebacken: Farbe UND Normale kommen von
+        // Ecke 0, die Position bleibt je Ecke. Ergebnis ist über das Dreieck
+        // konstant — also byteweise dasselbe wie D3DSHADE_FLAT.
+        const shadeCorner = flat ? 0 : corner;
+        const shadeV = vertexStart + relV[shadeCorner]!;
+        const shadeN = relN[shadeCorner]! < nNormals ? relN[shadeCorner]! : -1;
+
+        const key = `${absV}/${shadeV}/${shadeN}/${uvIdx}`;
         let unified = dedupe.get(key);
         if (unified === undefined) {
           unified = positions.length / 3;
           dedupe.set(key, unified);
           const vo = offVertices + absV * 12;
           positions.push(view.getFloat32(vo, true), view.getFloat32(vo + 4, true), view.getFloat32(vo + 8, true));
-          if (absN >= 0) {
-            const no = offNormals + absN * 12;
+          if (shadeN >= 0) {
+            const no = offNormals + shadeN * 12;
             normals.push(view.getFloat32(no, true), view.getFloat32(no + 4, true), view.getFloat32(no + 8, true));
           } else {
             normals.push(0, 0, 1);
@@ -198,12 +241,14 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
           } else {
             uvs.push(0, 0);
           }
-          if (absV < nVertexColors) {
-            const co = offVertexColors + absV * 4;
+          if (shadeV < nVertexColors) {
+            const co = offVertexColors + shadeV * 4;
             // Ablage BGRA → RGBA. 🟢 Sichtgeprüft (B6a, 2026-08-10): An zwei
             // figürlichen Modellen mit abgeschalteten Texturen wurde BGRA
             // einstimmig bestätigt; unter RGBA werden Haare blau und
-            // Kleidung weinrot.
+            // Kleidung weinrot. 🟡 Bestätigt durch das Dekompilat (ADR-027/A2):
+            // `polygon_data+0x50` führt einen D3DCOLOR (0xAARRGGBB) je Vertex,
+            // little-endian also genau die Bytefolge B,G,R,A.
             colors.push(bytes[co + 2]!, bytes[co + 1]!, bytes[co]!, bytes[co + 3]!);
           } else {
             colors.push(255, 255, 255, 255);
@@ -218,7 +263,15 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
       droppedGroups++;
       continue;
     }
-    submeshes.push({ start: startIndex, count: indices.length - startIndex, textured, textureIndex });
+    submeshes.push({
+      start: startIndex,
+      count: indices.length - startIndex,
+      textured,
+      textureIndex,
+      materialClass,
+      flatShaded: flat,
+      blendMode,
+    });
   }
 
   return {

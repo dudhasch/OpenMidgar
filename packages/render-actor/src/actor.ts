@@ -112,10 +112,18 @@ const ALPHA_TEST = 0.5;
  * wirkungslos ist oder in die falsche Richtung zeigt — genau das hätte die
  * Kontrollzelle aufgedeckt.
  *
- * Bleibt trotzdem 🟡, weil die Regel eine Bauform ausnutzt und keine Angabe
- * der Datei ist: Ein texturiertes Submesh, das KEIN Aufkleber ist, bekäme den
- * Vorzug ebenfalls. Bei einem Versatz dieser Größe ist das folgenlos, aber es
- * ist eine Annahme und wird als solche geführt.
+ * **Der Rest dieser Annahme ist jetzt geschlossen.** Die frühere Fassung gab
+ * den Vorzug JEDEM texturierten Submesh und führte als offenen Punkt: „Ein
+ * texturiertes Submesh, das KEIN Aufkleber ist, bekäme ihn ebenfalls." Seit
+ * der Schattierungsmodus mitgelesen wird, gibt es dafür ein Merkmal statt
+ * einer Vermutung — Aufkleber sind FLACH schattiert.
+ *
+ * 🟢 **Gemessen** (`joint-overlap-probe`, alle 4060 Bone-Meshes von
+ * `char.lgp`): 626 texturierte Submeshes, davon **618 flach** (die Aufkleber)
+ * und **8 Gouraud**. Genau diese 8 — in `avia`, `avjb`, `bydf`, `byee`,
+ * `hjgc`, `hjgf`, `hrda`, `hrdf` — bekamen den Vorzug bisher zu Unrecht:
+ * texturierte KÖRPERgeometrie, die dadurch minimal vor ihre Nachbarsegmente
+ * gezogen wurde. Die Bedingung lautet deshalb jetzt `textured && flatShaded`.
  */
 const DECAL_OFFSET_FACTOR = -1;
 const DECAL_OFFSET_UNITS = -1;
@@ -134,7 +142,7 @@ function buildTexture(tex: TextureSource): THREE.DataTexture {
 }
 
 /**
- * Feldlicht je Modell (F42) — Sektion-3-Block: drei gerichtete Lichter
+ * Feldlicht je Modell (F42) — Sektion-2-Block: drei gerichtete Lichter
  * (RGB + i16-Richtungsvektor, 4096er-Festkomma) plus Umgebungsfarbe.
  */
 export interface ActorLighting {
@@ -143,41 +151,149 @@ export interface ActorLighting {
 }
 
 /**
- * Beleuchtung in die Vertexfarben einbacken (F42).
+ * Festkommaeinheit der Richtungsvektoren.
  *
- * 🟡 **Lambert-Hypothese**: `farbe · clamp(ambient + Σ max(0, n·l̂ᵢ)·cᵢ)` im
- * Modellraum. Makou Reactor rendert die drei Richtungslichter selbst nicht —
- * es editiert sie nur; die Anwendung ist also Sichtsache. Ohne jede
- * Beleuchtung wirkten unsere Modelle gegenüber dem Original flach und blass
- * (Nutzerbefund „viel satter", Runde 3).
+ * 🟡 **Herkunft** (ADR-027/A2): `ff7_en.exe`, `Field_InstantiateModels`
+ * (0x0063E4EB) bildet jede Komponente als `-(i16) / DAT_007B78AC`; die
+ * Konstante steht im Abbild als `0x45800000` = **4096.0f**. (Der Fließtext der
+ * vorliegenden Dekompilat-Notizen nennt an dieser Stelle 360 — das ist der
+ * Divisor des Skalenfeldes daneben, nicht der der Richtung.)
+ *
+ * 🟢 **Gegenprobe an unseren Daten bestanden** (Auflage A2): Über alle 5454
+ * Modellblöcke liegt der Median der Vektorbeträge bei 4108,5 (IQR 9,2), 96,4 %
+ * innerhalb ±10 % — auf 4096 normierte Vektoren. Zwei unabhängige Quellen,
+ * derselbe Wert.
  */
-function bakeLighting(mesh: MeshSource, licht: ActorLighting): Uint8Array {
-  const out = new Uint8Array(mesh.colors); // Kopie — die Quelle ist geteilt
-  const dirs = licht.lights.map((l) => {
-    const [x, y, z] = l.direction;
-    const len = Math.hypot(x, y, z) || 1;
-    return { x: x / len, y: y / len, z: z / len, c: l.color };
-  });
-  const vertexCount = mesh.positions.length / 3;
-  for (let v = 0; v < vertexCount; v++) {
-    const nx = mesh.normals[v * 3]!;
-    const ny = mesh.normals[v * 3 + 1]!;
-    const nz = mesh.normals[v * 3 + 2]!;
-    let r = licht.ambient[0] / 255;
-    let g = licht.ambient[1] / 255;
-    let b = licht.ambient[2] / 255;
-    for (const d of dirs) {
-      const beitrag = Math.max(0, nx * d.x + ny * d.y + nz * d.z);
-      r += (beitrag * d.c[0]) / 255;
-      g += (beitrag * d.c[1]) / 255;
-      b += (beitrag * d.c[2]) / 255;
-    }
-    const o = v * 4;
-    out[o] = Math.min(255, out[o]! * Math.min(1.25, r));
-    out[o + 1] = Math.min(255, out[o + 1]! * Math.min(1.25, g));
-    out[o + 2] = Math.min(255, out[o + 2]! * Math.min(1.25, b));
+const LIGHT_DIR_SCALE = 1 / 4096;
+
+/**
+ * Vorberechnetes Lichtwerk eines Modells: die 3×3-Matrix `C·D` und die
+ * Umgebungsfarbe. Siehe {@link buildLightSet} für die Herleitung.
+ */
+export interface ActorLightSet {
+  /** `C·D` — Zeile = Farbkanal (R,G,B), Spalte = Richtungskomponente. */
+  colorDir: THREE.Matrix3;
+  /** Umgebungsfarbe, 0…1. */
+  ambient: THREE.Vector3;
+}
+
+/**
+ * Das Lichtwerk des Originals, nachgebaut.
+ *
+ * 🟡 **Herkunft** (ADR-027/A2): Dekompilat `ff7_en.exe`. Die Kette ist
+ * `Field_InstantiateModels` (0x0063E4EB) → `Gfx_CreateLightSet` (0x0069CA53) →
+ * `FUN_0069C5EE` → `FUN_0069C25A` / `FUN_0069C2E8` / `MultiplyMatrix4x4Core`,
+ * je Bone und Bild dann `ApplyLightSet` (0x0069C69F) und der Vertexkern
+ * `FUN_0068DD1E` bzw. `Gfx_LightVertexDiffuse` (0x0068DAE1).
+ *
+ * Aufbau, Schritt für Schritt:
+ *
+ *  1. **Richtung** je Licht L: `d_L = −roh_L / 4096`, danach gedreht mit der
+ *     Feldlichtbasis `(x, y, z) → (x, z, −y)` (im Original `FUN_006390D5`, eine
+ *     Identität mit `m[5]=0, m[6]=1, m[9]=−1, m[10]=0`). Die Vektoren werden
+ *     **nicht** normiert — ihr Betrag ist Teil der Helligkeit.
+ *  2. **Richtungsmatrix** `D`: Zeile L ist `d_L`.
+ *  3. **Farbmatrix** `C`: `C[r][L] = Farbkanal r von Licht L / 255`.
+ *  4. `C·D` — die Matrix, die eine Normale direkt auf ein RGB-Intensitätstripel
+ *     abbildet.
+ *
+ * Je Bone kommt die Bone-Weltrotation dazu (siehe {@link buildMeshObject}), je
+ * Vertex dann `I = C·D·R·n + ambient`.
+ *
+ * **Zwei Abweichungen der bisherigen Lambert-Hypothese sind damit belegt
+ * falsch:** die Richtung war nicht negiert (Licht kam von der Gegenseite), und
+ * es gibt **kein** `max(0, n·l)` je Licht — ein wegzeigendes Licht zieht im
+ * Original ab. Der frühere Deckel `min(1.25, …)` war frei erfunden.
+ */
+export function buildLightSet(licht: ActorLighting): ActorLightSet {
+  const dir: [number, number, number][] = [];
+  for (let l = 0; l < 3; l++) {
+    const roh = licht.lights[l]?.direction ?? [0, 0, 0];
+    const x = -roh[0] * LIGHT_DIR_SCALE;
+    const y = -roh[1] * LIGHT_DIR_SCALE;
+    const z = -roh[2] * LIGHT_DIR_SCALE;
+    dir.push([x, z, -y]); // Feldlichtbasis
   }
-  return out;
+
+  // (C·D)[r][k] = Σ_L (Farbe_L,r / 255) · d_L[k]
+  const e: number[] = new Array<number>(9).fill(0);
+  for (let r = 0; r < 3; r++) {
+    for (let k = 0; k < 3; k++) {
+      let summe = 0;
+      for (let l = 0; l < 3; l++) {
+        summe += ((licht.lights[l]?.color?.[r] ?? 0) / 255) * dir[l]![k]!;
+      }
+      e[r * 3 + k] = summe;
+    }
+  }
+
+  return {
+    // Matrix3.set nimmt zeilenweise entgegen — genau unsere Anordnung.
+    colorDir: new THREE.Matrix3().set(e[0]!, e[1]!, e[2]!, e[3]!, e[4]!, e[5]!, e[6]!, e[7]!, e[8]!),
+    ambient: new THREE.Vector3(
+      licht.ambient[0] / 255,
+      licht.ambient[1] / 255,
+      licht.ambient[2] / 255,
+    ),
+  };
+}
+
+/** Szenenbasis als Quaternion, einmalig — zum Herausrechnen im Lichtpfad. */
+const SCENE_BASIS_INVERSE = new THREE.Quaternion()
+  .setFromRotationMatrix(sceneBasisMatrix())
+  .invert();
+
+// Wiederverwendet — der Lichtpfad läuft je Mesh und Bild, darf nicht allozieren.
+const lightQuatScratch = new THREE.Quaternion();
+const lightMat4Scratch = new THREE.Matrix4();
+const lightMat3Scratch = new THREE.Matrix3();
+
+/**
+ * Der Vertexkern des Originals, als Einschub in three's `MeshBasicMaterial`.
+ *
+ * 🟡 **Herkunft** (ADR-027/A2): `FUN_0068DD1E` — je Kanal
+ * `I < ambient ? ambient : I`, dann `min(farbe · I, 255)`. Die Untergrenze ist
+ * die Umgebungsfarbe, **nicht** null: Der Schalter dafür ist das Kartenfeld
+ * `g_FieldModelNoShadow`, und `Field_InitMapConfigTable` (0x0060EFF9) setzt es
+ * für alle 1200 Karten auf 0 und danach für genau **12** Karten (Liste bei
+ * 0x00905AE0) auf 1. Der Regelfall — 1188 von 1200 Feldkarten — ist damit die
+ * Variante mit Umgebungs-Untergrenze; nur jene 12 nutzen `Gfx_LightVertexDiffuse`
+ * mit Untergrenze null.
+ *
+ * `vColor` ist an dieser Stelle bereits die Vertexfarbe (0…1); das Ergebnis
+ * wird im Fragment mit dem Texel multipliziert — das ist D3DTBLEND_MODULATE,
+ * das `D3D5ApplyRenderState` (0x006A3D30) für Modellgeometrie setzt.
+ */
+function applyLightShader(material: THREE.MeshBasicMaterial, set: ActorLightSet): {
+  matrix: { value: THREE.Matrix3 };
+  ambient: { value: THREE.Vector3 };
+} {
+  const uniforms = {
+    matrix: { value: new THREE.Matrix3().copy(set.colorDir) },
+    ambient: { value: set.ambient },
+  };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFf7LightMatrix = uniforms.matrix;
+    shader.uniforms.uFf7Ambient = uniforms.ambient;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform mat3 uFf7LightMatrix;\nuniform vec3 uFf7Ambient;',
+      )
+      .replace(
+        '#include <color_vertex>',
+        `#include <color_vertex>
+{
+  vec3 ff7Intensity = uFf7LightMatrix * normal + uFf7Ambient;
+  ff7Intensity = max(ff7Intensity, uFf7Ambient);
+  vColor.rgb = min(vColor.rgb * ff7Intensity, vec3(1.0));
+}`,
+      );
+  };
+  // Ohne eigenen Schlüssel gäbe three uns das zwischengespeicherte Programm
+  // einer gleich parametrisierten, aber UNbeleuchteten Basisvariante.
+  material.customProgramCacheKey = () => 'ff7-field-light';
+  return uniforms;
 }
 
 /**
@@ -187,16 +303,50 @@ function bakeLighting(mesh: MeshSource, licht: ActorLighting): Uint8Array {
  * Mesh-Bau ohne den Bone-Baum drumherum. Zwei Implementierungen desselben
  * Materialaufbaus würden sonst unbemerkt auseinanderlaufen.
  */
+/**
+ * Vertexfarben als RGB — die Alphakomponente der `.p`-Farben wird bewusst
+ * fallengelassen.
+ *
+ * 🟡 **Herkunft** (ADR-027/A2): `D3D5BuildVertexArray` (0x006A37F5) übernimmt
+ * das RGB von `polygon_data+0x50` unverändert — „ein glatter dword-Kopiervorgang,
+ * ohne Multiplikation, Skalierung, Gamma oder Vormultiplikation" —, ruft danach
+ * aber `ApplyGlobalColorModulate` (0x006A3BEE) auf, und das überschreibt das
+ * **Alphabyte** jedes Vertex mit `p_hundred+0x5C`. (Dieses Feld heißt in
+ * älteren Notizen „alphaRef"; das ist falsch — der Zeichenzeit-`ALPHAREF` sitzt
+ * auf `+0x40`, und `+0x5C` ist ein erzwungenes Alpha.)
+ *
+ * Für `char.lgp` ist der Wert in 4852 von 4875 Blöcken 255 — das gespeicherte
+ * Vertexalpha erreicht das Gerät also praktisch nie. Behielten wir es bei,
+ * würde three es (als vierkomponentiges Farbattribut) auf die Fragment-
+ * deckkraft multiplizieren und Vertices ausbleichen, die im Original voll
+ * deckend sind.
+ */
+function vertexColorsRgb(colors: Uint8Array): Uint8Array {
+  const anzahl = Math.floor(colors.length / 4);
+  const out = new Uint8Array(anzahl * 3);
+  for (let v = 0; v < anzahl; v++) {
+    out[v * 3] = colors[v * 4]!;
+    out[v * 3 + 1] = colors[v * 4 + 1]!;
+    out[v * 3 + 2] = colors[v * 4 + 2]!;
+  }
+  return out;
+}
+
 export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(bundle.mesh.positions, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(bundle.mesh.normals, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(bundle.mesh.uvs, 2));
-  geometry.setAttribute(
-    'color',
-    new THREE.BufferAttribute(licht ? bakeLighting(bundle.mesh, licht) : bundle.mesh.colors, 4, true),
-  );
+  geometry.setAttribute('color', new THREE.BufferAttribute(vertexColorsRgb(bundle.mesh.colors), 3, true));
   geometry.setIndex(new THREE.BufferAttribute(bundle.mesh.indices, 1));
+
+  const set = licht ? buildLightSet(licht) : null;
+  const lichtUniforms: { matrix: { value: THREE.Matrix3 } }[] = [];
+  const basisMaterial = (opts: THREE.MeshBasicMaterialParameters): THREE.MeshBasicMaterial => {
+    const material = new THREE.MeshBasicMaterial(opts);
+    if (set && opts.vertexColors) lichtUniforms.push(applyLightShader(material, set));
+    return material;
+  };
 
   const materials: THREE.Material[] = [];
   bundle.mesh.submeshes.forEach((sub, s) => {
@@ -205,24 +355,54 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
       const tex = bundle.textures[sub.textureIndex];
       materials.push(
         tex
-          ? new THREE.MeshBasicMaterial({
+          ? basisMaterial({
               map: buildTexture(tex),
-              // F42: Textur × Vertexfarbe — erst mit der Modulation wirken
-              // die Modelle so gesättigt wie im Original.
+              // Textur × Vertexfarbe. 🟡 Beleg (ADR-027/A2):
+              // `D3D5ApplyRenderState` (0x006A3D30) setzt für Modellgeometrie
+              // `D3DRENDERSTATE_TEXTUREMAPBLEND = D3DTBLEND_MODULATE` — das
+              // Endergebnis ist genau Texel × Vertexfarbe. Eine Verdopplung
+              // (`*2`) oder eine 128-=-1,0-Halbskala, wie sie PSX-Pipelines
+              // kennen, gibt es im PC-Build an keiner Stelle.
               vertexColors: true,
               alphaTest: ALPHA_TEST,
-              polygonOffset: true,
-              polygonOffsetFactor: DECAL_OFFSET_FACTOR,
-              polygonOffsetUnits: DECAL_OFFSET_UNITS,
+              // Nur echte Aufkleber (flach schattiert) — s. DECAL_OFFSET_*.
+              polygonOffset: sub.flatShaded,
+              polygonOffsetFactor: sub.flatShaded ? DECAL_OFFSET_FACTOR : 0,
+              polygonOffsetUnits: sub.flatShaded ? DECAL_OFFSET_UNITS : 0,
             })
           : new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR }),
       );
     } else {
-      materials.push(new THREE.MeshBasicMaterial({ vertexColors: true }));
+      materials.push(basisMaterial({ vertexColors: true }));
     }
   });
   const mesh = new THREE.Mesh(geometry, materials);
   mesh.frustumCulled = false;
+
+  if (set && lichtUniforms.length > 0) {
+    /**
+     * Die Lichtmatrix hängt an der **Weltdrehung des Bones** und ändert sich
+     * daher je Bild — mit jedem Schritt der Figur und jeder Drehung.
+     *
+     * 🟡 **Herkunft** (ADR-027/A2): `Anim_DrawSkeletonFrame` (0x006840DA) ruft
+     * je Bone `ApplyLightSet` mit der eben berechneten Bone-Weltmatrix, und
+     * `FUN_0069C3D7` bildet daraus `M = (C·D) · Wᵀ`. Weil `W` zeilenvektorisch
+     * abgelegt ist, ist `Wᵀ·n` die Normale im Weltraum — die Beleuchtung findet
+     * also im FF7-Weltraum statt, nicht im Modellraum.
+     *
+     * Deshalb `onBeforeRender`: three hat dort die Weltmatrix bereits
+     * aktualisiert, und es braucht keinerlei Verdrahtung beim Aufrufer. Die
+     * Szenenbasis (ADR-009) wird herausgerechnet, die Blickrichtung der Figur
+     * NICHT — sie steckt im Original ebenso in `W`. Der Weg über das Quaternion
+     * lässt zugleich die Modellskalierung draußen, die sonst als Helligkeits-
+     * faktor durchschlüge.
+     */
+    mesh.onBeforeRender = (): void => {
+      mesh.getWorldQuaternion(lightQuatScratch).premultiply(SCENE_BASIS_INVERSE);
+      lightMat3Scratch.setFromMatrix4(lightMat4Scratch.makeRotationFromQuaternion(lightQuatScratch));
+      for (const u of lichtUniforms) u.matrix.value.multiplyMatrices(set.colorDir, lightMat3Scratch);
+    };
+  }
   return mesh;
 }
 

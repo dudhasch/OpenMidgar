@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Farbprobe — Feldmodell-Farbpfad</title>
+    <style>
+      body { font: 13px/1.5 monospace; background: #111; color: #ddd; padding: 16px; }
+      canvas { border: 1px solid #444; image-rendering: pixelated; }
+      pre { white-space: pre-wrap; }
+      .ok { color: #6f6; }
+      .bad { color: #f66; }
+    </style>
+  </head>
+  <body>
+    <h1>Farbprobe</h1>
+    <p>
+      Rendert ein Fixture-Modell durch den echten Renderpfad und vergleicht die
+      zurückgelesenen Pixel mit der auf der CPU nachgerechneten Erwartung des
+      Originals. Keine Originaldaten nötig.
+    </p>
+    <canvas id="view" width="256" height="256"></canvas>
+    <pre id="out">läuft …</pre>
+    <script type="module" src="./src/colorprobe.ts"></script>
+  </body>
+</html>

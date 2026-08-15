@@ -9,8 +9,10 @@ import {
   boneModelMatrix,
   buildActor,
   buildFallbackActor,
+  buildLightSet,
   MODEL_FRONT_OFFSET_DEG,
   setActorFacing,
+  type ActorLighting,
 } from './actor.js';
 
 /**
@@ -310,8 +312,11 @@ describe('Animationsbindung & Meshes', () => {
 
   it('texturierte Flächen bekommen Farbschlüssel und Aufkleber-Versatz', () => {
     const sk = skeleton();
-    // Zwei Flächen: eine texturierte (Aufkleber) und eine vertexgefärbte
-    // (Grundgeometrie) — nur die erste darf die Sonderbehandlung erhalten.
+    // Drei Flächen: ein echter Aufkleber (texturiert UND flach, Klasse T),
+    // texturierte KÖRPERgeometrie (texturiert, aber Gouraud — Klasse H) und
+    // vertexgefärbte Grundgeometrie. Nur die erste darf den Tiefenvorzug
+    // bekommen. Die mittlere ist der Fall, den die frühere Regel („jedes
+    // texturierte Submesh") zu Unrecht traf; im Bestand sind das 8 Submeshes.
     const { value: mesh } = parseP(
       composeP({
         vertices: [
@@ -321,9 +326,15 @@ describe('Animationsbindung & Meshes', () => {
           [0, 0, 1],
           [1, 0, 1],
           [0, 1, 1],
+          [0, 0, 2],
+          [1, 0, 2],
+          [0, 1, 2],
         ],
         normals: [[0, 0, 1]],
         texCoords: [
+          [0, 0],
+          [1, 0],
+          [0, 1],
           [0, 0],
           [1, 0],
           [0, 1],
@@ -336,6 +347,16 @@ describe('Animationsbindung & Meshes', () => {
             textured: true,
             textureIndex: 0,
             texCoordStart: 0,
+            materialClass: 2, // T — flach, der Aufkleber
+          },
+          {
+            vertexStart: 6,
+            vertexCount: 3,
+            polys: [{ v: [0, 1, 2], n: [0, 0, 0] }],
+            textured: true,
+            textureIndex: 0,
+            texCoordStart: 3,
+            materialClass: 4, // H — Gouraud, texturierte Körpergeometrie
           },
           { vertexStart: 3, vertexCount: 3, polys: [{ v: [0, 1, 2], n: [0, 0, 0] }] },
         ],
@@ -360,19 +381,108 @@ describe('Animationsbindung & Meshes', () => {
     const actor = buildActor(sk, (bone) => (bone === 1 ? [{ mesh: mesh!, textures: [tex!] }] : []));
     const drei = actor.boneGroups[1]!.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh;
     const mats = drei.material as THREE.MeshBasicMaterial[];
-    expect(mats).toHaveLength(2);
+    expect(mats).toHaveLength(3);
 
-    // Texturiert: Farbschlüssel scharf, Tiefenvorzug aktiv.
+    // Aufkleber (texturiert + flach): Farbschlüssel scharf, Tiefenvorzug aktiv.
     expect(mats[0]!.alphaTest).toBeGreaterThan(0);
     expect(mats[0]!.polygonOffset).toBe(true);
     expect(mats[0]!.polygonOffsetFactor).toBeLessThan(0); // zur Kamera hin
     expect(mats[0]!.map).not.toBeNull();
 
+    // Texturierte KÖRPERgeometrie (Gouraud): Textur und Farbschlüssel ja,
+    // Tiefenvorzug NEIN. Das ist die Gegenprobe zur verschärften Regel — mit
+    // der alten Fassung („jedes texturierte Submesh") wäre sie rot.
+    expect(mats[1]!.map).not.toBeNull();
+    expect(mats[1]!.alphaTest).toBeGreaterThan(0);
+    expect(mats[1]!.polygonOffset).toBe(false);
+
     // Vertexgefärbt: KEINE Sonderbehandlung. Ohne diese Gegenprobe wäre der
     // Test auch dann grün, wenn jedes Material den Versatz bekäme — und dann
     // hätte er über Aufkleber nichts ausgesagt.
-    expect(mats[1]!.polygonOffset).toBe(false);
-    expect(mats[1]!.alphaTest).toBe(0);
-    expect(mats[1]!.vertexColors).toBe(true);
+    expect(mats[2]!.polygonOffset).toBe(false);
+    expect(mats[2]!.alphaTest).toBe(0);
+    expect(mats[2]!.vertexColors).toBe(true);
+  });
+});
+
+/**
+ * Das Lichtwerk des Originals (🟡 ADR-027/A2, Dekompilat `ff7_en.exe`:
+ * `Field_InstantiateModels` → `Gfx_CreateLightSet` → `FUN_0069C2E8`/`FUN_0069C25A`).
+ * Geprüft wird die Matrix, nicht die Optik: `I = C·D·n + ambient`.
+ */
+describe('Feldlicht', () => {
+  const licht = (
+    lights: { color: [number, number, number]; direction: [number, number, number] }[],
+    ambient: [number, number, number] = [0, 0, 0],
+  ): ActorLighting => ({ lights, ambient });
+
+  /** Intensitätstripel für eine Normale — dieselbe Rechnung wie im Shader. */
+  function intensity(l: ActorLighting, n: [number, number, number]): [number, number, number] {
+    const set = buildLightSet(l);
+    const v = new THREE.Vector3(...n).applyMatrix3(set.colorDir).add(set.ambient);
+    return [v.x, v.y, v.z];
+  }
+
+  it('negiert die Richtung, teilt durch 4096 und dreht in die Feldlichtbasis', () => {
+    // Roh (0, 4096, 0) → negiert/skaliert (0, −1, 0) → Basis (x, z, −y) = (0, 0, 1).
+    const l = licht([{ color: [255, 255, 255], direction: [0, 4096, 0] }]);
+    // Normale entlang +z trifft das Licht voll.
+    expect(intensity(l, [0, 0, 1])[0]).toBeCloseTo(1);
+    // Die Gegenrichtung liefert −1 — es gibt KEIN max(0, n·l) je Licht.
+    expect(intensity(l, [0, 0, -1])[0]).toBeCloseTo(-1);
+    // Die beiden anderen Achsen bleiben unbeteiligt.
+    expect(intensity(l, [1, 0, 0])[0]).toBeCloseTo(0);
+    expect(intensity(l, [0, 1, 0])[0]).toBeCloseTo(0);
+  });
+
+  it('Gegenprobe zum Vorzeichen: ohne Negation zeigte das Licht auf die falsche Seite', () => {
+    const l = licht([{ color: [255, 255, 255], direction: [0, 0, 4096] }]);
+    // Roh (0,0,4096) → (0,0,−1) → Basis (x, z, −y) = (0, −1, 0).
+    // Die beleuchtete Seite ist damit −y, nicht +y.
+    expect(intensity(l, [0, -1, 0])[0]).toBeCloseTo(1);
+    expect(intensity(l, [0, 1, 0])[0]).toBeCloseTo(-1);
+  });
+
+  it('Lichter summieren sich VORZEICHENBEHAFTET — gegenläufige heben sich auf', () => {
+    const l = licht([
+      { color: [255, 255, 255], direction: [0, 4096, 0] },
+      { color: [255, 255, 255], direction: [0, -4096, 0] },
+      { color: [0, 0, 0], direction: [0, 0, 0] },
+    ]);
+    expect(intensity(l, [0, 0, 1])[0]).toBeCloseTo(0);
+    expect(intensity(l, [0, 0, -1])[0]).toBeCloseTo(0);
+  });
+
+  it('trennt die Farbkanäle: Zeile r der Matrix trägt nur Kanal r der Lichter', () => {
+    const l = licht(
+      [
+        { color: [255, 0, 0], direction: [0, 4096, 0] }, // rein rot, Richtung +z
+        { color: [0, 0, 255], direction: [0, 0, -4096] }, // rein blau, Richtung +y
+        { color: [0, 0, 0], direction: [0, 0, 0] },
+      ],
+      [0, 0, 0],
+    );
+    const [r1, g1, b1] = intensity(l, [0, 0, 1]);
+    expect(r1).toBeCloseTo(1);
+    expect(g1).toBeCloseTo(0);
+    expect(b1).toBeCloseTo(0);
+
+    const [r2, g2, b2] = intensity(l, [0, 1, 0]);
+    expect(r2).toBeCloseTo(0);
+    expect(g2).toBeCloseTo(0);
+    expect(b2).toBeCloseTo(1);
+  });
+
+  it('Umgebungsfarbe ist der additive Sockel, auf 0…1 skaliert', () => {
+    const l = licht([{ color: [0, 0, 0], direction: [0, 0, 0] }], [128, 64, 32]);
+    const [r, g, b] = intensity(l, [0, 0, 1]);
+    expect(r).toBeCloseTo(128 / 255);
+    expect(g).toBeCloseTo(64 / 255);
+    expect(b).toBeCloseTo(32 / 255);
+  });
+
+  it('unnormierte Richtungen bleiben unnormiert — der Betrag ist Helligkeit', () => {
+    const halb = licht([{ color: [255, 255, 255], direction: [0, 2048, 0] }]);
+    expect(intensity(halb, [0, 0, 1])[0]).toBeCloseTo(0.5);
   });
 });

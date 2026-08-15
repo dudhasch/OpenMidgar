@@ -76,6 +76,21 @@ export interface PGroupSpec {
   textureIndex?: number | undefined;
   /** Start in den TexCoord-Pool (nur texturierte Gruppen). */
   texCoordStart?: number | undefined;
+  /**
+   * Materialklasse (`p_group+0x00`): 0 C, 1 G, 2 T, 3 D, 4 H — sie entscheidet
+   * über FLAT (0/2/3) oder GOURAUD (1/4). Default 1 (Gouraud).
+   */
+  materialClass?: 0 | 1 | 2 | 3 | 4 | undefined;
+  /**
+   * Schattierung des zugehörigen Renderstate-Blocks (`p_hundred+0x24`):
+   * 1 D3DSHADE_FLAT, 2 D3DSHADE_GOURAUD. Ohne Angabe aus `materialClass`
+   * abgeleitet — genau wie `Pfile_BuildHundredFromMaterial` es täte. Setze 0,
+   * um einen leeren Block zu schreiben und den Rückfall auf die Klasse zu
+   * prüfen.
+   */
+  shadeMode?: 0 | 1 | 2 | undefined;
+  /** FF7-Blendmodus des Blocks (`p_hundred+0x44`); Default 4 (deckend). */
+  blendMode?: number | undefined;
 }
 
 export interface PSpec {
@@ -155,10 +170,18 @@ export function composeP(spec: PSpec): Uint8Array {
     view.setUint16(o + 12, p.n[2], true);
     o += 24;
   }
-  o += nH * 100; // Renderstate-Blöcke (roh 0)
+  // Renderstate-Blöcke ("hundreds"), einer je Gruppe und in gleicher
+  // Reihenfolge — so erzeugt sie `Pfile_BuildGroupsFromFaces` im Original.
+  for (const g of spec.groups) {
+    const klasse = g.materialClass ?? 1;
+    const shade = g.shadeMode ?? (klasse === 1 || klasse === 4 ? 2 : 1);
+    view.setUint32(o + 0x24, shade, true); // D3DSHADE_FLAT 1 / GOURAUD 2
+    view.setUint32(o + 0x44, g.blendMode ?? 4, true); // FF7-Blendmodus
+    o += 100;
+  }
   let polyCursor = 0;
   for (const g of spec.groups) {
-    view.setUint32(o + 0, 1, true); // primitiveType
+    view.setUint32(o + 0, g.materialClass ?? 1, true); // Materialklasse C/G/T/D/H
     view.setUint32(o + 4, polyCursor, true);
     view.setUint32(o + 8, g.polys.length, true);
     view.setUint32(o + 12, g.vertexStart, true);

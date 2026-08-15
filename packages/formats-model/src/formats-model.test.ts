@@ -192,6 +192,104 @@ describe('.p', () => {
     expect(result.value).toBeNull();
     expect(result.diagnostics.map((d) => d.code)).toContain('E-P-SIZE');
   });
+
+  it('Renderstate-Block schlägt die Materialklasse — er ist, was die Engine liest', () => {
+    // Widersprüchliche Datei: Klasse sagt GOURAUD, der Block sagt FLAT.
+    // Im Bestand kommt das nicht vor (der Konverter erzeugt beide aus
+    // demselben Materialsatz), aber es trennt die beiden Quellen sauber.
+    const spec = meshSpec();
+    spec.groups[0]!.materialClass = 1; // G → Klasse sagt Gouraud
+    spec.groups[0]!.shadeMode = 1; // Block sagt D3DSHADE_FLAT
+    spec.groups[1]!.materialClass = 0; // C → Klasse sagt flach
+    spec.groups[1]!.shadeMode = 2; // Block sagt D3DSHADE_GOURAUD
+    const { value } = parseP(composeP(spec), 'fix.p');
+    expect(value!.submeshes.map((s) => s.flatShaded)).toEqual([true, false]);
+  });
+
+  it('ohne Renderstate-Block fällt die Schattierung auf die Materialklasse zurück', () => {
+    const spec = meshSpec();
+    spec.groups[0]!.materialClass = 0; // C
+    spec.groups[0]!.shadeMode = 0; // Block bleibt leer
+    spec.groups[1]!.materialClass = 4; // H
+    spec.groups[1]!.shadeMode = 0;
+    const { value } = parseP(composeP(spec), 'fix.p');
+    expect(value!.submeshes.map((s) => s.flatShaded)).toEqual([true, false]);
+  });
+
+  it('Blendmodus des Blocks wird mitgeführt', () => {
+    const spec = meshSpec();
+    spec.groups[0]!.blendMode = 1;
+    spec.groups[1]!.blendMode = 4;
+    const { value } = parseP(composeP(spec), 'fix.p');
+    expect(value!.submeshes.map((s) => s.blendMode)).toEqual([1, 4]);
+  });
+
+  it('Materialklasse wird gelesen und trennt FLAT von GOURAUD', () => {
+    const spec = meshSpec();
+    spec.groups[0]!.materialClass = 1; // G
+    spec.groups[1]!.materialClass = 2; // T — im Original D3DSHADE_FLAT
+    const { value } = parseP(composeP(spec), 'fix.p');
+    expect(value!.submeshes.map((s) => s.materialClass)).toEqual([1, 2]);
+    expect(value!.submeshes.map((s) => s.flatShaded)).toEqual([false, true]);
+  });
+
+  it('FLAT-Gruppe: Farbe UND Normale aller drei Ecken stammen von Ecke 0', () => {
+    const spec = meshSpec();
+    // Beide Gruppen flach; jede Ecke hat im Fixture eine andere Farbe, und
+    // Gruppe 1 nutzt unterschiedliche Normalenindizes je Ecke.
+    spec.groups[0]!.materialClass = 0; // C
+    spec.groups[0]!.polys[0]!.n = [0, 1, 0];
+    spec.groups[1]!.materialClass = 2; // T
+    spec.groups[1]!.polys[0]!.n = [1, 0, 1];
+
+    const { value } = parseP(composeP(spec), 'fix.p');
+    const mesh = value!;
+
+    for (const [g, gruppe] of spec.groups.entries()) {
+      const sub = mesh.submeshes[g]!;
+      const ecke0 = mesh.indices[sub.start]!;
+      const erwarteteFarbe = spec.vertexColors![gruppe.vertexStart + gruppe.polys[0]!.v[0]!]!;
+      const erwarteteNormale = spec.normals[gruppe.polys[0]!.n[0]!]!;
+
+      for (let k = 0; k < 3; k++) {
+        const u = mesh.indices[sub.start + k]!;
+        expect([mesh.colors[u * 4], mesh.colors[u * 4 + 1], mesh.colors[u * 4 + 2]]).toEqual([
+          erwarteteFarbe[0],
+          erwarteteFarbe[1],
+          erwarteteFarbe[2],
+        ]);
+        expect(mesh.normals[u * 3]).toBeCloseTo(erwarteteNormale[0]);
+        expect(mesh.normals[u * 3 + 1]).toBeCloseTo(erwarteteNormale[1]);
+        expect(mesh.normals[u * 3 + 2]).toBeCloseTo(erwarteteNormale[2]);
+      }
+      // Die Position bleibt je Ecke echt — nur Schattierungsquelle wird geteilt.
+      expect(ecke0).toBe(mesh.indices[sub.start]!);
+      const positionen = [0, 1, 2].map((k) => {
+        const u = mesh.indices[sub.start + k]!;
+        return [mesh.positions[u * 3], mesh.positions[u * 3 + 1], mesh.positions[u * 3 + 2]];
+      });
+      expect(positionen).toEqual(
+        gruppe.polys[0]!.v.map((rel) => spec.vertices[gruppe.vertexStart + rel]!.map((c) => c)),
+      );
+    }
+  });
+
+  it('GOURAUD-Gruppe behält die Ecknormale — Gegenprobe zur FLAT-Einbackung', () => {
+    const spec = meshSpec();
+    spec.groups[0]!.materialClass = 1;
+    spec.groups[0]!.polys[0]!.n = [0, 1, 0];
+    const { value } = parseP(composeP(spec), 'fix.p');
+    const mesh = value!;
+    const sub = mesh.submeshes[0]!;
+    const normaleVon = (k: number): number => {
+      const u = mesh.indices[sub.start + k]!;
+      return mesh.normals[u * 3]!;
+    };
+    // Normalenindex 1 = (1,0,0), Index 0 = (0,0,1) → x-Komponente trennt sie.
+    expect(normaleVon(0)).toBeCloseTo(0);
+    expect(normaleVon(1)).toBeCloseTo(1);
+    expect(normaleVon(2)).toBeCloseTo(0);
+  });
 });
 
 describe('.tex', () => {
