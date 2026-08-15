@@ -245,15 +245,58 @@ export interface MateriaSlot {
   ap: number;
 }
 
+/**
+ * 🟢 Sentinel für „Maximum noch nicht berechnet" bei @56/@58.
+ *
+ * Das Original füllt diese Felder erst beim Laden eines Kampfes, in den
+ * meisten Menübildern und bei jeder Gruppenänderung. Wer nie in der Gruppe
+ * war, behält den Sentinel. **Gemessen an den echten Spielständen: 24 von 63
+ * benannten Records** (38 %) — das ist kein Randfall, sondern der Normalfall
+ * für Figuren, die noch nicht mitgekämpft haben.
+ */
+export const MAXIMUM_UNBERECHNET = 0xffff;
+
+/**
+ * Wirksames Maximum: das berechnete, sonst der Basiswert.
+ *
+ * Steht bewusst als eine Funktion da und nicht zweimal als Bedingung — die
+ * Klemmung im Schreibpfad (`setCharacterPoints`) braucht dieselbe Regel wie
+ * der Leser, und zwei Kopien wären zwei Wahrheiten. Ohne sie klemmte ein
+ * „auf voll heilen" gegen 65535, also gar nicht.
+ */
+export function wirksamesMaximum(roh: number, basis: number): number {
+  return roh === MAXIMUM_UNBERECHNET ? basis : roh;
+}
+
 export interface CharacterRecord {
   index: number;
   id: number;
   name: string;
   level: number;
   hp: number;
+  /**
+   * 🟢 **Wirksames** HP-Maximum. Das ist @56, **außer** die Datei trägt dort
+   * `0xFFFF` — dann der Basiswert @46. Siehe {@link maximaBerechnet}.
+   */
   hpMax: number;
   mp: number;
+  /** 🟢 Wirksames MP-Maximum, gleiche Regel wie {@link hpMax} (@58 / @50). */
   mpMax: number;
+  /** 🟢 Basiswert ohne Ausrüstung/Materia (@46), roh. */
+  hpBasis: number;
+  /** 🟢 Basiswert ohne Ausrüstung/Materia (@50), roh. */
+  mpBasis: number;
+  /**
+   * 🟢 Ob die Datei bei @56/@58 **berechnete** Maxima trägt.
+   *
+   * `0xFFFF` heißt „noch nicht berechnet", nicht 65535. Das Original füllt die
+   * Felder erst beim Laden eines Kampfes, in den meisten Menübildern und bei
+   * jeder Gruppenänderung — Figuren, die nie in der Gruppe waren, behalten den
+   * Sentinel. **Gemessen an den echten Spielständen: 24 von 63 benannten
+   * Records** (38 %) tragen ihn, quer über mehrere Slots. Ohne diese
+   * Unterscheidung ginge eine Figur mit `maxHp = 65535` in den Kampf.
+   */
+  maximaBerechnet: boolean;
   /** 🟡 Sechs Grundwerte in Speicherreihenfolge, bewusst unbenannt. */
   stats: number[];
   weapon: number;
@@ -373,7 +416,23 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
   const u32 = (o: number): number => (base + o + 4 <= slot.length ? view.getUint32(base + o, true) : 0);
 
   const name = readName(view, slot, base + CHAR.name);
-  const hpMax = u16(CHAR.hpMax);
+
+  /**
+   * 🟢 `0xFFFF` bei @56/@58 heißt „noch nicht berechnet", nicht 65535 — dann
+   * gilt der Basiswert. Gemessen an den echten Spielständen: **24 von 63**
+   * benannten Records tragen den Sentinel, und zwar an BEIDEN Feldern
+   * gleichzeitig, nie an nur einem. Die Fallunterscheidung steht trotzdem je
+   * Feld, weil „nie einzeln" eine Beobachtung über diesen Bestand ist und
+   * keine Zusicherung des Formats.
+   */
+  const hpBasis = u16(CHAR.hpBasis);
+  const mpBasis = u16(CHAR.mpBasis);
+  const hpMaxRoh = u16(CHAR.hpMax);
+  const mpMaxRoh = u16(CHAR.mpMax);
+  const maximaBerechnet =
+    hpMaxRoh !== MAXIMUM_UNBERECHNET && mpMaxRoh !== MAXIMUM_UNBERECHNET;
+  const hpMax = wirksamesMaximum(hpMaxRoh, hpBasis);
+
   return {
     index,
     id: u8(CHAR.id),
@@ -382,7 +441,10 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
     hp: u16(CHAR.hp),
     hpMax,
     mp: u16(CHAR.mp),
-    mpMax: u16(CHAR.mpMax),
+    mpMax: wirksamesMaximum(mpMaxRoh, mpBasis),
+    hpBasis,
+    mpBasis,
+    maximaBerechnet,
     stats,
     weapon: u8(CHAR.weapon),
     armor: u8(CHAR.armor),

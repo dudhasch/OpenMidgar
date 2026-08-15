@@ -18,7 +18,16 @@ import type { PartyMemberSpec } from './session.js';
  * gedeutet) — bis dahin gehen die Grundwerte unverstärkt in den 🔵-Formelsatz.
  */
 
-/** Kapselt die 🟡-Reihenfolge-Deutung des stats-Blocks an genau EINER Stelle. */
+/**
+ * Kapselt die 🟡-Reihenfolge-Deutung des stats-Blocks an genau EINER Stelle.
+ *
+ * 🟢 `record.hpMax`/`record.mpMax` sind bereits die **wirksamen** Maxima: Der
+ * Leser in `formats-save` löst den Sentinel `0xFFFF` („noch nicht berechnet",
+ * in 24 von 63 echten Records) gegen den Basiswert @46/@50 auf. Ohne das ginge
+ * eine Figur, die noch nie in der Gruppe war, mit `maxHp = 65535` in den
+ * Kampf. Die Auflösung gehört bewusst in den Leser und nicht hierher — sonst
+ * müsste sie jeder Verbraucher wiederholen, und einer würde sie vergessen.
+ */
 export function specFromRecord(record: CharacterRecord): PartyMemberSpec {
   const [strength = 0, vitality = 0, magic = 0, spirit = 0, dexterity = 0, luck = 0] = record.stats;
   return {

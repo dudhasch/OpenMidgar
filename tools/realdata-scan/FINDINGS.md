@@ -1803,3 +1803,68 @@ Wurzelzweig.
 *Proben: `tools/realdata-scan/src/locale-probe.rdtest.ts` (3 Fälle) ·
 `packages/io/src/locale.test.ts` (15 Fälle) · gemeinsame Pfadauflösung in
 `tools/realdata-scan/src/real-pfade.ts`.*
+
+---
+
+## F12-Nachtrag — `0xFFFF` bei @56/@58 ist eine Marke, kein Wert (2026-08-15)
+
+F12 hat die abgeleiteten Maxima bei @56/@58 belegt. Was dabei offen blieb: Was
+bedeutet dort `0xFFFF`? Der naheliegende Schluss „65535" ist falsch — und er
+war im Code wirksam.
+
+### Gemessen an den echten Spielständen
+
+| | |
+|---|---:|
+| Slots | 7 |
+| benannte Charakterrecords | **63** |
+| davon `0xFFFF` an **beiden** Feldern | **24** (38,1 %) |
+| davon `0xFFFF` an nur **einem** Feld | **0** |
+| Maximum **unter** dem Basiswert | 18 |
+| größtes **berechnetes** Maximum | **9999** |
+
+`0xFFFF` heißt „noch nicht berechnet". Das Original füllt die Felder erst bei
+Kampfeintritt, in den meisten Menübildern und bei jeder Gruppenänderung; wer nie
+in der Gruppe war, behält die Marke. Mit 38 % ist das kein Randfall.
+
+### Die Gütefunktion ist die Ordnung, nicht die Häufigkeit
+
+Ein Zähler allein belegt nichts. Entscheidend ist die Ordnungsaussage
+`aktuell ≤ Maximum`, über die F12 die Feldlage überhaupt bestimmt hat:
+
+- **roh:** 63/63 bestanden — **trivial**, weil 65535 jeden Wert durchlässt.
+- **aufgelöst:** 63/63 bestanden — und jetzt sagt es etwas.
+
+Dass 65535 wirklich eine Marke ist, zeigt der Bestand selbst: Das größte
+*berechnete* Maximum ist **9999**, die dokumentierte Obergrenze des Originals.
+65535 liegt um Faktor 6,5 darüber und ist im Wertebereich unerreichbar.
+
+### Zwei Fehler, die das im Code verursacht hat
+
+1. **Lesend:** `specFromRecord` reichte `maxHp = 65535` in den Kampf, sobald
+   eine Figur mit der Marke in der Gruppe stand.
+2. **Schreibend, und das war der unauffälligere:** `setCharacterPoints` klemmte
+   gegen den Rohwert. Bei der Marke klemmte es gegen 65535 — also gar nicht.
+   Ein „auf voll heilen" hätte 65535 in die aktuellen HP geschrieben und damit
+   genau die Ordnungsaussage zerstört, auf der F12 beruht.
+
+Beide gehen jetzt über **eine** Funktion (`wirksamesMaximum` in
+`formats-save/src/savemap.ts`); zwei Kopien wären zwei Wahrheiten.
+
+### Was ausdrücklich NICHT eingebaut wurde
+
+Eine Wache „Maximum ≥ Basiswert" wäre falsch: **18 von 63** Records haben ein
+Maximum *unter* dem Basiswert, weil Magie-Materia HP nach unten und MP nach oben
+handelt. Der Bestand hätte eine solche Wache sofort widerlegt — sie steht
+deshalb als Negativbefund in der Probe.
+
+### Dauerbefund
+
+Die Marke tritt in diesem Bestand **nie einzeln** auf; beide Felder werden
+gemeinsam gefüllt. Das ist eine Beobachtung über diesen Bestand, **keine
+Zusicherung des Formats** — der Code behandelt die Felder weiterhin getrennt.
+Schlägt die Erwartung `sentinelEinzeln === 0` je fehl, ist das die interessante
+Nachricht und kein Regressionsschaden.
+
+*Proben: `tools/realdata-scan/src/maxima-sentinel.rdtest.ts` (2 Fälle) ·
+`packages/formats-save/src/maxima.test.ts` (8 Fälle).*

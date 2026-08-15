@@ -12,6 +12,7 @@ import {
   PLAYTIME_OFFSET,
   PLAYTIME_OFFSET_SAVEMAP,
   SAVEMAP_SLOT_LEN,
+  wirksamesMaximum,
 } from './savemap.js';
 
 /**
@@ -279,6 +280,12 @@ export function setPlaytimeSeconds(slot: Uint8Array, sekunden: number): WriteRes
  * Die Klemmung ist keine Bequemlichkeit: „aktuell ≤ Maximum" ist eine der
  * Ordnungsaussagen, über die die Feldlage überhaupt belegt wurde — ein
  * Schreibpfad, der sie verletzt, würde die eigene Messgrundlage zerstören.
+ *
+ * 🟢 Deshalb muss hier {@link wirksamesMaximum} stehen und nicht der Rohwert:
+ * Trägt @56 den Sentinel `0xFFFF` („noch nicht berechnet", in 24 von 63 echten
+ * Records), klemmte die Rohlesung gegen 65535 — also gar nicht, und ein
+ * „auf voll heilen" schriebe 65535 in die aktuellen HP. Genau die
+ * Ordnungsaussage, die dieser Kommentar schützen soll, wäre verletzt.
  */
 export function setCharacterPoints(
   slot: Uint8Array,
@@ -294,8 +301,9 @@ export function setCharacterPoints(
   const out = kopie(slot);
   const v = sicht(out);
   const maxAt = basis + (kind === 'hp' ? CHAR.hpMax : CHAR.mpMax);
+  const basisAt = basis + (kind === 'hp' ? CHAR.hpBasis : CHAR.mpBasis);
   const at = basis + (kind === 'hp' ? CHAR.hp : CHAR.mp);
-  const max = v.getUint16(maxAt, true);
+  const max = wirksamesMaximum(v.getUint16(maxAt, true), v.getUint16(basisAt, true));
   v.setUint16(at, Math.max(0, Math.min(max, Math.round(wert))), true);
   return { ok: true, slot: out };
 }
