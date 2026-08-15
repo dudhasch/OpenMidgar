@@ -16,6 +16,10 @@ den Teil davon, der falsch ist.
 
 ## Die Abgrenzung, die diesen Bogen überhaupt zulässig macht
 
+> ⚠️ **ÜBERHOLT durch [ADR-028](ADR-028-EIGENE-CODEANALYSE.md) (2026-08-15).** Zusatzregel 4 ist
+> **aufgehoben** — nicht abgeschwächt, nicht präzisiert. Der folgende Absatz gibt den Stand
+> vor ADR-028 wieder und bleibt nur als Beleg der Entwicklung stehen.
+
 ROADMAP-S27-S36 Zusatzregel 4 lautet: *„Kein Disassemblieren der
 Original-EXE."* Diese Regel bleibt **unverändert in Kraft**. Sie wird hier
 nicht aufgeweicht, sondern **präzisiert**, weil sie zwei sehr verschiedene
@@ -227,7 +231,7 @@ falsch ausgerichtet, und die 80 % sind der Beweis dafür, nicht dagegen.
 | **S31** (ATB, Formeln) | Bekommt belegte Konstanten und wird dadurch überhaupt erst falsifizierbar |
 | **S34/S35** (Minigames) | Geringster erwarteter Ertrag, ehrlich als solcher geführt |
 | **S27-S36 Zusatzregel 3** | Wird durch diesen Bogen **teilweise widerlegt**: „liegt in der EXE" heißt nicht automatisch „nicht zugänglich" |
-| **S27-S36 Zusatzregel 4** | Bleibt in Kraft, präzisiert um die Grenze Codeanalyse ↔ Datenextraktion |
+| **S27-S36 Zusatzregel 4** | ~~Bleibt in Kraft, präzisiert um die Grenze Codeanalyse ↔ Datenextraktion~~ — **aufgehoben durch [ADR-028](ADR-028-EIGENE-CODEANALYSE.md)** |
 
 **Empfohlene Lage:** vorziehbar, unabhängig von S27–S36, frühestens nach S20
 (Fingerprint-Verfahren) und sinnvollerweise **vor** S30, damit das

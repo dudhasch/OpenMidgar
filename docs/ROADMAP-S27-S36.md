@@ -311,10 +311,18 @@ Nummer**.
 
 ## Was dieser Bogen bewusst offen lässt
 
+> ⚠️ **ÜBERHOLT durch [ADR-028](ADR-028-EIGENE-CODEANALYSE.md) (2026-08-15).** Zusatzregel 4 ist
+> **aufgehoben** — nicht abgeschwächt, nicht präzisiert. Der folgende Absatz gibt den Stand
+> vor ADR-028 wieder und bleibt nur als Beleg der Entwicklung stehen.
+
 - **Byte-Gleichheit mit dem Original** bei Schadenszahlen, ATB-Timing und
   Minigame-Physik. Sie ist ohne EXE-Analyse nicht erreichbar, und
   EXE-Analyse ist per Zusatzregel 4 ausgeschlossen. Wer sie will, ändert die
   Projektgrundlage, nicht die Roadmap.
+
+  **Stand seit ADR-028:** Die Projektgrundlage *wurde* geändert — der
+  Eigentümer hat den eigenen Analysebestand ohne Auflagen freigegeben. Dieser
+  Punkt ist damit **nicht mehr versperrt**, sondern schlicht offen.
 - **Fort Condor** und die **Kampfarena** — beide sind eigenständige
   Spielsysteme, keine Minigames im Sinne von S34/S35.
 - **Modding-Zugriff** auf Weltkarte, Kampfdaten und Minigames. Der
