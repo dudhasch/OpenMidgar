@@ -2699,3 +2699,73 @@ benutzte Quellen oder eine gesetzte Kondition trägt, schlagen sie an — und
 dann wird die Messung zum ersten Mal aussagekräftig.
 
 *Probe: `tools/realdata-scan/src/savemap-felder.rdtest.ts` (3 Fälle).*
+
+---
+
+## Die abgeleitete Statuskette — und der überraschendste Fakt darin (2026-08-15)
+
+Von den sechs Grundwerten des Spielstands bis zu den vier Zahlen, mit denen
+die Schadensformel rechnet. Ohne sie ist `schadenPhysisch` eine Funktion ohne
+Eingaben.
+
+```
+Grundwert  = base[i] + sourceBonus[i] + Ausrüstungsbonus[i]   (auf 255 geklemmt)
+Angriff    = Waffe.attackPower + Kraft
+Abwehr     = Rüstung.defense   + Widerstandskraft
+MagAngriff = 0 + Magie
+MagAbwehr  = 0 + Geist
+```
+
+🟢 **Die Magieabwehr der Rüstung wird NIE addiert.** Das Feld (`+0x03`)
+existiert, die Menüanzeige liest es — die Kampfrechnung ignoriert es. Eine
+Portierung, die es mitrechnet, liegt bei jedem magischen Treffer daneben: im
+Testvektor um 4 Punkte auf 25, also rund 2 % Schaden. Klein genug, um beim
+Spielen nicht aufzufallen; groß genug, um jede Zahlengleichheit zu verfehlen.
+
+Ebenso zahlengleich: `wendeStatProzentAn` (Division **zur Null hin**, nicht
+abwärts — bei negativen Prozentsätzen ein anderer Wert), das Ausweichprozent
+mit seiner Party-Grenze **`< 4`** statt `< 3` (Platz 3 nimmt den Party-Zweig),
+die u8-Überlaufsemantik des Bonusakkumulators und die Regel, dass Bonusindizes
+6…254 **ignoriert** statt geklemmt werden.
+
+### Der unabhängige Beleg: die Ausrüstung aus unserer KERNEL.BIN
+
+Testvektor 11.8 nennt zwei Datensätze **wörtlich**. Sie liegen in
+`KERNEL.BIN` — also nachprüfbar:
+
+| | erwartet | gemessen |
+|---|---:|---:|
+| Waffe 0 `attackPower` | 18 | **18** |
+| Waffe 0 `accuracy` | 96 | **96** |
+| Waffe 0 `statBoostIndex` / `-Amount` | `02 FF FF FF` / `+2` | **trifft** |
+| Rüstung 2 `defense` | 14 | **14** |
+| Rüstung 2 `magicDefense` | 4 | **4** |
+| Rüstung 2 `defensePercent` | 2 | **2** |
+
+Und die Kette **auf diesen echten Bytes** statt auf abgeschriebenen Zahlen:
+Magie `24` (der Waffenbonus +2 schlägt durch), Angriff `63`, Abwehr `44`,
+MagAngriff `24`, MagAbwehr `25` — nicht 29, die Rüstung bleibt außen vor.
+
+🟢 **Die Zählaussage hält auch.** Der Bestand behauptet, in allen drei
+Ausrüstungstabellen kämen als `statBoostIndex` nur `0…5` und `0xFF` vor.
+Gemessen über 128 Waffen + 32 Rüstungen + 32 Accessoires, **704 Indexbytes**:
+
+```
+0×33  1×8  2×123  3×10  4×3  5×2  255×525
+```
+
+Sieben Werte von 256 möglichen, und alle sechs Statplätze kommen wirklich vor.
+Läge das Feld anderswo, wäre das über hunderte Datensätze fast sicher
+verletzt. Das belegt zugleich, dass Index und Betrag echte **Paare** sind.
+
+### Was fehlt und sichtbar bleibt
+
+🔴 **Materia.** Das Original addiert vor der Klemmung vorzeichenbehaftete
+Materia-Deltas auf alle vier Werte und tauscht bei gesetztem HP↔MP-Flag die
+Maxima. Beides ist **nicht** umgesetzt; die Deltas sind Parameter mit Vorgabe
+0. Ein Platzhalter wäre schlimmer als eine Lücke — er sähe aus wie eine
+Antwort.
+
+*Modul: `packages/battle-runtime/src/ff7-statuskette.ts` · Fixtures:
+`ff7-statuskette.test.ts` (12 Fälle, Vektoren 11.8 und 11.9) · Probe:
+`tools/realdata-scan/src/ausruestung-statkette.rdtest.ts` (2 Fälle).*
