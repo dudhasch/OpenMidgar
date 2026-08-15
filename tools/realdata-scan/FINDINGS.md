@@ -2995,3 +2995,78 @@ Schild und Berserk.
 
 *Modul: `packages/battle-runtime/src/ff7-status.ts` · Fixtures:
 `ff7-status.test.ts` (16 Fälle).*
+
+---
+
+## F43 — der Story-Fortschritt bei `0x0BA4`, an unseren Spielständen belegt (2026-08-15)
+
+Der Posten stand als „Fortschrittsvariable liegt bei Slot-Offset `0x0BA4` — wie
+weit unsere Bäume tatsächlich tragen, ist ungemessen". Der Versatz war richtig;
+gemessen war er nicht.
+
+### Die Prüfgröße ist die Rangfolge
+
+Fortschrittswert und Spielzeit stehen an ganz verschiedenen Stellen des Slots
+und werden von verschiedenen Stellen geschrieben — Feldskripte bzw. Engine.
+Trägt `0x0BA4` den Erzählfortschritt, müssen beide Reihen **dieselbe Ordnung**
+haben. Das bindet jedes Spielstandspaar.
+
+```
+Momente  415, 257,  63,   63,  263,   63
+Zeiten 31176, 11856, 1759, 1762, 21248, 1855
+
+gleichgeordnete Paare: echt 12/12 · rotiert 6/12
+```
+
+🟢 **Alle Paare stimmen.** Die Kontrolle (rotierte Zuordnung) halbiert es auf
+den Zufallswert.
+
+⚠️ Ein achter Stand trägt **Spielzeit 0 bei Fortschritt 583** und ist
+ausgenommen — eine Spielzeit von exakt 0 kann nicht stimmen, wenn schon
+Hunderte Story-Punkte gesetzt sind. Er steht in der Ausgabe, damit die
+Auslassung sichtbar bleibt.
+
+### Ein zweiter, unabhängiger Beleg
+
+Die Verfügbarkeitsmaske `0x10A6` steht **21 KB entfernt** und wird von anderen
+Skripten gesetzt. Ihre Kardinalität hat dieselbe Ordnung: **11/11**.
+
+```
+verfügbare Figuren: 8, 4, 2, 2, 4, 2   (zu den Momenten oben)
+```
+
+Wer weiter ist, hat mehr Figuren — das bestätigt beide Felder auf einmal.
+
+### Cloud ist festgesetzt, aber sichtbar
+
+🟢 Die Sperrmaske `0x10A4` trägt in **7 von 7** Ständen genau Bit 0. Ein
+beliebiges Feld wäre nicht in allen Ständen genau `1`. Und `phsBeweglich` ist
+falsch, während `phsVorhanden` wahr ist — **genau die Unterscheidung, die
+verlorenginge, führte man die beiden Masken zusammen** (dann verschwände Cloud
+aus dem Raster, statt sich nur nicht bewegen zu lassen).
+
+### Eine Erwartung gefallen — und der Befund wurde dadurch besser
+
+⚠️ Ich hatte erwartet, das „Beenden"-Bit (10) sei **nie** gespeichert und
+werde immer erzwungen. Gemessen: Es ist in **3 von 7** Ständen gesetzt. Die
+drei sind die fortgeschrittenen (`0xFFFF`, `0xFEFF`); die vier frühen tragen
+`0x2FB` und haben es **nicht**.
+
+🟢 **Das macht den Zwang erst wichtig.** Wäre es immer gesetzt, wäre das
+Erzwingen überflüssig; wäre es nie gesetzt, eine Formalie. So ist es genau
+das, was den **frühen** Ständen einen Ausgang aus dem Menü gibt.
+
+### Was bewusst NICHT geändert wurde
+
+`MENU_ITEM_ORDER` führt zehn Zeilen und endet bei „save"; der EXE-Bestand
+nennt eine elfte (`Beenden`, Bit 10). Die Liste bleibt **unverändert**: Welche
+Zeilen unser Hauptmenü zeigt, ist ein eigener offener Posten ohne
+Referenzaufnahme, und eine Zeile hinzuzufügen wäre eine Sichtänderung ohne
+Beleg. Die Abweichung ist festgehalten, nicht entschieden.
+
+🟡 Die vier Erzählschwellen (1000 Junon · 1199 · 1580 Nordkrater · 1620 Ende
+Disc 2) sind an unseren Ständen **nicht prüfbar** — der höchste Wert ist 583.
+Sie stehen als Konstanten da, damit sie an einer Stelle korrigierbar bleiben.
+
+*Modul: `packages/formats-save/src/story.ts` · Probe:
+`tools/realdata-scan/src/story-fortschritt.rdtest.ts` (4 Fälle).*

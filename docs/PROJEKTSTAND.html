@@ -105,7 +105,7 @@
 <div class="hinweis">
   <strong>Wie die Balken zu lesen sind.</strong> Sie zählen <em>Posten</em>, nicht Spielinhalt.
   Ein Haken bei „Szenenformat gelesen“ und einer bei „Minigames“ wiegen hier gleich viel,
-  in Arbeit aber um Größenordnungen verschieden — und die 16 offenen Posten sind im Schnitt
+  in Arbeit aber um Größenordnungen verschieden — und die 15 offenen Posten sind im Schnitt
   deutlich dicker als die 32 erledigten.
   Drei davon sind als <em>versperrt</em> ausgewiesen: Sie bleiben Ziel, aber der Weg dorthin ist
   heute durch fehlendes Vergleichsmaterial oder einen noch nicht eröffneten Arbeitsbogen
@@ -119,7 +119,7 @@
 
 <h2>Erkundung — Felder, Bewegung, Hintergrund</h2>
 <div class="balken"><span class="b-ok" style="width:72.7%"></span><span class="b-teil" style="width:18.2%"></span><span class="b-offen" style="width:9.1%"></span></div>
-<p class="zaehler">11 Posten — 8 steht · 2 teilweise · 1 offen</p>
+<p class="zaehler">11 Posten — 8 steht · 3 teilweise</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -133,7 +133,7 @@
 <tr class="ok"><td class="was">Talk-Interaktion</td><td class="status">steht</td><td class="notiz">F04, <code>requestEntityScript</code> mit Leerspan-Erkennung</td></tr>
 <tr class="teil"><td class="was">Script-geschaltete Feldobjekte</td><td class="status">teilweise</td><td class="notiz">F35-Rest: Was <code>junonr2</code>s <code>lift</code> zeichnet, ist ungeklärt — weder Modell noch Hintergrundparameter</td></tr>
 <tr class="teil"><td class="was">Kachelverlust-Ausläufer</td><td class="status">teilweise</td><td class="notiz">27 von 508 Fields verlieren &gt;10 % ihrer Kacheln (<code>junin7</code> 61,7 %). Als Dauerprobe eingezäunt, nicht erklärt</td></tr>
-<tr class="offen"><td class="was">Story-Fortschritt durch die Script-Bäume</td><td class="status">offen</td><td class="notiz">F43: Die Fortschrittsvariable liegt bei Slot-Offset 0x0BA4 — wie weit unsere Bäume tatsächlich tragen, ist ungemessen</td></tr>
+<tr class="teil"><td class="was">Story-Fortschritt durch die Script-Bäume</td><td class="status">teilweise</td><td class="notiz">F43 <strong>gemessen</strong>: Der Wert bei <code>0x0BA4</code> ist das erste Wort der persistenten Skriptbank 1 und wird von Feldskripten geschrieben, nicht von der Engine — er gehört deshalb als <em>Sicht</em> auf die Bank geführt, nicht als kopiertes Feld (Skripte schreiben ihn als Wort, als Byte und als hohes Byte allein). Belegt über die <strong>Rangfolge gegen die Spielzeit: 12/12 Paare</strong> gleichgeordnet, rotierte Kontrolle 6/12 — dazu ein zweiter, unabhängiger Beleg aus der 21&nbsp;KB entfernten Verfügbarkeitsmaske <code>0x10A6</code> (11/11). <code>0x10A4</code> trägt in 7/7 Ständen Bit 0: Cloud ist festgesetzt, bleibt aber im Raster — die beiden Masken dürfen <strong>nicht</strong> verschmolzen werden. Das „Beenden“-Bit ist in 3/7 Ständen gespeichert und in 4/7 nicht; der Zwang der Engine ist also genau das, was den frühen Ständen einen Menüausgang gibt. Offen: wie weit unsere Script-Bäume tatsächlich tragen, und die vier Erzählschwellen (1000/1199/1580/1620) — unser höchster Stand ist 583.</td></tr>
 </tbody>
 </table>
 
@@ -254,7 +254,7 @@
 <h2>Zusammen</h2>
 <div class="gesamt">
   <div class="balken"><span class="b-ok" style="width:51.6%"></span><span class="b-teil" style="width:19.4%"></span><span class="b-offen" style="width:22.6%"></span><span class="b-sperre" style="width:6.4%"></span></div>
-  <p class="zaehler"><strong>62 Posten — 32 steht · 14 teilweise · 16 offen (davon 3 versperrt)</strong></p>
+  <p class="zaehler"><strong>62 Posten — 32 steht · 15 teilweise · 15 offen (davon 3 versperrt)</strong></p>
   <p class="zaehler" style="margin-top:.7rem">
     Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
     ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend
