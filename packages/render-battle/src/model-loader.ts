@@ -1,4 +1,4 @@
-import { parseBattleSkeleton } from '@webmidgar/formats-battle';
+import { parseBattleAnimBank, parseBattleSkeleton } from '@webmidgar/formats-battle';
 import {
   hasPSignature,
   hasTexSignature,
@@ -40,9 +40,11 @@ import type { BattleModelFiles } from './battle-actor.js';
  *  - Namensraum: ausnahmslos 4 Kleinbuchstaben `<präfix:2><suffix:2>`,
  *    481 Präfixe. 🟢 Klassifikation nach Inhalt: 8979 `.p`, 787 TEX,
  *    481 Skelette (je Präfix genau eines, Suffix `aa`, Grammatik 52+12·n),
- *    872 Rest — und dieser Rest ist ZU 100 % die `ab`/`da`-Familie
- *    (Animationsformate, Grammatik 🔴). Die drei Signaturen sind am
- *    Gesamtbestand paarweise disjunkt (0 Mehrfachtreffer).
+ *    872 Rest — und dieser Rest ist ZU 100 % die `ab`/`da`-Familie. Beide sind
+ *    seit K9 gedeutet: `da` ist die **Animationsbank** (391 Dateien, Format
+ *    🟢 belegt, 391/391 byteexakt abgerechnet), `ab` ist der `.B`-Infoblock
+ *    des Modells (481 Dateien) — **keine** Animationsfamilie. Die drei
+ *    Signaturen sind am Gesamtbestand paarweise disjunkt (0 Mehrfachtreffer).
  *  - 🟢 Der Namensraum aus `docs/quellen/gears-pdf.md` §9 ist damit an
  *    den Daten bestätigt UND präzisiert: `am`…`cj` Körperteile, `ck`…`cz`
  *    Waffen. Für **391/391 Modellpräfixe** gilt exakt
@@ -62,6 +64,16 @@ import type { BattleModelFiles } from './battle-actor.js';
  */
 
 const SKELETON_SUFFIX = 'aa';
+
+/**
+ * 🟢 **Namensfest belegt, nicht geraten.** Die Namensbildung des Originals
+ * (`BattleModel_ResolveArchiveName` `0x005E2460`) rechnet einen Suffixcode in
+ * zwei Buchstaben um: `out[2] = 'A' + code/26`, `out[3] = 'A' + code%26`. Die
+ * Codes stehen fest — `.D` → 0 (`aa`, Deskriptor/Skelett), `.B` → 1 (`ab`,
+ * Infoblock), `.Pnn` → 12+nn (Teile ab `am`), `.A` → **78** → `da`. Es gibt
+ * genau EINE Animationsdatei je Modell; die Bank darin trägt alle Sätze.
+ */
+const ANIM_SUFFIX = 'da';
 
 /**
  * 🔵 Quelle der battle.lgp-Einträge. `listBattleEntries` liefert die Namen
@@ -139,8 +151,9 @@ async function collectParts(
       // Platzhalter bei Parse-Fehler: die Indexposition MUSS erhalten bleiben.
       textures.push(parseTex(bytes, name).value);
     }
-    // Alles Übrige (gemessen: ausschließlich die `ab`/`da`-Animationsfamilie)
-    // wird nicht angefasst.
+    // Alles Übrige wird hier nicht angefasst: `ab` ist der Infoblock, `da`
+    // die Animationsbank — die liest `loadBattleModel` gezielt über ihren
+    // belegten Namen, nicht über diese Signaturschleife.
   }
   return { parts, textures };
 }
@@ -158,7 +171,17 @@ export async function loadBattleModel(
   if (!skeleton) return null;
 
   const { parts, textures } = await collectParts(prefix, source, read);
-  return { skeleton, parts, textures };
+
+  /**
+   * Animationsbank (K9). Fehlerpolitik wie bei den Teilen: Eine fehlende oder
+   * defekte Bank kostet die Bewegung, nicht das Modell — die Figur steht dann
+   * in der Bindpose, so wie vor K9 alle Figuren. `null` gibt dieser Lader
+   * weiterhin NUR bei fehlendem Skelett zurück.
+   */
+  const animBytes = await read(prefix + ANIM_SUFFIX);
+  const animations = animBytes ? parseBattleAnimBank(animBytes, prefix + ANIM_SUFFIX).bank : null;
+
+  return { skeleton, parts, textures, animations };
 }
 
 /**

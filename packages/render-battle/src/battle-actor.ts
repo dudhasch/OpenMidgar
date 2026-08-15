@@ -1,8 +1,15 @@
 import * as THREE from 'three';
-import type { BattleSkeleton } from '@webmidgar/formats-battle';
-import type { MeshSource, TextureSource } from '@webmidgar/formats-model';
+import type { BattleAnimBank, BattleSkeleton } from '@webmidgar/formats-battle';
+import type { AnimationClipSource, MeshSource, Skeleton, TextureSource } from '@webmidgar/formats-model';
 import { applyFrame, bindPoseFrame, buildActor, type Actor } from '@webmidgar/render-actor';
-import { assignPartsToBones, BATTLE_ROOT_EXTRA_X_DEG, battleSkeletonToSkeleton, battleToScene, type BattleCamera } from './composition.js';
+import {
+  assignPartsToBones,
+  battleAnimationToClip,
+  BATTLE_ROOT_EXTRA_X_DEG,
+  battleSkeletonToSkeleton,
+  battleToScene,
+  type BattleCamera,
+} from './composition.js';
 
 /**
  * Three-Pfad der Battle-Darstellung (S32). Die Regeln (Skelettabbildung,
@@ -18,12 +25,18 @@ export interface BattleModelFiles {
   parts: MeshSource[];
   /** Texturen in Suffixordnung — `.p`-Submeshes indizieren hinein (🟡). */
   textures: (TextureSource | null)[];
+  /** Animationsbank aus `<präfix>da` (K9). `null`, wenn keine geladen wurde. */
+  animations?: BattleAnimBank | null;
 }
 
 export interface BuiltBattleActor {
   actor: Actor;
   /** Teile ohne Bone (🟡 Waffen-Kandidaten) — nicht dargestellt, gemeldet. */
   unassignedParts: number[];
+  /** Der NAM-Skeleton der Modellkette — nötig, um Rahmen anzuwenden. */
+  skeleton: Skeleton;
+  /** Clips der Bank in Bankreihenfolge; leere Platzhaltersätze fallen heraus. */
+  clips: AnimationClipSource[];
 }
 
 /**
@@ -73,7 +86,44 @@ export function buildBattleActor(name: string, files: BattleModelFiles): BuiltBa
   // Bindpose + Battle-Wurzelwinkel (Sichtnachweis, s. composition.ts).
   const frame = bindPoseFrame(skeleton);
   applyFrame(actor, skeleton, { ...frame, rootRotation: [BATTLE_ROOT_EXTRA_X_DEG, 0, 0] });
-  return { actor, unassignedParts };
+  // Leere Platzhaltersätze tragen keine Rahmen (K9) — sie fallen hier heraus,
+  // damit ein Index in `clips` immer einen abspielbaren Clip trifft.
+  const clips = (files.animations?.animations ?? []).filter((a) => !a.leer).map((a) => battleAnimationToClip(a));
+  return { actor, unassignedParts, skeleton, clips };
+}
+
+/**
+ * Einen Animationsrahmen auf einen Kampfaktor legen (K9).
+ *
+ * Der Battle-Wurzelwinkel wird auf die Wurzeldrehung des Rahmens **addiert** —
+ * genauso, wie ihn `buildBattleActor` für die Bindpose setzt. Das ist die
+ * bestehende Algebra des Projekts (`applyFrame` addiert `ROOT_FRAME_FIX_DEG`
+ * an derselben Stelle), nicht eine neue Annahme.
+ *
+ * ⚠️ 🟡 **Wo diese Addition genau stimmt.** Sie faltet die Basisdrehung in den
+ * X-Platz eines YXZ-Eulertripels. Das ist mit „Basis ∘ Animation" nur dann
+ * gleichbedeutend, wenn die Wurzel-Y-Drehung des Rahmens 0 ist — bei der
+ * Bindpose ist sie das, im Lauf einer Animation nicht zwangsläufig. Der
+ * Field-Pfad rechnet seit je genauso; ob der Unterschied im Kampf sichtbar
+ * wird, entscheidet ein Bildvergleich, keine Rechnung. Bis dahin bleibt es
+ * bei der bestehenden Algebra, damit Feld und Kampf nicht auseinanderlaufen.
+ *
+ * Rahmenindizes werden zyklisch genommen — eine Kampfanimation ist eine
+ * Schleife, und ein Index jenseits des Endes soll nicht in die Bindpose
+ * zurückfallen.
+ */
+export function applyBattleAnimationFrame(
+  built: BuiltBattleActor,
+  clip: AnimationClipSource,
+  frameIndex: number,
+): void {
+  if (clip.frames.length === 0) return;
+  const n = clip.frames.length;
+  const f = clip.frames[((frameIndex % n) + n) % n]!;
+  applyFrame(built.actor, built.skeleton, {
+    ...f,
+    rootRotation: [f.rootRotation[0] + BATTLE_ROOT_EXTRA_X_DEG, f.rootRotation[1], f.rootRotation[2]],
+  });
 }
 
 /**

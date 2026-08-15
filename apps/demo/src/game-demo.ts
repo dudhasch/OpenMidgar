@@ -91,7 +91,10 @@ import {
 import {
   BattleViewModel,
   applyBattleCamera,
+  applyBattleAnimationFrame,
   buildBattleActor,
+  type AnimationClipSource,
+  type BuiltBattleActor,
   buildBattleStage,
   buildSubstituteStage,
   loadBattleModel,
@@ -297,6 +300,30 @@ const battleScene3 = new Scene();
 battleScene3.add(new DirectionalLight(0xffffff, 2.0).translateY(1));
 const battleGroup = new Group();
 battleScene3.add(battleGroup);
+/**
+ * K9 — was im Kampf bewegt wird. Je gebautem Aktor der Clip, der laeuft.
+ *
+ * 🟡 **Welcher Satz die Ruhepose ist, ist NICHT belegt.** Gewaehlt ist Satz 0
+ * der Bank, weil das die einzige Wahl ist, die ohne eine weitere Annahme
+ * auskommt. Die 16 `animationIds` je Gegnerrecord zeigen zwar in die Bank,
+ * aber 25 von 337 Gegnern nennen Indizes jenseits ihrer eigenen Bankgroesse
+ * (K9-Nachtrag) — diese Zuordnung traegt also noch nicht.
+ */
+const battleAnimatoren: { built: BuiltBattleActor; clip: AnimationClipSource }[] = [];
+let battleAnimRahmen = 0;
+
+/**
+ * Einen Animationsschritt auf alle Kampfaktoren legen.
+ *
+ * Die Bildrate ist NICHT geraten: Aufgerufen wird das aus dem 15-Hz-Kampftakt
+ * (`isBattleTickDue`), also ein Animationsrahmen je Kampfbild — dieselbe
+ * Begrenzung, die das Original ueber `ff7_limit_fps` fuer den Kampf setzt.
+ */
+function battleAnimationsSchritt(): void {
+  if (!battleAnimatoren.length) return;
+  battleAnimRahmen++;
+  for (const a of battleAnimatoren) applyBattleAnimationFrame(a.built, a.clip, battleAnimRahmen);
+}
 /**
  * K5 — die Bühne hängt am KAMPF, nicht am Programm: welche der 90 Bühnen
  * (`og`…`rr`) gilt, entscheidet `location` der Formation. Die schwarze
@@ -1098,6 +1125,8 @@ function openBattle(encounterId: number, requestId: number | null, source: 'fiel
 function buildBattleVisuals(battleId: number): void {
   const gen = ++battleGen;
   battleGroup.clear();
+  battleAnimatoren.length = 0;
+  battleAnimRahmen = 0;
   if (!data?.scenes) return;
   const { sceneIndex, formationIndex } = formationAddress(battleId);
   const scn = data.scenes.scenes[sceneIndex];
@@ -1162,6 +1191,10 @@ function buildBattleVisuals(battleId: number): void {
         built.actor.root.position.set(p.scenePosition[0], p.scenePosition[1], p.scenePosition[2]);
         battleGroup.add(built.actor.root);
         battleGroup.remove(box);
+        // K9: Satz 0 als Ruhepose (🟡, s. `battleAnimatoren`). Ohne Bank
+        // bleibt die Figur in der Bindpose — wie vor K9.
+        const clip = built.clips[0];
+        if (clip) battleAnimatoren.push({ built, clip });
         battleModellProtokoll.set(prefix, {
           prefix,
           teile: files.parts.length,
@@ -1208,6 +1241,8 @@ function buildBattleVisuals(battleId: number): void {
         const built = buildBattleActor(`party-${i}`, files);
         built.actor.root.position.set(platz[0], platz[1], platz[2]);
         battleGroup.add(built.actor.root);
+        const clip = built.clips[0];
+        if (clip) battleAnimatoren.push({ built, clip });
         battleModellProtokoll.set(prefix, {
           prefix,
           teile: files.parts.length,
@@ -1383,6 +1418,7 @@ function closeRealBattle(): void {
   battle = null;
   battleGen++;
   battleGroup.clear();
+  battleAnimatoren.length = 0;
   // Die Bühne gehört dem beendeten Kampf — sie bleibt nicht für den nächsten stehen.
   setzeBuehne(null);
   stageProtokoll = { prefix: null, location: null, teile: 0, texturen: 0, ersatz: true };
@@ -2189,6 +2225,7 @@ function tick(): void {
       const gepuffert: ActionFrame = { ...frame, pressed: [...kampfEingabePuffer].sort() as typeof frame.pressed };
       kampfEingabePuffer.clear();
       battleTick(gepuffert);
+      battleAnimationsSchritt();
     }
     return;
   }
@@ -2779,6 +2816,26 @@ function codeForAction(action: SemanticAction): string | null {
    * also allein an der Projektion. Diese Sonde liefert die Kennzahlen, mit
    * denen sich „Figur zu klein" von „Kamera falsch" trennen lässt.
    */
+  /**
+   * K9-Prüfgröße: Läuft die Kampfanimation wirklich? Gibt den Rahmenzähler
+   * und die tatsächlich gesetzten Knochendrehungen zurück. Zwei Abrufe mit
+   * Abstand müssen verschiedene Werte liefern — das ist der Nachweis, dass
+   * nicht bloß ein Standbild aus der Bank gelegt wurde.
+   */
+  kampfAnimation: (): object => ({
+    rahmen: battleAnimRahmen,
+    aktoren: battleAnimatoren.map((a) => ({
+      name: a.built.actor.root.name,
+      clipRahmen: a.clip.frames.length,
+      knochen: a.clip.boneCount,
+      // Erste drei Knochen als Stichprobe, in Grad und gerundet.
+      probe: a.built.actor.boneGroups.slice(0, 3).map((g) =>
+        [g.rotation.x, g.rotation.y, g.rotation.z].map((r) => Math.round((r * 180) / Math.PI)),
+      ),
+      wurzel: [a.built.actor.model.position.x, a.built.actor.model.position.y, a.built.actor.model.position.z].map((v) => Math.round(v)),
+    })),
+  }),
+
   kameraSonde: (): object => {
     if (!fieldCamera || !fieldSession?.player) return { fehler: 'keine Kamera/Figur' };
     const p = fieldSession.player;

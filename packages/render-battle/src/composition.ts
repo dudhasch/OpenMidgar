@@ -1,5 +1,11 @@
-import type { BattleFormation, BattleSkeleton } from '@webmidgar/formats-battle';
-import { fnv1a32Numbers, type Skeleton } from '@webmidgar/formats-model';
+import type { BattleAnimation, BattleFormation, BattleSkeleton } from '@webmidgar/formats-battle';
+import {
+  fnv1a32Numbers,
+  ROTATION_ORDER_YXZ,
+  type AnimationClipSource,
+  type AnimationFrame,
+  type Skeleton,
+} from '@webmidgar/formats-model';
 
 /**
  * Battle-Modellkomposition (S32) — bewusst Three-frei (Dualitätsprinzip wie
@@ -181,4 +187,68 @@ export function placeParty(count: number): [number, number, number][] {
     out.push(battleToScene([Math.round(x), 0, PARTY_ROW_DEPTH]));
   }
   return out;
+}
+
+/**
+ * PSX-Winkeleinheit in Grad. 🟢 Aus dem Original: `BattleModel_DecodeAnimation`
+ * rechnet jeden Winkel als `(v / 4096) · 360`, wobei `4096.0f` unmittelbar im
+ * Code steht und `360.0f` bei `0x007B77F0` — beide am Abbild nachgeschlagen.
+ */
+export const PSX_ZU_GRAD = 360 / 4096;
+
+/**
+ * Kampfanimation → Animationsclip der Modellkette (K9).
+ *
+ * 🟢 **Das ist keine Umdeutung, sondern der Weg des Originals.**
+ * `BattleModel_DecodeAnimation` schiebt die dekodierten Rahmen in **dieselbe**
+ * `Animation`-Struktur, die auch der Field-Pfad benutzt — Kampf- und
+ * Feldanimation unterscheiden sich nur im Dateiformat, nicht im Abspieler.
+ * Diese Funktion bildet genau die drei Schritte jener Funktion ab:
+ *
+ * 1. `Anim_Create(frameCount, jointCount − 1, …)` — die Knochenzahl des Clips
+ *    ist die Gelenkzahl **minus eins**; Gelenk 0 ist die Wurzeldrehung.
+ * 2. `Anim_SetRootChannel(6, …)` bekommt sechs Werte: drei Winkel in Grad,
+ *    dann die drei Verschiebungen (Maßstab `0x007B77EC` = `1.0f`, also roh).
+ * 3. `Anim_SetBoneChannel(0|1|2, frame, boneIndex, …)` liest Gelenk
+ *    `boneIndex + 1` — daher der Versatz um eins in der Schleife.
+ *
+ * 🟢 **Rotationsreihenfolge YXZ.** Das Original übergibt `Anim_Create` die
+ * Konstante `0x20001`; das Feld ist ein gepacktes 3-Byte-Tripel (je Byte
+ * 0=X, 1=Y, 2=Z), also `[1, 0, 2]`. Das ist **dieselbe** Reihenfolge, die
+ * unser Field-Parser in allen 3209 `.a`-Dateien gemessen hat — im Kampf steht
+ * sie fest im Code statt in der Datei.
+ *
+ * 🟡 `negateRootY` ist **kein** Merkmal des Modells, sondern ein Feld des
+ * Ladedeskriptors (`battleLoadDesc+0x08`), das nur das Vorzeichen der
+ * Wurzelverschiebung Y kippt. Welchen Wert es im Kampf trägt, ist an unseren
+ * Daten nicht ablesbar; Vorgabe ist „nicht kippen".
+ */
+export function battleAnimationToClip(anim: BattleAnimation, negateRootY = false): AnimationClipSource {
+  const boneCount = Math.max(0, anim.jointCount - 1);
+  const frames: AnimationFrame[] = anim.frames.map((f) => {
+    const rotations = new Float32Array(3 * boneCount);
+    for (let b = 0; b < boneCount; b++) {
+      for (let a = 0; a < 3; a++) rotations[b * 3 + a] = f.rotations[(b + 1) * 3 + a]! * PSX_ZU_GRAD;
+    }
+    return {
+      rootRotation: [
+        f.rotations[0]! * PSX_ZU_GRAD,
+        f.rotations[1]! * PSX_ZU_GRAD,
+        f.rotations[2]! * PSX_ZU_GRAD,
+      ] as [number, number, number],
+      rootTranslation: [
+        f.rootTranslation[0],
+        negateRootY ? -f.rootTranslation[1] : f.rootTranslation[1],
+        f.rootTranslation[2],
+      ] as [number, number, number],
+      rotations,
+    };
+  });
+  return {
+    schemaVersion: 1,
+    boneCount,
+    frames,
+    rotationOrder: [...ROTATION_ORDER_YXZ] as [number, number, number],
+    diagnostics: [],
+  };
 }

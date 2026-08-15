@@ -2351,3 +2351,120 @@ Attackenanbindung, nicht zum Format.
 *Parser: `packages/formats-battle/src/battle-anim.ts` · Fixtures:
 `battle-anim.test.ts` (11 Fälle, mit unabhängigem Kodierer) · Probe:
 `tools/realdata-scan/src/k9-bitpackung.rdtest.ts` (4 Fälle).*
+
+### Nachtrag (gleicher Tag): Herkunftskorrektur und ein Gegenbeleg
+
+⚠️ **Richtigstellung.** Der Commit zu diesem Befund behauptet, kein Dossier
+beschreibe den Dekoder. **Das ist falsch.** `pseudocode/battle-actors.md`
+**§5 und §6** enthalten Satzkette und Bitstrom vollständig. Der erste Grep nach
+`DecodeAnim|LoadAnimBank` hat die Datei geliefert — sie wurde übergangen, weil
+das themengleiche `animation.md` (nur Field-Seite) den Blick gebunden hatte.
+Fehlertyp 1, „falsche Suchmenge", folgenlos nur deshalb, weil das Abbild
+danebenlag.
+
+🟢 **Der Gegenbeleg, der daraus wurde.** Dossier und unabhängige Abbildlesung
+stimmen in **jedem** Feld überein: `u16@2` als Abbruchmaß, `packed[4]` als
+`shift`, Strom ab `packed+5`, `12−shift` Bit je Winkel mit Linksschub,
+Normierung `a < 0 ? a + 0x1000 : a`, Abbruch bei `(cursor+7)/8 ≥ stromBytes`.
+Zwei Lesungen desselben Codes, keine Abweichung — das ist mehr wert als eine
+Lesung mit einer schönen Herkunftsgeschichte.
+
+Was das Dossier **nicht** hat und die Messung beigetragen hat: die 707 leeren
+Platzhalter, `packedSize == align4(5 + stromBytes)`, die schwankende
+Gelenkzahl, und vor allem die Abrechnung 391/391 mit drei Kontrollen. Ein
+Dekompilat ist ein **Bauplan, kein Beleg**.
+
+🟢 **Zwei Werte aus dem Ladepfad, die für die Wiedergabe zählen:**
+`Anim_Create(frameCount, jointCount − 1, 0x20001)` — der dritte Parameter ist
+die Rotationsreihenfolge als drei Bytes, also `[1, 0, 2] = **YXZ**`. Das ist
+**dieselbe** Reihenfolge, die unser Field-Parser in allen 3209 `.a`-Dateien
+gemessen hat; im Kampf steht sie fest im Code statt in der Datei.
+`negateRootY` ist **kein** Modellmerkmal, sondern ein Feld des
+Ladedeskriptors (`battleLoadDesc+0x08`) — es kippt nur das Vorzeichen der
+Wurzelverschiebung Y.
+
+---
+
+## K9-Wiedergabe — die Kampffiguren bewegen sich (2026-08-15)
+
+Das Format war entschlüsselt, die Figuren standen weiter in der Bindpose. Diese
+Runde schließt die Kette: Datei → Bank → Clip → Aktor → Bild.
+
+### Der Weg ist der des Originals
+
+`BattleModel_DecodeAnimation` schiebt die dekodierten Rahmen in **dieselbe**
+`Animation`-Struktur, die auch der Field-Pfad benutzt. Kampf und Feld
+unterscheiden sich also nur im **Dateiformat**, nicht im Abspieler — deshalb
+ist `battleAnimationToClip` eine Umrechnung und keine Umdeutung.
+
+🟢 **Rotationsreihenfolge YXZ.** `Anim_Create(frameCount, jointCount − 1,
+0x20001)` — der dritte Parameter ist ein gepacktes 3-Byte-Tripel (je Byte
+0=X, 1=Y, 2=Z), also `[1, 0, 2]`. Das ist **dieselbe** Reihenfolge, die unser
+Field-Parser in allen 3209 `.a`-Dateien gemessen hat. Im Kampf steht sie fest
+im Code, im Feld in der Datei.
+
+🟡 `negateRootY` ist kein Modellmerkmal, sondern ein Feld des Ladedeskriptors
+(`battleLoadDesc+0x08`); es kippt nur das Vorzeichen der Wurzelverschiebung Y.
+An unseren Daten nicht ablesbar — Vorgabe „nicht kippen".
+
+### Messbild über den ganzen Bestand
+
+| | |
+|---|---:|
+| Präfixe mit Animationsbank | **391** (die 90 ohne sind das Bühnenband `og`…`rr`) |
+| Modelle mit mindestens einem bewegten Satz | **391 / 391** |
+| Clips · Rahmen | **7.130 · 99.400** |
+| Clips, die über ihr Skelett hinausgreifen | **0** |
+
+Die letzte Zeile ist die Bedingung dafür, dass `applyFrame` gefahrlos laufen
+kann: Knochen, die ein Clip nicht abdeckt, bleiben in der Bindpose; Knochen
+jenseits des Skeletts gibt es nicht.
+
+### Eine Erwartung ist gefallen — und die Widerlegung ist der Befund
+
+Erwartet war, dass kein Winkel `[0, 360°)` verlässt. Gemessen: **50.371 von
+8.492.094 (0,59 %)**, Spanne **−2520°…+2877°**. Die halbe Normierung des
+Originals (`a < 0 ? a + 0x1000 : a`) holt also nachweislich nicht jeden Wert
+zurück.
+
+🟢 **Und das ist folgenlos, aus einem Grund, der im Format steckt.** Der
+Akkumulator ist ein `short`. Läuft er über, springt der Wert um 65536
+Einheiten — und `65536 / 4096 = **16**`, also **genau sechzehn volle
+Umdrehungen**. Ein Überlauf ist im Winkelraum unsichtbar. Aus demselben Grund
+ist 2877° dasselbe wie −3°. Genau deshalb kann das Original sich die halbe
+Normierung leisten; wer sie für einen Fehler hält, hat die Periode übersehen.
+
+Die **echte** Schranke ist der `short`: kein Winkel über ±32768 Einheiten =
+**±2880°**. Gemessenes Maximum 2877,19° — knapp darunter, wie es sein muss.
+Das ist als Dauererwartung eingefroren und schlägt an, sobald ein Deltacode
+falsch gelesen wird.
+
+### Sichtnachweis am laufenden Programm
+
+Kampf 8, über `gameDebug.stepTicks` getaktet (die Browseransicht war nicht
+eingeblendet, also lief `requestAnimationFrame` gedrosselt — der Nachweis ist
+deshalb **numerisch, nicht bildlich**):
+
+```
+60 Takte -> 30 Animationsrahmen        (die 15-Hz-Halbierung greift)
+Knochen 1 von Cloud, alle 4 Takte:  17 -> 18 -> 20 -> 19 -> 18 Grad
+Clips: party-0 14 Rahmen/32 Knochen · party-1 20/23 · party-2 10/31
+```
+
+Eine glatte, zyklische Schwingung von wenigen Grad — das ist eine atmende
+Ruhepose, kein Standbild und kein Rauschen. Vor dieser Runde standen dort
+lauter Nullen.
+
+🟡 **Welcher Satz die Ruhepose ist, bleibt offen.** Gewählt ist Satz 0, weil
+das die einzige Wahl ohne zusätzliche Annahme ist. Die `animationIds` der
+Gegnerrecords zeigen zwar in die Bank, tragen aber noch nicht (25 von 337
+nennen Indizes jenseits der eigenen Bankgröße).
+
+🔴 **Ein Bildvergleich steht aus.** Die Kamerafrage (K8) ist unabhängig davon
+weiter offen: Die Szenenkamera zeigt im Testkampf auf eine Wand. Solange kein
+Bild gegen das Original steht, bleibt die Wurzeldrehungs-Faltung (Basiswinkel
+im X-Platz eines YXZ-Tripels) 🟡 — sie ist exakt nur bei Wurzel-Y = 0.
+
+*Umrechnung: `packages/render-battle/src/composition.ts` · Abspielen:
+`battle-actor.ts` · Fixtures: `battle-anim-clip.test.ts` (5 Fälle) · Probe:
+`tools/realdata-scan/src/k9-wiedergabe.rdtest.ts`.*

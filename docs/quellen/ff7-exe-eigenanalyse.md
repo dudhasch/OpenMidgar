@@ -194,7 +194,7 @@ stehen deshalb nur dort, wo sie einen langen Abschnitt aufschließen.
 | Wer zuerst handelt, Fluchtuhr | `pseudocode/ai-vm-unknowns.md` §4, §6 |
 | Statuseffekte (Immunitätsfeld `u32@0xB0`) | `pseudocode/status-effects.md` Bit→Name-Tabelle, `Battle_BuildStatusImmunityMask`, 16 Statustimer, Verwirrung; `spec/spec-battle-formulas.md` §7, §8.1 |
 | Kampfkamera (K8) und `camdat` (K11) | `spec/spec-battle-camera.md` — Archiv plus drei Kamera-VMs (Auge 33 Ops, Fokus 25 Ops, Beschwörung 12 Modi); `pseudocode/camera-vms.md` |
-| Battle-Animationen `da` (K9) — **eingelöst** | **Nicht** aus einem Dossier, sondern am Abbild: `BattleModel_LoadAnimBank` `0x005E82DE` (Satzkette), `BattleModel_DecodeAnimation` `0x005E7DE4`, `BattleModel_DecodeAnimFrame` `0x005E7680`, Bitleser `0x005E7C40` / `0x005E7B7B` / `0x005E7CE4`. Namensbildung: `BattleModel_ResolveArchiveName` `0x005E2460` (Suffixcode `.D`→0, `.B`→1, `.A`→78 — daher `aa`, `ab`, `da`). Konstanten am Abbild geprüft: `0x007B77EC` = `1.0f`, `0x007B77F0` = `360.0f` |
+| Battle-Animationen `da` (K9) — **eingelöst** | `pseudocode/battle-actors.md` **§5 und §6** — die Satzkette und der Bitstrom, vollständig. Am Abbild gegengelesen: `BattleModel_LoadAnimBank` `0x005E82DE`, `BattleModel_DecodeAnimation` `0x005E7DE4`, `BattleModel_DecodeAnimFrame` `0x005E7680`, Bitleser `0x005E7C40` / `0x005E7B7B` / `0x005E7CE4`. **Beide Lesungen stimmen in jedem Feld überein** — der einzige Fall im Bestand, in dem ein Dossier eine Formatfrage vollständig und ohne Abweichung trägt. Namensbildung: `BattleModel_ResolveArchiveName` `0x005E2460` (Suffixcode `.D`→0, `.B`→1, `.A`→78 — daher `aa`, `ab`, `da`). Konstanten am Abbild geprüft: `0x007B77EC` = `1.0f`, `0x007B77F0` = `360.0f`. Was das Dossier **nicht** hat: die leeren Platzhalter, `align4(5+stromBytes)`, die schwankende Gelenkzahl — das kam aus der Messung |
 | Magie/Effektdarstellung | `spec/spec-battle-effects.md`; `pseudocode/fx-*.md` — ⚠ nur Spritepfad; 1.179 von 2.160 Assetrecords ohne definierte Darstellung |
 | Szenenformat, Formationen | `spec/spec-file-formats.md` §8; `pseudocode/scene-bin.md` — nur Quervergleich, wir sind hier belegt |
 
@@ -271,14 +271,15 @@ umgangen, und sie ist für uns gegenstandslos — unser Weg über
    Lesen — **greppen**, nach Symbolnamen oder Adresse. ⚠ `function-index.md`
    führt analystenvergebene Namen, keine wiedergewonnenen Symbole: Ein
    plausibler Name belegt kein Verhalten.
-5. **Der Namensindex schlägt die Dossiers, wenn man eine Funktion sucht statt
-   eines Themas.** K9 ist der Beleg: Kein Dossier beschreibt den
-   Animationsdekoder, `pseudocode/animation.md` behandelt ausschließlich die
-   Field-Seite. Gefunden wurde er über die Namensliste
-   (`BattleModel_Decode*`) und dann per `Gh-Decompile` **am Abbild gelesen** —
-   in einer Sitzung, nachdem drei Anläufe aus den Dateien heraus nur
-   eingekreist hatten. Umgekehrt gilt weiter: Wo ein Dossier Fließtext liefert,
-   ist die Zahl am Abbild nachzuschlagen (§2).
+5. **Nach Symbolnamen greppen, nicht nach Thema — und dann JEDEN Treffer
+   öffnen.** K9 ist hier ein Lehrstück mit einem Fehler darin: Der Dekoder
+   steht vollständig in `pseudocode/battle-actors.md` §5/§6. Ein Grep nach
+   `DecodeAnim|LoadAnimBank` hat diese Datei sofort geliefert — sie wurde
+   trotzdem übergangen, weil das *themengleiche* Dossier `animation.md` (nur
+   Field-Seite) den Blick gebunden hatte. Das ist Fehlertyp 1 („falsche
+   Suchmenge"), und er blieb nur folgenlos, weil das Abbild danebenlag.
+   Der Themenname eines Dossiers sagt nichts darüber, was darin steht:
+   Der Kampf-Animationsdekoder wohnt im *Aktoren*-Dossier.
 6. Ein Fund aus dem Abbild ist ein **Bauplan, kein Beleg**. Er wird 🟢 erst
    durch eine Abrechnung an unseren Daten — bei K9 die Rahmenzahl, 391/391 mit
    drei Kontrollen. Ohne diesen Schritt bleibt er 🟡, egal wie klar der
