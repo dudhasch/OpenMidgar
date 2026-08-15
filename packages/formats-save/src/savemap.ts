@@ -47,6 +47,23 @@ export const CHAR = {
   /** 🟡 Sechs Grundwerte; die Reihenfolge ist aus dem Wertebereich plausibel, nicht belegt. */
   stats: 2,
   statsCount: 6,
+  /**
+   * 🟡 **Sechs „Quellen"-Boni** (Kraftquelle, Wächterquelle …), index-für-index
+   * auf die Grundwerte addiert. Der wirksame Grundwert einer Figur ist also
+   * `stats[i] + sourceBonus[i]` — wer nur `stats` liest, rechnet mit zu
+   * kleinen Werten, sobald der Spieler Quellen benutzt hat.
+   *
+   * Die Lage folgt aus dem Recordraster: Sie füllt genau die sechs Bytes
+   * zwischen den Grundwerten und der Limitstufe (@14), und nur diese Deutung
+   * lässt keine Lücke.
+   *
+   * ⚠️ **An unseren Spielständen NICHT prüfbar**: alle sechs Bytes sind in
+   * 63 von 63 Records null. Die Deutung stammt aus dem EXE-Bestand; eine
+   * Wache in `savemap-felder.rdtest.ts` schlägt an, sobald ein Spielstand
+   * benutzte Quellen trägt.
+   */
+  sourceBonus: 8,
+  sourceBonusCount: 6,
   name: 16,
   nameLen: 12,
   /**
@@ -102,14 +119,32 @@ export const CHAR = {
   limitLevel: 14,
   /** 🟡 Limitbalken; 0xFF soll „bereit" heißen — der Wertebereich stützt das nicht allein. */
   limitBar: 15,
-  /** 🟡 Statusflagge (0x00 normal). Im Bestand durchgehend 0 — nicht unterscheidbar. */
-  statusFlag: 31,
   /**
-   * 🟢 Kampfreihe. Die Fremdquelle nennt hier zwei sich widersprechende
-   * Lesarten (0/1 gegen 0xFE/0xFF); die Messung entscheidet: Im Bestand kommen
-   * ausschließlich **0xFE und 0xFF** vor, also gilt die zweite.
+   * 🟡 **Der einzige Status, der den Kampf überdauert.** Bit `0x10` = Trauer,
+   * Bit `0x20` = Wut; beide schließen einander aus. Alle übrigen Zustände
+   * enden mit dem Kampf und stehen deshalb nicht im Spielstand.
+   *
+   * ⚠️ Unsere Messung („im Bestand durchgehend 0") bleibt richtig und ist
+   * kein Gegenbeleg: Keine Figur der vorliegenden Spielstände war traurig
+   * oder wütend. Der Wertebereich allein konnte die Bedeutung nicht hergeben.
+   */
+  condition: 31,
+  CONDITION_SADNESS: 0x10,
+  CONDITION_FURY: 0x20,
+  /**
+   * 🟢 Kampfreihe — und die alte Zweideutigkeit ist **aufgelöst**.
+   *
+   * Die Fremdquelle nannte zwei sich widersprechende Lesarten (0/1 gegen
+   * 0xFE/0xFF), unsere Messung fand ausschließlich **0xFE und 0xFF**. Beide
+   * hatten recht: Das Byte ist ein **Flagfeld, und nur Bit 0 trägt die
+   * Reihe** (gesetzt = vordere Reihe). `0xFF` hat Bit 0 gesetzt, `0xFE`
+   * nicht — die „0/1"-Lesart beschrieb das Bit, unsere Messung das ganze
+   * Byte. Deshalb ist {@link istVordereReihe} eine Bitprüfung und kein
+   * Wertevergleich: Sie überlebt es, wenn ein anderes Bit dieses Bytes je
+   * belegt wird.
    */
   row: 32,
+  ROW_FRONT_BIT: 0x01,
   /** 🟡 Fortschritt zur nächsten Stufe, 0…255. */
   tnl: 33,
   /**
@@ -134,6 +169,26 @@ export const CHAR = {
 /** Reihenwerte des Kampfsystems — 🟢 gemessen, siehe `CHAR.row`. */
 export const ROW_FRONT = 0xff;
 export const ROW_BACK = 0xfe;
+
+/**
+ * Steht die Figur in der **vorderen** Reihe? Geprüft wird **Bit 0**, nicht der
+ * Bytewert — siehe `CHAR.row`: Das Feld ist ein Flagfeld, in dem heute nur
+ * Bit 0 belegt ist. Ein Wertevergleich gegen `0xFF` würde falsch antworten,
+ * sobald irgendetwas ein weiteres Bit setzt; diese Prüfung nicht.
+ */
+export function istVordereReihe(row: number): boolean {
+  return (row & CHAR.ROW_FRONT_BIT) !== 0;
+}
+
+/** Trägt die Figur Trauer? (Bit `0x10` von `CHAR.condition`.) */
+export function hatTrauer(condition: number): boolean {
+  return (condition & CHAR.CONDITION_SADNESS) !== 0;
+}
+
+/** Trägt die Figur Wut? (Bit `0x20`.) Schließt {@link hatTrauer} aus. */
+export function hatWut(condition: number): boolean {
+  return (condition & CHAR.CONDITION_FURY) !== 0;
+}
 
 /**
  * Bitpositionen der gelernten Limits (`CHAR.limitsLearned`). Die Lücken sind
@@ -309,10 +364,20 @@ export interface CharacterRecord {
   limitBar: number;
   /** 🟢 Bitmaske der gelernten Limits; siehe {@link LIMIT_BITS}. */
   limitsLearned: number;
-  /** 🟢 Kampfreihe: {@link ROW_FRONT} oder {@link ROW_BACK}. */
+  /** 🟢 Kampfreihe, roh. Deutung über {@link istVordereReihe} (Bit 0). */
   row: number;
-  /** 🟡 Statusflagge, roh. */
-  statusFlag: number;
+  /**
+   * 🟡 Der einzige Status, der den Kampf überdauert: Bit `0x10` Trauer,
+   * Bit `0x20` Wut (Deutung aus dem EXE-Bestand; im Bestand durchgehend 0,
+   * also nicht nachgemessen). Zugriff über {@link hatTrauer} / {@link hatWut}.
+   */
+  condition: number;
+  /**
+   * 🟡 Sechs „Quellen"-Boni, index-für-index auf {@link stats} zu addieren.
+   * Der wirksame Grundwert ist `stats[i] + sourceBonus[i]`. Im vorliegenden
+   * Bestand durchgehend 0 — Deutung aus dem EXE-Bestand, nicht gemessen.
+   */
+  sourceBonus: number[];
   /** 🟡 Fortschritt zur nächsten Stufe 0…255. */
   tnl: number;
   /** 🟡 Zahl der bestrittenen Kämpfe. */
@@ -406,6 +471,8 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
 
   const stats: number[] = [];
   for (let i = 0; i < CHAR.statsCount; i++) stats.push(u8(CHAR.stats + i));
+  const sourceBonus: number[] = [];
+  for (let i = 0; i < CHAR.sourceBonusCount; i++) sourceBonus.push(u8(CHAR.sourceBonus + i));
 
   const materia: MateriaSlot[] = [];
   for (let i = 0; i < CHAR.materiaSlots; i++) {
@@ -454,7 +521,8 @@ export function readCharacterRecord(slot: Uint8Array, index: number): CharacterR
     limitBar: u8(CHAR.limitBar),
     limitsLearned: u16(CHAR.limitsLearned),
     row: u8(CHAR.row),
-    statusFlag: u8(CHAR.statusFlag),
+    condition: u8(CHAR.condition),
+    sourceBonus,
     tnl: u8(CHAR.tnl),
     kills: u16(CHAR.kills),
     exp: u32(CHAR.exp),

@@ -2640,3 +2640,62 @@ sie mit einem Platzhalter zu verwischen.
 *Module: `packages/battle-runtime/src/ff7-zufall.ts`, `ff7-treffer.ts` ·
 Fixtures: `ff7-zufall.test.ts`, `ff7-treffer.test.ts` (19 Fälle) · Probe:
 `tools/realdata-scan/src/zufallstabelle.rdtest.ts` (3 Fälle).*
+
+---
+
+## Savemap gegen den EXE-Bestand: eine Bestätigung, eine Auflösung, zwei ungeprüfte Deutungen (2026-08-15)
+
+### Die Bestätigung: unsere Recordbasis war von Anfang an richtig
+
+Der Bestand führt zum Charakterrecord eine Feldtabelle, die er in einer
+eigenen Korrekturrunde um `0x0C` verschieben musste — Zitat: *„save-file
+parsers were reading 12 bytes past every field."* Die richtige Basis ist
+Savemap `+0x54`.
+
+Unser Parser steht seit S14 auf **84 = 0x54**, hergeleitet über etwas ganz
+anderes: das Namensraster (FF-Text-Namen bei `100 + i·132`, also Basis
+`+0x10`). **Jeder einzelne Feldversatz stimmt überein** — Kennung, Stufe,
+Grundwerte, Limitstufe, Limitbalken, Name, die drei Ausrüstungsplätze,
+Kondition, Reihe, Limitmaske, HP/MP und beide Maximapaare. Zwei unabhängige
+Wege, dieselbe Tabelle.
+
+Auch der 🟢-Befund aus F12 wird bestätigt: `+0x38`/`+0x3A` sind die
+**abgeleiteten** Maxima und tragen `0xFFFF`, solange die Figur nicht in der
+Gruppe war — genau die Unterscheidung, für die es `wirksamesMaximum` gibt.
+
+### Die Auflösung: der Reihenbyte-Streit ist entschieden
+
+Die Fremdquelle nannte für `+0x20` zwei sich widersprechende Lesarten,
+**0/1** gegen **0xFE/0xFF**; unsere Messung fand nur die zweite. Der Bestand
+löst es: Das Byte ist ein **Flagfeld, und Bit 0 trägt die Reihe**. `0xFF` hat
+Bit 0 gesetzt (vorne), `0xFE` nicht (hinten) — beide Lesarten beschrieben
+dasselbe, die eine das Bit, die andere das ganze Byte.
+
+🟢 **Nachgemessen** über 63 Records: `0xFF × 45`, `0xFE × 18`. Alle
+vorkommenden Werte unterscheiden sich **nur in Bit 0**, der Rest ist
+konstant. `istVordereReihe()` prüft deshalb das Bit und nicht den Bytewert —
+das bleibt richtig, falls je ein weiteres Bit belegt wird.
+
+### Zwei Deutungen, die diese Spielstände NICHT prüfen können
+
+⚠️ **Und das ist der eigentliche Befund dieser Runde.** Der Bestand benennt
+zwei bisher unbenannte Felder:
+
+* `+0x08`…`+0x0D` — sechs **Quellen-Boni**, index-für-index auf die
+  Grundwerte addiert. Der wirksame Grundwert ist also `stats[i] +
+  sourceBonus[i]`; wer nur `stats` liest, rechnet zu klein.
+* `+0x1F` — die **Kampfkondition**: Bit `0x10` Trauer, Bit `0x20` Wut, der
+  einzige Status, der einen Kampf überdauert.
+
+Beide Felder sind in **63 von 63** Records **null**. Damit ist jede Prüfung
+auf „Wertebereich plausibel" oder „kein unerwartetes Bit gesetzt" **leer** —
+Nullen bestehen sie, gleichgültig was das Feld bedeutet. Aus diesen
+Spielständen lässt sich „sechs Quellen-Boni" nicht von „sechs ungenutzte
+Bytes" unterscheiden.
+
+Beide Felder stehen deshalb als **🟡**, nicht 🟢, obwohl der Bestand sie klar
+benennt. Was im Repository steht, sind **Wachen**: Sobald ein Spielstand
+benutzte Quellen oder eine gesetzte Kondition trägt, schlagen sie an — und
+dann wird die Messung zum ersten Mal aussagekräftig.
+
+*Probe: `tools/realdata-scan/src/savemap-felder.rdtest.ts` (3 Fälle).*

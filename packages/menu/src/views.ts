@@ -3,6 +3,7 @@ import {
   CHAR,
   LIMIT_BITS,
   MENU_ITEM_ORDER,
+  istVordereReihe,
   ROW_BACK,
   ROW_FRONT,
   type CharacterRecord,
@@ -115,7 +116,16 @@ export function buildEquipView(data: MenuData, characterIndex: number): MenuView
     {
       key: `c${c.index}.row`,
       label: 'Reihe',
-      value: c.row === ROW_BACK ? 'hinten' : c.row === ROW_FRONT ? 'vorne' : `unbekannt (0x${c.row.toString(16)})`,
+      // Bit 0 entscheidet die Reihe (s. CHAR.row). Der rohe Bytewert wird
+      // trotzdem angezeigt, wenn er keiner der beiden bekannten ist — ein
+      // unbekanntes Nebenbit soll sichtbar bleiben und nicht stillschweigend
+      // als „vorne" durchgehen.
+      value:
+        c.row === ROW_FRONT || c.row === ROW_BACK
+          ? istVordereReihe(c.row)
+            ? 'vorne'
+            : 'hinten'
+          : `${istVordereReihe(c.row) ? 'vorne' : 'hinten'} (0x${c.row.toString(16)})`,
       static: true,
     },
   ];

@@ -1,6 +1,6 @@
 import { glyphMetricsFrom, type GlyphMetrics } from '@webmidgar/dialog';
 import { FALLBACK_SPACING, type FfSpacing } from '@webmidgar/formats-kernel';
-import { MENU_ITEM_ORDER, ROW_BACK } from '@webmidgar/formats-save';
+import { MENU_ITEM_ORDER, istVordereReihe } from '@webmidgar/formats-save';
 import {
   borderThickness,
   FF7_WINDOW_SKIN,
@@ -226,7 +226,7 @@ export function buildMainScreen(
       y: oben,
       runs: [
         run(characterLabel(c), 0, 'left', m),
-        run(c.row === ROW_BACK ? 'hinten' : 'vorne', gruppenFlaeche.width, 'right', m, true),
+        run(istVordereReihe(c.row) ? 'vorne' : 'hinten', gruppenFlaeche.width, 'right', m, true),
       ],
       bars: [],
       selectable: true,
