@@ -246,7 +246,7 @@ export function parseP(bytes: Uint8Array, asset: string): ParseResult<MeshSource
             // Ablage BGRA → RGBA. 🟢 Sichtgeprüft (B6a, 2026-08-10): An zwei
             // figürlichen Modellen mit abgeschalteten Texturen wurde BGRA
             // einstimmig bestätigt; unter RGBA werden Haare blau und
-            // Kleidung weinrot. 🟡 Bestätigt durch das Dekompilat (ADR-027/A2):
+            // Kleidung weinrot. 🟡 Bestätigt durch das Dekompilat (ADR-028):
             // `polygon_data+0x50` führt einen D3DCOLOR (0xAARRGGBB) je Vertex,
             // little-endian also genau die Bytefolge B,G,R,A.
             colors.push(bytes[co + 2]!, bytes[co + 1]!, bytes[co]!, bytes[co + 3]!);

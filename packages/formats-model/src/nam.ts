@@ -47,7 +47,7 @@ export interface ResourceBinding {
  * | 3    | D      | Farbe + Textur      | FLAT         |
  * | 4    | H      | Gouraud + Textur    | GOURAUD      |
  *
- * 🟡 **Herkunft** (ADR-027/A2): Dekompilat `ff7_en.exe`,
+ * 🟡 **Herkunft** (ADR-028): Dekompilat `ff7_en.exe`,
  * `Pfile_BuildHundredFromMaterial` (0x00694E05) setzt aus genau dieser Klasse
  * `p_hundred.shadeMode` (D3DSHADE_FLAT 1 / D3DSHADE_GOURAUD 2), und
  * `D3D5ApplyRenderState` (0x006A3D30) schreibt ihn je Gruppe als

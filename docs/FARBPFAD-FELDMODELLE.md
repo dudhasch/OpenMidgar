@@ -1,19 +1,29 @@
 # Farbpfad der Feldmodelle — was das Original tut
 
-**Datum:** 2026-08-15 · **Grundlage:** [ADR-027](ADR-027-DECOMP-REFERENZ.md)
-(dekompilierte Originalquellen als Referenz zugelassen) · **Quelle:** die
-Ghidra-Dekompilation von `ff7_en.exe` (PC-Build) samt der daraus abgeleiteten
-Notizensammlung unter `decomp/`
+**Datum:** 2026-08-15 · **Grundlage:** [ADR-028](ADR-028-EIGENE-CODEANALYSE.md)
+(eigene Codeanalyse der PC-EXE, ohne Auflagen freigegeben) · **Quelle:** die
+eigene Ghidra-Analyse von `ff7_en.exe` samt der Notizensammlung unter
+`decomp/` — genau der Bestand, den ADR-028 benennt
 
 Dieses Dokument hält fest, wie im Original aus einer `.p`-Datei und einer
 `.tex`-Palette ein Pixel wird — und an welchen fünf Stellen unsere Umsetzung
-davor danebenlag. Es erfüllt die **Herkunftspflicht A2**: jede Aussage nennt die
-Funktion, aus der sie stammt. Was ausschließlich aus der Referenz kommt, bleibt
-🟡, bis eine Gegenprobe an unseren Daten sie hebt.
+davor danebenlag.
 
-> **A1 bleibt gewahrt.** Übernommen sind Tatsachen über das Verhalten —
-> Formeln, Konstanten, Reihenfolgen, Feldbedeutungen. Kein Quelltext, keine
-> Bezeichnerlisten, keine zeilenweise Übersetzung.
+Jede Aussage nennt die Funktion, aus der sie stammt. Das ist seit ADR-028
+**keine Auflage mehr**, sondern gute Praxis: Der Quellvermerk ist der Beleg,
+dass nachgebaut und nicht übersetzt wurde — übernommen sind Verhaltenstatsachen
+(Formeln, Konstanten, Reihenfolgen, Feldbedeutungen), kein Quelltext.
+
+Was **nicht** entfällt, ist die Beweisklassenordnung: Eine Aussage aus dem
+Bestand bleibt 🟡, bis eine Gegenprobe an unseren Daten sie trägt. ADR-028 führt
+das ausdrücklich als „Arithmetik, keine Regel" — der Bestand beziffert seine
+eigene Fehlerquote mit 131 Defekten und hält fest, dass sein **Fließtext** etwa
+zur Hälfte falsch war, wo die Codeblöcke daneben stimmen.
+
+> Dieser Farbpfad ist ein Beleg dafür. Der Fließtext nennt als Divisor der
+> Lichtrichtung 360; im Abbild steht an der benutzten Stelle 4096 (§ 2.2).
+> Genau deshalb steht hinter jeder Zahl hier entweder eine Messung an unseren
+> Daten oder ein 🟡.
 
 ---
 

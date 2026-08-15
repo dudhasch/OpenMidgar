@@ -153,13 +153,13 @@ export interface ActorLighting {
 /**
  * Festkommaeinheit der Richtungsvektoren.
  *
- * 🟡 **Herkunft** (ADR-027/A2): `ff7_en.exe`, `Field_InstantiateModels`
+ * 🟡 **Herkunft** (ADR-028): `ff7_en.exe`, `Field_InstantiateModels`
  * (0x0063E4EB) bildet jede Komponente als `-(i16) / DAT_007B78AC`; die
  * Konstante steht im Abbild als `0x45800000` = **4096.0f**. (Der Fließtext der
  * vorliegenden Dekompilat-Notizen nennt an dieser Stelle 360 — das ist der
  * Divisor des Skalenfeldes daneben, nicht der der Richtung.)
  *
- * 🟢 **Gegenprobe an unseren Daten bestanden** (Auflage A2): Über alle 5454
+ * 🟢 **Gegenprobe an unseren Daten bestanden**: Über alle 5454
  * Modellblöcke liegt der Median der Vektorbeträge bei 4108,5 (IQR 9,2), 96,4 %
  * innerhalb ±10 % — auf 4096 normierte Vektoren. Zwei unabhängige Quellen,
  * derselbe Wert.
@@ -180,7 +180,7 @@ export interface ActorLightSet {
 /**
  * Das Lichtwerk des Originals, nachgebaut.
  *
- * 🟡 **Herkunft** (ADR-027/A2): Dekompilat `ff7_en.exe`. Die Kette ist
+ * 🟡 **Herkunft** (ADR-028): Dekompilat `ff7_en.exe`. Die Kette ist
  * `Field_InstantiateModels` (0x0063E4EB) → `Gfx_CreateLightSet` (0x0069CA53) →
  * `FUN_0069C5EE` → `FUN_0069C25A` / `FUN_0069C2E8` / `MultiplyMatrix4x4Core`,
  * je Bone und Bild dann `ApplyLightSet` (0x0069C69F) und der Vertexkern
@@ -251,7 +251,7 @@ const lightMat3Scratch = new THREE.Matrix3();
 /**
  * Der Vertexkern des Originals, als Einschub in three's `MeshBasicMaterial`.
  *
- * 🟡 **Herkunft** (ADR-027/A2): `FUN_0068DD1E` — je Kanal
+ * 🟡 **Herkunft** (ADR-028): `FUN_0068DD1E` — je Kanal
  * `I < ambient ? ambient : I`, dann `min(farbe · I, 255)`. Die Untergrenze ist
  * die Umgebungsfarbe, **nicht** null: Der Schalter dafür ist das Kartenfeld
  * `g_FieldModelNoShadow`, und `Field_InitMapConfigTable` (0x0060EFF9) setzt es
@@ -307,7 +307,7 @@ function applyLightShader(material: THREE.MeshBasicMaterial, set: ActorLightSet)
  * Vertexfarben als RGB — die Alphakomponente der `.p`-Farben wird bewusst
  * fallengelassen.
  *
- * 🟡 **Herkunft** (ADR-027/A2): `D3D5BuildVertexArray` (0x006A37F5) übernimmt
+ * 🟡 **Herkunft** (ADR-028): `D3D5BuildVertexArray` (0x006A37F5) übernimmt
  * das RGB von `polygon_data+0x50` unverändert — „ein glatter dword-Kopiervorgang,
  * ohne Multiplikation, Skalierung, Gamma oder Vormultiplikation" —, ruft danach
  * aber `ApplyGlobalColorModulate` (0x006A3BEE) auf, und das überschreibt das
@@ -357,7 +357,7 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
         tex
           ? basisMaterial({
               map: buildTexture(tex),
-              // Textur × Vertexfarbe. 🟡 Beleg (ADR-027/A2):
+              // Textur × Vertexfarbe. 🟡 Beleg (ADR-028):
               // `D3D5ApplyRenderState` (0x006A3D30) setzt für Modellgeometrie
               // `D3DRENDERSTATE_TEXTUREMAPBLEND = D3DTBLEND_MODULATE` — das
               // Endergebnis ist genau Texel × Vertexfarbe. Eine Verdopplung
@@ -384,7 +384,7 @@ export function buildMeshObject(bundle: ActorMeshBundle, licht?: ActorLighting):
      * Die Lichtmatrix hängt an der **Weltdrehung des Bones** und ändert sich
      * daher je Bild — mit jedem Schritt der Figur und jeder Drehung.
      *
-     * 🟡 **Herkunft** (ADR-027/A2): `Anim_DrawSkeletonFrame` (0x006840DA) ruft
+     * 🟡 **Herkunft** (ADR-028): `Anim_DrawSkeletonFrame` (0x006840DA) ruft
      * je Bone `ApplyLightSet` mit der eben berechneten Bone-Weltmatrix, und
      * `FUN_0069C3D7` bildet daraus `M = (C·D) · Wᵀ`. Weil `W` zeilenvektorisch
      * abgelegt ist, ist `Wᵀ·n` die Normale im Weltraum — die Beleuchtung findet

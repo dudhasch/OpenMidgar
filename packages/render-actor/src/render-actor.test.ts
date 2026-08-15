@@ -406,7 +406,7 @@ describe('Animationsbindung & Meshes', () => {
 });
 
 /**
- * Das Lichtwerk des Originals (🟡 ADR-027/A2, Dekompilat `ff7_en.exe`:
+ * Das Lichtwerk des Originals (🟡 ADR-028, Dekompilat `ff7_en.exe`:
  * `Field_InstantiateModels` → `Gfx_CreateLightSet` → `FUN_0069C2E8`/`FUN_0069C25A`).
  * Geprüft wird die Matrix, nicht die Optik: `I = C·D·n + ambient`.
  */
