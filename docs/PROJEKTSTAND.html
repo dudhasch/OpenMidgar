@@ -234,8 +234,8 @@
 </table>
 
 <h2>Unterbau</h2>
-<div class="balken"><span class="b-ok" style="width:71.4%"></span><span class="b-teil" style="width:14.3%"></span><span class="b-sperre" style="width:14.3%"></span></div>
-<p class="zaehler">7 Posten — 5 steht · 1 teilweise · 1 offen (versperrt)</p>
+<div class="balken"><span class="b-ok" style="width:85.7%"></span><span class="b-sperre" style="width:14.3%"></span></div>
+<p class="zaehler">7 Posten — 6 steht · 1 offen (versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -244,15 +244,15 @@
 <tr class="ok"><td class="was">Determinismus &amp; Replay</td><td class="status">steht</td><td class="notiz">Fixed-Tick; Digests identisch über Node 22, Chromium 148 und 151 (R9)</td></tr>
 <tr class="ok"><td class="was">Leistung (NFR)</td><td class="status">steht</td><td class="notiz">Feldwechsel p95 10,12 ms gegen 500 ms Budget; Soak über 500 Wechsel, +1,07 % Heap</td></tr>
 <tr class="ok"><td class="was">Modding-MVP</td><td class="status">steht</td><td class="notiz">Manifest-Validierung, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order</td></tr>
-<tr class="teil"><td class="was">Testhygiene</td><td class="status">teilweise</td><td class="notiz"><code>menu-savemap-probe</code> schließt seine Dateihandles nicht — zwei <code>ERR_INVALID_STATE</code> je Realdatenlauf. Kein Fehlschlag, aber Lärm, der einen echten Fehler verdecken kann</td></tr>
+<tr class="ok"><td class="was">Testhygiene</td><td class="status">steht</td><td class="notiz">Der Realdatenlauf meldet keine unbehandelten Fehler mehr. Die <code>ERR_INVALID_STATE</code> waren <em>nicht</em> einer Probe zuzuordnen: Node meldet ein weggeworfenes <code>FileHandle</code> erst, wenn die Speicherbereinigung darüber stolpert — also in irgendeiner Probe, die zufällig gerade lief. Behoben in <code>NodeSourceFile</code> (hält die <code>open()</code>-Promise statt des Handles, sonst überschreiben zwei gleichzeitige <code>read()</code> einander) plus einem Aufräumnetz über <code>setupFiles</code></td></tr>
 <tr class="sperre"><td class="was">Modding-Zugriff auf Weltkarte, Kampf, Minigames</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel. Der Studio-Strang und die Modding-Bögen kennen diese Assetklassen noch nicht; die Aufnahme ist für nach 2.0 vorgesehen</td></tr>
 </tbody>
 </table>
 
 <h2>Zusammen</h2>
 <div class="gesamt">
-  <div class="balken"><span class="b-ok" style="width:50.0%"></span><span class="b-teil" style="width:21.0%"></span><span class="b-offen" style="width:22.6%"></span><span class="b-sperre" style="width:6.4%"></span></div>
-  <p class="zaehler"><strong>62 Posten — 31 steht · 13 teilweise · 18 offen (davon 4 versperrt)</strong></p>
+  <div class="balken"><span class="b-ok" style="width:51.6%"></span><span class="b-teil" style="width:19.4%"></span><span class="b-offen" style="width:22.6%"></span><span class="b-sperre" style="width:6.4%"></span></div>
+  <p class="zaehler"><strong>62 Posten — 32 steht · 12 teilweise · 18 offen (davon 4 versperrt)</strong></p>
   <p class="zaehler" style="margin-top:.7rem">
     Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
     ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend
