@@ -3070,3 +3070,42 @@ Sie stehen als Konstanten da, damit sie an einer Stelle korrigierbar bleiben.
 
 *Modul: `packages/formats-save/src/story.ts` · Probe:
 `tools/realdata-scan/src/story-fortschritt.rdtest.ts` (4 Fälle).*
+
+### Nachtrag: der Fortschritt ist jetzt eine Sicht, keine Kopie
+
+Die Messung oben belegte den **Wert**. Die Vorgabe war aber eine andere: „als
+`u16`-Sicht auf Bank 1, Versatz 0, geteilt mit der VM" — und das war nicht
+gebaut. Nachgeprüft: Zwischen den Bankregionen des Interpreters und der
+Savemap gibt es **überhaupt keine Verbindung**. Ein Feldskript, das den
+Fortschritt setzt, schreibt in `banks[0]`; beim Speichern ginge das verloren.
+
+🟢 **Das Raster ist über drei unabhängig hergeleitete Versätze belegt:**
+
+```
+0x10A4 (PHS-Maske) − 0x0BA4 (Fortschritt) = 0x500 = 5 × 256
+```
+
+Genau **fünf** persistente Regionen führt unser Interpreter
+(`PERSISTENT_REGIONS`) — abgeleitet aus der Bank-Aliasing-Tabelle, ohne
+Kenntnis dieser Versätze. Und unsere eigene, längst gemessene `DISC_OFFSET`
+(`0x0EA4`) liegt **exakt** auf dem Anfang der vierten Region. Drei Zahlen aus
+drei Quellen auf demselben Gitter.
+
+⚠️ **Daraus folgt eine Kollision, die vorher niemand sehen konnte.**
+`DISC_OFFSET` und die Ausrüstungssperre (`0x0E13`) liegen **innerhalb** der
+Bankregionen — sie sind **Skriptvariablen**, keine eigenen Savemap-Felder.
+Wer die Bänke schreibt, überschreibt sie; wer sie einzeln schreibt, ändert
+eine Skriptvariable. Solange beide Zugriffswege nebeneinander bestehen, ist
+das ein echter Konflikt und keine Stilfrage.
+
+🟡 Welche Region welche **Nummer** trägt, ist nicht gemessen — belegt ist
+allein Region 0 bei `0x0BA4`. Die Reihenfolge der übrigen vier ist die
+naheliegende, aber ungeprüfte.
+
+Die Sicht selbst hat einen eigenen Testfall für den Grund ihrer Existenz: das
+Schreiben des **hohen Bytes allein**. Über die Sicht ist das eine Änderung um
+256 — über ein synchronisiertes Zweitfeld wäre es gar keine, bis jemand
+nachzieht. Genau dort liefe eine Kopie auseinander.
+
+*Ergänzt: `packages/formats-save/src/story.ts` · Fixtures: `story.test.ts`
+(8 Fälle).*

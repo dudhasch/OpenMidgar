@@ -136,3 +136,73 @@ export function phsBeweglich(z: StoryZustand, charId: number): boolean {
 export function phsVorhanden(z: StoryZustand, charId: number): boolean {
   return (z.phsAvailable & (1 << charId)) !== 0;
 }
+
+/**
+ * ## Die Skriptbänke im Spielstand
+ *
+ * 🟢 **Das Raster ist über drei unabhängig hergeleitete Versätze belegt.**
+ * Der Fortschrittswert liegt bei `0x0BA4` (F43, gemessen), die PHS-Sperrmaske
+ * bei `0x10A4` — und `0x10A4 − 0x0BA4 = 0x500 = 5 × 256`. Genau fünf
+ * persistente Regionen führt unser Interpreter (`PERSISTENT_REGIONS`), aus der
+ * Bank-Aliasing-Tabelle abgeleitet und ohne Kenntnis dieser Versätze. Dazu
+ * liegt unsere eigene `DISC_OFFSET` (`0x0EA4`) **exakt** auf dem Anfang der
+ * vierten Region.
+ *
+ * Drei Zahlen aus drei Quellen auf demselben 256-Byte-Raster.
+ *
+ * ⚠️ **Daraus folgt eine Warnung.** `DISC_OFFSET` und
+ * {@link LOADOUT_LOCK_OFFSET} liegen **innerhalb** der Bankregionen; sie sind
+ * Skriptvariablen, keine eigenen Savemap-Felder. Wer die Bänke schreibt,
+ * überschreibt sie — und wer sie einzeln schreibt, ändert eine Skriptvariable.
+ *
+ * 🟡 **Welche Region welche Nummer trägt, ist nicht gemessen.** Belegt ist
+ * allein Region 0 bei `0x0BA4` (über den Fortschrittswert). Die Reihenfolge
+ * der übrigen vier ist die naheliegende, aber ungeprüfte.
+ */
+export const SCRIPT_BANK_BASE = 0x0ba4;
+export const SCRIPT_BANK_REGION_LEN = 256;
+export const SCRIPT_BANK_REGION_COUNT = 5;
+/** Region der Bänke 1/2 — sie trägt den Fortschrittswert an Versatz 0. */
+export const SCRIPT_BANK_REGION_STORY = 0;
+
+/** Versatz einer persistenten Bankregion im Slot. */
+export function skriptregionVersatz(region: number): number {
+  return SCRIPT_BANK_BASE + region * SCRIPT_BANK_REGION_LEN;
+}
+
+/** Die fünf persistenten Regionen als Kopien herauslesen. */
+export function leseSkriptregionen(slot: Uint8Array): Uint8Array[] | null {
+  if (slot.length < skriptregionVersatz(SCRIPT_BANK_REGION_COUNT)) return null;
+  const out: Uint8Array[] = [];
+  for (let r = 0; r < SCRIPT_BANK_REGION_COUNT; r++) {
+    const ab = skriptregionVersatz(r);
+    out.push(slot.slice(ab, ab + SCRIPT_BANK_REGION_LEN));
+  }
+  return out;
+}
+
+/** Die fünf Regionen zurückschreiben. Falsch bemessene werden abgelehnt. */
+export function schreibeSkriptregionen(slot: Uint8Array, regionen: readonly Uint8Array[]): boolean {
+  if (slot.length < skriptregionVersatz(SCRIPT_BANK_REGION_COUNT)) return false;
+  if (regionen.length !== SCRIPT_BANK_REGION_COUNT) return false;
+  if (regionen.some((r) => r.length !== SCRIPT_BANK_REGION_LEN)) return false;
+  for (let r = 0; r < SCRIPT_BANK_REGION_COUNT; r++) slot.set(regionen[r]!, skriptregionVersatz(r));
+  return true;
+}
+
+/**
+ * Der Fortschrittswert als **Sicht** auf die Story-Region — nicht als Kopie.
+ *
+ * ⚠️ Feldskripte schreiben ihn als Wort, als Byte **und als hohes Byte
+ * allein**. Ein synchronisiertes Zweitfeld liefe spätestens beim hohen Byte
+ * auseinander; hier liest und schreibt jeder Zugriff dieselben zwei Bytes wie
+ * das Skript.
+ */
+export function leseGameMoment(regionStory: Uint8Array): number {
+  return (regionStory[0]! | (regionStory[1]! << 8)) & 0xffff;
+}
+
+export function schreibeGameMoment(regionStory: Uint8Array, wert: number): void {
+  regionStory[0] = wert & 0xff;
+  regionStory[1] = (wert >>> 8) & 0xff;
+}
