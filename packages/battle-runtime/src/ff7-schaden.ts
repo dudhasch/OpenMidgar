@@ -389,3 +389,67 @@ export function leererKontext(teil: Partial<SchadensKontext> = {}): SchadensKont
     ...teil,
   };
 }
+
+/**
+ * Formeln `0x03` / `0x04` — Anteil der aktuellen bzw. maximalen HP/MP (§5.5).
+ *
+ * `power / 32` ist der Bruch: 8 → 25 %, 16 → 50 %, 32 → 100 %. **Weder Trauer
+ * noch Aufteilung, Barriere oder Streuung** greifen hier — die vier
+ * Nachbearbeiter laufen bei diesen beiden Formeln gar nicht.
+ */
+export function schadenAnteil(ctx: SchadensKontext, aktuellerWert: number): number {
+  let v = trunc32(Math.imul(aktuellerWert, ctx.power), 32);
+  if (ctx.repeatCasts !== 0) v = sar(v, 1);
+  ctx.damage = v;
+  return v;
+}
+
+/** Wählt HP oder MP für {@link schadenAnteil}: Sonderflag Bit 0 heißt HP. */
+export function anteilTrifftHp(ctx: SchadensKontext): boolean {
+  return (ctx.specialFlags & 0x1) !== 0;
+}
+
+/** Formel `0x05` — die „flache" Formel (Heilzauber). Ohne Trauerabzug. */
+export function schadenFlach(ctx: SchadensKontext, roll256: number): number {
+  let v = (Math.imul((ctx.attackStat + ctx.attackerLevel) | 0, 6) + Math.imul(ctx.power, 22)) | 0;
+  v = wendeZielaufteilungAn(ctx, v, 0);
+  v = wendeBarriereUndAufschlagAn(ctx, v);
+  v = wendeStreuungAn(v, roll256);
+  ctx.damage = v;
+  return v;
+}
+
+/** Formel `0x06` — schlicht `power · 20`. Kein Nachbearbeiter, keine Streuung. */
+export function schadenKonstant(ctx: SchadensKontext): number {
+  ctx.damage = Math.imul(ctx.power, 20);
+  return ctx.damage;
+}
+
+/** Formel `0x07` — Stärke gegen Abwehr, **nur** Streuung. */
+export function schadenGegenAbwehr(ctx: SchadensKontext, roll256: number): number {
+  const v = trunc32(Math.imul(ctx.power, (512 - ctx.defence) | 0), 32);
+  ctx.damage = wendeStreuungAn(v, roll256);
+  return ctx.damage;
+}
+
+/**
+ * Formel `0x08` — kein Schaden, sondern eine erzwungene Elementarreaktion.
+ *
+ * Absorbiert das Ziel (`0x40`), wird daraus Affinität 0 = **Sofortiger Tod**;
+ * sonst Affinität 7 = **volle Wiederherstellung**. Die Formel dreht die
+ * Wirkung also um, statt eine Zahl zu liefern.
+ */
+export function erzwingeElementarreaktion(elemReaction: number): number {
+  return elemReaction & 0x40 ? 0x01 : 0x80;
+}
+
+/**
+ * Formel `0x0A` — `power` auf die Ziele verteilt, **aufgerundet**.
+ * `targetMask` ist eine 32-Bit-Maske; gezählt werden ihre gesetzten Bits.
+ */
+export function schadenAufgeteilt(ctx: SchadensKontext, targetMask: number): number {
+  let n = 0;
+  for (let m = targetMask >>> 0; m !== 0; m >>>= 1) n += m & 1;
+  ctx.damage = n !== 0 ? (((ctx.power + n - 1) / n) | 0) : 0;
+  return ctx.damage;
+}

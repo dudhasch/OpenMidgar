@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { leererKontext } from './ff7-schaden.js';
 import { setzeZufall } from './ff7-zufall.js';
 import {
+  magischerTrefferwurf,
   physischerTrefferwurf,
   STATUS_FURY,
   TREFFER_ERZWINGENDE_STATUS,
@@ -138,5 +139,79 @@ describe('Physischer Trefferwurf', () => {
     const zc = setzeZufall(identitaet(), 0);
     const ctxc = leererKontext({ resultFlags: 0x20 });
     expect(physischerTrefferwurf(ctxc, EIN({ hitRate: 0, dexterity: 0 }), zc).rate).toBe(0xff);
+  });
+});
+
+describe('Magischer Trefferwurf', () => {
+  const MAG = (teil: Partial<Parameters<typeof magischerTrefferwurf>[1]> = {}) => ({
+    hitRate: 100,
+    attackerLevel: 30,
+    targetLevel: 20,
+    magicDefensePercent: 0,
+    elemReaction: 0,
+    statusInflict: 0,
+    ...teil,
+  });
+
+  it('zieht BEIDE Größen vor jeder Abkürzung — die fragilste Reihenfolge', () => {
+    const verbrauch = (hitRate: number): number => {
+      const z = setzeZufall(identitaet(), 0);
+      magischerTrefferwurf(leererKontext(), MAG({ hitRate }), z);
+      return z.cursor[0]!;
+    };
+    // 0xFF heißt „kann nicht danebengehen" — kostet trotzdem beide Bytes.
+    expect(verbrauch(0xff)).toBe(2);
+    expect(verbrauch(100)).toBe(2);
+  });
+
+  it('kostet zwei zufallUnter — nicht einen plus wurf1bis100 wie physisch', () => {
+    const zm = setzeZufall(identitaet(), 0);
+    magischerTrefferwurf(leererKontext(), MAG(), zm);
+    const zp = setzeZufall(identitaet(), 0);
+    physischerTrefferwurf(leererKontext(), EIN(), zp);
+    // Physisch: 1 + 2 = 3 Bytes. Magisch: 2. Die Wege sind verschieden teuer.
+    expect(zm.cursor[0]).toBe(2);
+    expect(zp.cursor[0]).toBe(3);
+  });
+
+  /**
+   * ⚠️ Für einen Fehlschlag muss `r2 >= rate + lvlTerm` gelten. Bei einem
+   * Angreifer weit ÜBER der Zielstufe ist `lvlTerm` so groß, dass selbst
+   * Trefferquote 0 noch trifft — der erste Anlauf dieses Tests ist genau
+   * daran gescheitert. Deshalb steht der Angreifer hier unter dem Ziel.
+   */
+  const SCHWACH = { hitRate: 0, attackerLevel: 1, targetLevel: 20 };
+
+  it('lässt Reflect nur ohne Sonderflag 0x0200 durchgehen', () => {
+    const mitReflect = leererKontext({ targetStatus: 1 << 18 });
+    expect(magischerTrefferwurf(mitReflect, MAG(SCHWACH), setzeZufall(identitaet(), 0)).getroffen).toBe(true);
+    const beachtet = leererKontext({ targetStatus: 1 << 18, specialFlags: 0x0200 });
+    expect(magischerTrefferwurf(beachtet, MAG(SCHWACH), setzeZufall(identitaet(), 0)).getroffen).toBe(false);
+  });
+
+  it('kann bei gesetztem statusInflict doch danebengehen', () => {
+    // Schlafendes Ziel: ohne Statuszufügung sicherer Treffer …
+    const ohne = leererKontext({ targetStatus: 1 << 2 });
+    expect(magischerTrefferwurf(ohne, MAG(SCHWACH), setzeZufall(identitaet(), 0)).getroffen).toBe(true);
+    // … mit Statuszufügung greift die Ausnahme nicht mehr.
+    const mit = leererKontext({ targetStatus: 1 << 2 });
+    expect(
+      magischerTrefferwurf(mit, MAG({ ...SCHWACH, statusInflict: 0x4 }), setzeZufall(identitaet(), 0)).getroffen,
+    ).toBe(false);
+  });
+
+  it('lässt einen hochstufigen Angreifer auch mit Quote 0 treffen', () => {
+    // Der Stufenterm allein trägt: 30 − trunc32(20,2) = 20, und r2 = 1 < 20.
+    const ctx = leererKontext();
+    expect(magischerTrefferwurf(ctx, MAG({ hitRate: 0 }), setzeZufall(identitaet(), 0)).getroffen).toBe(true);
+  });
+
+  it('rechnet den Stufenterm mit halber Zielstufe, zur Null hin gekürzt', () => {
+    // lvlTerm = 30 − trunc32(21,2) = 30 − 10 = 20
+    const z = setzeZufall(identitaet(), 0);
+    // r1 = 0 (kein MDef%-Ausweichen), r2 = (1*100>>8)+1 = 1 → 1 >= rate+20?
+    const ctx = leererKontext();
+    const r = magischerTrefferwurf(ctx, MAG({ hitRate: 1, targetLevel: 21 }), z);
+    expect(r.getroffen).toBe(true); // 1 >= 1+20 ist falsch
   });
 });

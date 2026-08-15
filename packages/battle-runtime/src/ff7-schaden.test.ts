@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   dekodiereSchadensbyte,
+  anteilTrifftHp,
+  erzwingeElementarreaktion,
   klemmeSchaden,
   leererKontext,
+  schadenAnteil,
+  schadenAufgeteilt,
+  schadenFlach,
+  schadenGegenAbwehr,
+  schadenKonstant,
   nimmtKeinenSchaden,
   sar,
   schadenMagisch,
@@ -294,5 +301,77 @@ describe('Nachklemmung', () => {
     expect(nimmtKeinenSchaden(1 << 24, false)).toBe(true);
     expect(nimmtKeinenSchaden(0, true)).toBe(true);
     expect(nimmtKeinenSchaden(1 << 23, false)).toBe(false);
+  });
+});
+
+describe('Die übrigen Formelschlitze', () => {
+  const grund = () =>
+    leererKontext({ power: 16, defence: 30, attackStat: 60, attackerLevel: 30, targetCount: 1 });
+
+  it('0x03/0x04 rechnen power/32 als Bruch — ohne jeden Nachbearbeiter', () => {
+    const ctx = grund();
+    ctx.power = 16; // 50 %
+    expect(schadenAnteil(ctx, 1000)).toBe(500);
+    ctx.power = 8; // 25 %
+    expect(schadenAnteil(ctx, 1000)).toBe(250);
+    ctx.power = 32; // 100 %
+    expect(schadenAnteil(ctx, 999)).toBe(999);
+    // Trauer beim Ziel ändert NICHTS — die vier Nachbearbeiter laufen hier nicht.
+    ctx.targetStatus = 1 << STATUS_SADNESS;
+    ctx.power = 16;
+    expect(schadenAnteil(ctx, 1000)).toBe(500);
+  });
+
+  it('0x03/0x04 halbieren bei Mehrfachzauber, abrundend', () => {
+    const ctx = grund();
+    ctx.power = 32;
+    ctx.repeatCasts = 1;
+    expect(schadenAnteil(ctx, 999)).toBe(499); // 999 >> 1
+  });
+
+  it('wählt HP oder MP über Sonderflag Bit 0', () => {
+    expect(anteilTrifftHp(leererKontext({ specialFlags: 0x1 }))).toBe(true);
+    expect(anteilTrifftHp(leererKontext({ specialFlags: 0x2 }))).toBe(false);
+  });
+
+  it('0x05 rechnet flach und lässt Trauer aus', () => {
+    const ctx = grund();
+    // (60+30)*6 + 16*22 = 540 + 352 = 892; ein Ziel → keine Aufteilung.
+    const erwartet = (892 * 4096) >> 12;
+    expect(schadenFlach(ctx, 0xff)).toBe(erwartet);
+    const traurig = grund();
+    traurig.targetStatus = 1 << STATUS_SADNESS;
+    expect(schadenFlach(traurig, 0xff)).toBe(erwartet); // unverändert
+  });
+
+  it('0x06 ist power · 20, ohne Streuung', () => {
+    const ctx = grund();
+    expect(schadenKonstant(ctx)).toBe(320);
+    expect(ctx.damage).toBe(320);
+  });
+
+  it('0x07 setzt power gegen die Abwehr und streut nur', () => {
+    const ctx = grund();
+    // trunc32(16 * (512−30), 32) = trunc32(7712, 32) = 241
+    expect(trunc32(16 * 482, 32)).toBe(241);
+    expect(schadenGegenAbwehr(ctx, 0xff)).toBe((241 * 4096) >> 12);
+  });
+
+  it('0x08 dreht die Wirkung um statt eine Zahl zu liefern', () => {
+    // Absorbiert das Ziel (0x40) → Affinität 0 = sofortiger Tod.
+    expect(erzwingeElementarreaktion(0x40)).toBe(0x01);
+    // Sonst → Affinität 7 = volle Wiederherstellung.
+    expect(erzwingeElementarreaktion(0x00)).toBe(0x80);
+    expect(erzwingeElementarreaktion(0x21)).toBe(0x80);
+  });
+
+  it('0x0A teilt power auf die gesetzten Zielbits auf und rundet AUF', () => {
+    const ctx = grund();
+    ctx.power = 10;
+    expect(schadenAufgeteilt(ctx, 0b111)).toBe(4); // ceil(10/3)
+    expect(schadenAufgeteilt(ctx, 0b1)).toBe(10);
+    expect(schadenAufgeteilt(ctx, 0)).toBe(0);
+    // Auch das oberste Bit zählt mit — die Maske ist vorzeichenlos.
+    expect(schadenAufgeteilt(ctx, 0x80000000 | 0)).toBe(10);
   });
 });

@@ -120,3 +120,58 @@ export function physischerTrefferwurf(
   if (!getroffen) ctx.resultFlags |= 1;
   return { getroffen, rate, workCure };
 }
+
+/** Statusbits, bei denen ein MAGISCHER Treffer nicht danebengehen kann (§6.6). */
+export const MAG_TREFFER_ERZWINGENDE_STATUS = 0x02004445;
+export const STATUS_REFLECT = 18;
+
+export interface MagTrefferEingabe {
+  /** Trefferquote des Angriffs. `>= 0xFF` heißt „kann nicht danebengehen". */
+  hitRate: number;
+  attackerLevel: number;
+  targetLevel: number;
+  /** Magieabwehr-Prozent des Ziels (Rüstung `+0x05`). */
+  magicDefensePercent: number;
+  elemReaction: number;
+  /** Statusmaske, die der Angriff zufügen will; 0 = keiner. */
+  statusInflict: number;
+}
+
+/**
+ * Magischer Trefferwurf (§6.6).
+ *
+ * ⚠️ **Die fragilste Reihenfolge im ganzen System.** Beide Zufallsgrößen
+ * werden **vor jeder vorzeitigen Rückkehr** gezogen — auch wenn feststeht,
+ * dass der Angriff nicht danebengehen kann. Ein Dekoder, der faul zieht,
+ * verschiebt den Strom für alles Folgende.
+ *
+ * Anders als physisch werden hier **zwei** `zufallUnter(100)` gezogen, nicht
+ * einer plus ein `wurf1bis100` — die beiden Wege kosten also verschieden
+ * viele Tabellenbytes.
+ */
+export function magischerTrefferwurf(
+  ctx: SchadensKontext,
+  ein: MagTrefferEingabe,
+  z: Zufallszustand,
+): { getroffen: boolean; rate: number } {
+  let rate = ein.hitRate;
+  const lvlTerm = (ein.attackerLevel - trunc32(ein.targetLevel, 2)) | 0;
+
+  // UNBEDINGT, vor allen Abkürzungen.
+  const r1 = zufallUnter(z, 100) & 0xff;
+  const r2 = ((zufallUnter(z, 100) & 0xff) + 1) | 0;
+
+  const trifftSicher =
+    rate >= 0xff ||
+    (ein.elemReaction & 0x63) !== 0 ||
+    (!(ctx.specialFlags & 0x0200) && (ctx.targetStatus & (1 << STATUS_REFLECT)) !== 0) ||
+    (ein.statusInflict === 0 && (ctx.targetStatus & MAG_TREFFER_ERZWINGENDE_STATUS) !== 0);
+  if (trifftSicher) return { getroffen: true, rate };
+
+  rate = wendeWutabzugAn(ctx.attackerStatus, rate);
+  if (r1 < ein.magicDefensePercent || r2 >= rate + lvlTerm) {
+    ctx.resultFlags |= 1;
+    return { getroffen: false, rate };
+  }
+  return { getroffen: true, rate };
+}

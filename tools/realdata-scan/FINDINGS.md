@@ -2769,3 +2769,50 @@ Antwort.
 *Modul: `packages/battle-runtime/src/ff7-statuskette.ts` · Fixtures:
 `ff7-statuskette.test.ts` (12 Fälle, Vektoren 11.8 und 11.9) · Probe:
 `tools/realdata-scan/src/ausruestung-statkette.rdtest.ts` (2 Fälle).*
+
+---
+
+## Magischer Trefferwurf und die übrigen Formelschlitze (2026-08-15)
+
+Rein additiv — die Formeltabelle ist damit bis auf die Trickhälfte
+(`0x10`…`0x1D`) vollständig.
+
+### Der magische Trefferwurf: die fragilste Reihenfolge im System
+
+⚠️ **Beide Zufallsgrößen fallen VOR jeder vorzeitigen Rückkehr** — auch wenn
+feststeht, dass der Angriff nicht danebengehen kann. Wer faul zieht,
+verschiebt den Strom für alles Folgende. Der Bestand nennt das ausdrücklich
+„the single most fragile ordering constraint in the whole system".
+
+Und die beiden Wege sind **verschieden teuer**: physisch ein `zufallUnter`
+plus ein `wurf1bis100` = **3 Tabellenbytes**, magisch zwei `zufallUnter` =
+**2 Bytes**. Als Testfall festgehalten, weil eine Vereinheitlichung der
+beiden Wege genau hier auseinanderliefe.
+
+### Die Formeln 0x03…0x0A
+
+| Formel | Rechnung | Nachbearbeiter |
+|---|---|---|
+| `0x03`/`0x04` | Anteil der aktuellen/maximalen HP oder MP, `power/32` | **keine** |
+| `0x05` | `(Angriff+Stufe)·6 + power·22` | Aufteilung, Barriere, Streuung — **keine Trauer** |
+| `0x06` | `power · 20` | keine |
+| `0x07` | `power · (512−Abwehr) / 32` | nur Streuung |
+| `0x08` | **kein Schaden** — erzwingt eine Elementarreaktion | — |
+| `0x0A` | `power` auf die Zielbits verteilt, **aufgerundet** | keine |
+
+`0x08` ist der eigenartigste: Absorbiert das Ziel, wird daraus *sofortiger
+Tod*; sonst *volle Wiederherstellung*. Die Formel dreht die Wirkung um, statt
+eine Zahl zu liefern.
+
+### Zwei eigene Testaufbauten, die falsch waren
+
+⚠️ Zwei Fälle des magischen Wurfs erwarteten einen Fehlschlag und bekamen
+einen Treffer. Der Grund lag nicht im Code: Bei Trefferquote 0 und einem
+Angreifer **über** der Zielstufe trägt der Stufenterm allein
+(`30 − trunc32(20,2) = 20`), und `r2 = 1 >= 20` ist falsch — es trifft.
+Ein Fehlschlag ist nur möglich, wenn der Angreifer **unter** dem Ziel steht.
+Beide Fälle sind entsprechend umgebaut, und ein dritter hält den Befund fest:
+Ein hochstufiger Angreifer trifft magisch auch mit Quote 0.
+
+*Module: `ff7-treffer.ts`, `ff7-schaden.ts` · Fixtures: 105 Fälle in
+`packages/battle-runtime`.*
