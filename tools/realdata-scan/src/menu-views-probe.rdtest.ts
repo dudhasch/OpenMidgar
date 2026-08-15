@@ -14,6 +14,7 @@ import {
   resolveKernelDataSections,
   resolveKernelNameLists,
 } from '@webmidgar/formats-kernel';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Vorprobe zu den **neuen Menüansichten** (Welle 2, F24-B): Ausrüstung,
@@ -30,9 +31,6 @@ import {
  * wird über Indexbereiche gemessen, nicht über Wortlaute.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
@@ -74,7 +72,7 @@ async function ladeSlots(dicht: boolean): Promise<Slot[]> {
 }
 
 async function ladeKernel(): Promise<Awaited<ReturnType<typeof parseKernelContainer>> | null> {
-  const pfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+  const pfad = realPfad('kernel/KERNEL.BIN');
   if (!existsSync(pfad)) return null;
   return parseKernelContainer(await readFile(pfad), 'KERNEL.BIN');
 }

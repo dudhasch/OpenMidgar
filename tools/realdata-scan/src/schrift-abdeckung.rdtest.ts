@@ -13,6 +13,7 @@ import {
 } from '@webmidgar/formats-kernel';
 import { buildGlyphCodeMap, buildGlyphAtlas, cellRect, FONT_CELL } from '@webmidgar/ui-window';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Schrift-Abdeckung (Welle 3): Lässt sich der **echte** Dialogbestand aus dem
@@ -37,9 +38,6 @@ import { NodeDirectorySource } from './node-source.js';
  * dagegen eine andere Zahl, und genau daran scheitert eine falsche Zuordnung.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
@@ -48,7 +46,7 @@ describe.skipIf(!available)('Realdaten: Spielschrift gegen den echten Dialogbest
     'deckt die Felddialoge ab und trifft die Tintenbreiten der Zellen',
     { timeout: 900_000 },
     async () => {
-      const winBytes = new Uint8Array(await readFile(join(REAL_DIR, 'data', 'kernel', 'WINDOW.BIN')));
+      const winBytes = new Uint8Array(await readFile(realPfad('kernel/WINDOW.BIN')));
       const win = await parseWindowBin(winBytes, 'WINDOW.BIN');
       expect(win.fontTexture).not.toBeNull();
       const font = win.fontTexture!;

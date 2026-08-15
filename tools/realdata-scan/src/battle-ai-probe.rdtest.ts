@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseSceneBin } from '@webmidgar/formats-battle';
 import { aiOperandLengths, AI_STRING_OP, AI_TERMINATOR, parseAiScript, runAiHandler, type AiMemory } from '@webmidgar/battle-runtime';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * S31 — Gegner-KI-Grammatik (Verfahren S12 mit den dort gelernten Grenzen).
@@ -29,9 +30,6 @@ import { aiOperandLengths, AI_STRING_OP, AI_TERMINATOR, parseAiScript, runAiHand
  * battle-runtime) gegen den Bestand — inklusive der Kontrollen.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 
 interface Span {
@@ -40,7 +38,7 @@ interface Span {
 }
 
 async function loadAiScripts(): Promise<{ scripts: Uint8Array[]; spans: Span[] }> {
-  const bytes = new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'battle', 'scene.bin')));
+  const bytes = new Uint8Array(readFileSync(realPfad('battle/scene.bin')));
   const container = await parseSceneBin(bytes, 'scene.bin');
   const scripts: Uint8Array[] = [];
   const spans: Span[] = [];
@@ -89,7 +87,17 @@ describe.skipIf(!available)('S31-Probe: Gegner-KI-Grammatik', () => {
     console.log('KI-Skripte:', JSON.stringify({ scripts: scripts.length, monoton: mono, ersterOffset32: first32 }));
     expect(mono).toBe(scripts.length);
     expect(first32).toBe(scripts.length);
-    expect(scripts.length).toBe(614);
+    /**
+     * 612 statt 614: Seit der Locale-Umstellung (2026-08-15) liest die Probe
+     * `data/lang-en/battle/scene.bin` — den Zweig, den das Original lädt. Dort
+     * ist Szene 4 leergeräumt, im deutschen Zweig trug sie zwei Gegnertypen
+     * mit KI-Skript. Genau −2, keine andere Szene betroffen (F-LOC).
+     *
+     * Wichtig für die beiden Zusicherungen darüber: `mono` und `first32`
+     * werden gegen `scripts.length` geprüft, nicht gegen eine feste Zahl —
+     * die Invariante „alle Skripte, ausnahmslos" bleibt damit unberührt.
+     */
+    expect(scripts.length).toBe(612);
   }, 120_000);
 
   it('Spannen-Abschluss ≥ 99 % mit der eingefrorenen Tabelle; Nulltabellen-Blindheit dokumentiert', async () => {

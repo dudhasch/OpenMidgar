@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseWindowBin, FONT_CELL, FONT_CELLS_PER_ROW } from '@webmidgar/formats-kernel';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Fontblatt-Probe (Welle 3): Bevor die Demo aus dem Fontblatt zeichnet, muss
@@ -27,15 +28,12 @@ import { parseWindowBin, FONT_CELL, FONT_CELLS_PER_ROW } from '@webmidgar/format
  * Randspalte selten.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
 describe.skipIf(!available)('Realdaten: Aufbau des Fontblatts (WINDOW.BIN Sektion 1)', () => {
   it('misst Indexvorrat, Palette, Zellenursprung und Tintenhöhe', async () => {
-    const winBytes = new Uint8Array(await readFile(join(REAL_DIR, 'data', 'kernel', 'WINDOW.BIN')));
+    const winBytes = new Uint8Array(await readFile(realPfad('kernel/WINDOW.BIN')));
     const win = await parseWindowBin(winBytes, 'WINDOW.BIN');
     const font = win.fontTexture;
     expect(font).not.toBeNull();

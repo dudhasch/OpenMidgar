@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseWindowBin, measureGlyphInkWidths, buildFieldTextTable } from '@webmidgar/formats-kernel';
 import { buildGlyphCodeMap } from '@webmidgar/ui-window';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Die oberen Bits des Breitenbytes (Welle 3) — **Zusatzbreite oder Versatz?**
@@ -30,15 +31,12 @@ import { buildGlyphCodeMap } from '@webmidgar/ui-window';
  * etwas anderes als gedacht.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
 describe.skipIf(!available)('Realdaten: obere Bits des Glyphenbreiten-Bytes', () => {
   it('prüft additive Auslegung gegen untere 5 Bit an der Tintenbreite', async () => {
-    const winBytes = new Uint8Array(await readFile(join(REAL_DIR, 'data', 'kernel', 'WINDOW.BIN')));
+    const winBytes = new Uint8Array(await readFile(realPfad('kernel/WINDOW.BIN')));
     const win = await parseWindowBin(winBytes, 'WINDOW.BIN');
     const font = win.fontTexture!;
     const ink = measureGlyphInkWidths(font);

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseSceneBin, type BattleFormation } from '@webmidgar/formats-battle';
 import { battleToScene, parseCameraBlock, type BattleCamera } from '@webmidgar/render-battle';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K8 — DER ÖFFNUNGSWINKEL DER KAMPFKAMERA.
@@ -47,10 +48,7 @@ import { battleToScene, parseCameraBlock, type BattleCamera } from '@webmidgar/r
  * zu nehmen hieße, die eigene Annahme zu messen.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
-const available = existsSync(join(REAL_DIR, 'data', 'battle', 'scene.bin'));
+const available = existsSync(realPfad('battle/scene.bin'));
 
 /** 🟢 F40: vermessene Renderfläche des Originals. */
 const BREITE = 640;
@@ -143,7 +141,7 @@ interface Eintrag {
 
 async function bestand(): Promise<Eintrag[]> {
   const container = await parseSceneBin(
-    await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+    await readFile(realPfad('battle/scene.bin')),
     'scene.bin',
   );
   const out: Eintrag[] = [];

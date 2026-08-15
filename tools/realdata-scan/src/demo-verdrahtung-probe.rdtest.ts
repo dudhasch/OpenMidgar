@@ -17,6 +17,7 @@ import {
 } from '@webmidgar/formats-kernel';
 import { parseOriginalSave, readSavemap } from '@webmidgar/formats-save';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Demo-Verdrahtung: die vier Ketten, die `apps/demo` NEU benutzt, an den
@@ -53,9 +54,6 @@ import { NodeDirectorySource } from './node-source.js';
  * Werkinhalt, keine Rohbytes, keine Namenslisten.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(join(REAL_DIR, 'data', 'field')) && existsSync(join(REAL_DIR, 'data', 'wm'));
 
@@ -304,7 +302,7 @@ describe.skipIf(!available)('Realdaten: Demo-Verdrahtung (W1, F09-A, K1/K2, F18)
   });
 
   it('F18: bereichskodierte Inventarnamen gegen die einlistige Altauswahl', async () => {
-    const kernelPfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+    const kernelPfad = realPfad('kernel/KERNEL.BIN');
     if (!existsSync(kernelPfad)) return;
     const container = await parseKernelContainer(new Uint8Array(await readFile(kernelPfad)), 'kernel.bin');
     expect(container).not.toBeNull();

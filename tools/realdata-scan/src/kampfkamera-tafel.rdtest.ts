@@ -23,6 +23,7 @@ import {
 import { NodeDirectorySource } from './node-source.js';
 import { rasterize, type Bild, type Dreieck, type Vec3 } from './sheet.js';
 import { BREITE, HOEHE, meshDreiecke, modellDreieckeFabrik, projektor, projiziere } from './battle-sheet.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K8, Schritt 3 — DIE TAFEL, die den Öffnungswinkel entscheidet.
@@ -48,9 +49,6 @@ import { BREITE, HOEHE, meshDreiecke, modellDreieckeFabrik, projektor, projizier
  * Original liegen die Schattenmitten bei (65,5 | 260) und (177,5 | 241).
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 const OUT = process.env['WEBMIDGAR_K8_OUT'] ?? join(tmpdir(), 'webmidgar-sheets', 'k8');
 
@@ -90,7 +88,7 @@ describe.skipIf(!available)('K8/3: FOV-Tafel für die Referenzformation', () => 
     mkdirSync(OUT, { recursive: true });
 
     const container = await parseSceneBin(
-      await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+      await readFile(realPfad('battle/scene.bin')),
       'scene.bin',
     );
     const { sceneIndex, formationIndex } = formationAddress(REF_BATTLE_ID);
@@ -227,7 +225,7 @@ describe.skipIf(!available)('K8/3: FOV-Tafel für die Referenzformation', () => 
    */
   it('belegt: der Öffnungswinkel wirkt radial und ändert keine Richtung', async () => {
     const container = await parseSceneBin(
-      await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+      await readFile(realPfad('battle/scene.bin')),
       'scene.bin',
     );
     const { sceneIndex, formationIndex } = formationAddress(REF_BATTLE_ID);

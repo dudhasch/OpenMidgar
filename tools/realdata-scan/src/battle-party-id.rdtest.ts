@@ -12,6 +12,7 @@ import { hasPSignature, hasTexSignature, parseP, parseTex, type TextureSource } 
 import { bindPoseFrame } from '@webmidgar/render-actor';
 import { NodeDirectorySource } from './node-source.js';
 import { dreiecke, rasterize, type Dreieck, type Modell, type Vec3 } from './sheet.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K4 — WELCHE FIGUR TRÄGT WELCHES BATTLE-PRÄFIX?
@@ -38,9 +39,6 @@ import { dreiecke, rasterize, type Dreieck, type Modell, type Vec3 } from './she
  * Ausgabe: PNGs unter `%TEMP%/webmidgar-sheets/k4/` plus Kennzahlen auf stdout.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 
 const OUT = process.env['WEBMIDGAR_K4_OUT'] ?? join(tmpdir(), 'webmidgar-sheets', 'k4');
@@ -279,7 +277,7 @@ describe.skipIf(!available)('K4: Zuordnung Präfix → Spielfigur (Sichtbefund +
    * die die Kontrollhypothese „Präfixindex = 460 + charakterId" geprüft wird.
    */
   it('liest die Charakterreihenfolge aus kernel.bin', async () => {
-    const pfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+    const pfad = realPfad('kernel/KERNEL.BIN');
     const container = await parseKernelContainer(await readFile(pfad), 'KERNEL.BIN');
     expect(container).toBeTruthy();
     const tabelle = buildAsciiTable(DEFAULT_ASCII_OFFSET);

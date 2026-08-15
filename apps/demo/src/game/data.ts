@@ -1,4 +1,12 @@
-import { IndexService } from '@webmidgar/io';
+import {
+  IndexService,
+  loeseLocale,
+  normalisierePfad,
+  pruefeVerbund,
+  verfuegbareLocales,
+  waehleLocale,
+  type LocaleAuswahl,
+} from '@webmidgar/io';
 import type { LgpEntry } from '@webmidgar/formats-lgp';
 import {
   parseFieldEntry,
@@ -180,6 +188,34 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     return null;
   }
 
+  /**
+   * Locale-Auflösung, bevor irgendeine Nicht-LGP-Datei gelesen wird.
+   *
+   * Bis hierher las die Demo fest `data/kernel/…` und `data/battle/…` — auf
+   * dieser Installation ist das der **deutsche** Zweig, während das Original
+   * nachweislich `data/lang-en/` lädt. Der Unterschied ist nicht kosmetisch:
+   * `kernel.bin` trägt bei `+0x0F1C` den Blockindex für `scene.bin` (34
+   * Einträge gegen 33), und aus dem falschen Zweig zeigt er in die falsche
+   * Datei. Deshalb geht die Auflösung über `@webmidgar/io` und wird am Ende
+   * auf Verbundtreue geprüft, statt sie nur zu behaupten.
+   */
+  const alleDateien = new Set<string>();
+  for await (const f of source.files()) alleDateien.add(normalisierePfad(f.path));
+  const zweige = verfuegbareLocales(alleDateien);
+  const locale = waehleLocale(zweige);
+  const localeAuswahlen: LocaleAuswahl[] = [];
+  const holeRoh = async (rel: string): Promise<Uint8Array | null> => {
+    const a = loeseLocale(rel, locale, (p) => alleDateien.has(p));
+    if (!a) return null;
+    localeAuswahlen.push(a);
+    return fetchRawFile(a.pfad);
+  };
+  status(
+    zweige.length === 0
+      ? 'Kein Sprachzweig in der Installation — alles aus data/'
+      : `Sprachzweige: ${zweige.join(', ')} — gewählt: ${locale}`,
+  );
+
   const index = new IndexService();
   status('Indexiere LGP-Archive (Fast Scan) …');
   const result = await index.openSource(source, { deep: false });
@@ -224,7 +260,7 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   let materiaRecords: readonly MateriaRecord[] = [];
   let kernelHinweis = 'ohne KERNEL.BIN — Inventarnamen bleiben leer';
   let kernelSections: Uint8Array[] | null = null;
-  const kernelBytes = await fetchRawFile('data/kernel/KERNEL.BIN');
+  const kernelBytes = await holeRoh('kernel/KERNEL.BIN');
   if (kernelBytes) {
     const container = await parseKernelContainer(kernelBytes, 'kernel.bin');
     if (container) {
@@ -257,7 +293,7 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   // bemisst der Dialog seine Fenster mit einer erfundenen Breite — genau das
   // war bis Welle 1 der Zustand, und es fiel nicht auf, weil niemand es sagte.
   let windowBin: WindowBin | null = null;
-  const windowBytes = await fetchRawFile('data/kernel/WINDOW.BIN');
+  const windowBytes = await holeRoh('kernel/WINDOW.BIN');
   if (windowBytes) windowBin = await parseWindowBin(windowBytes, 'WINDOW.BIN');
   const textMetrik = dialogMetrics(windowBin);
   const windowHinweis = textMetrik.measured
@@ -267,8 +303,19 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
 
   // scene.bin: alle Kampfszenen (lazy wäre möglich, aber 256 Szenen sind klein).
   let scenes: SceneContainer | null = null;
-  const sceneBytes = await fetchRawFile('data/battle/scene.bin');
+  const sceneBytes = await holeRoh('battle/scene.bin');
   if (sceneBytes) scenes = await parseSceneBin(sceneBytes, 'scene.bin');
+
+  // Verbundprüfung, jetzt wo alle locale-gebundenen Dateien aufgelöst sind.
+  // Sie MUSS sichtbar sein statt still zu bleiben: Eine Mischung fällt sonst
+  // erst als falsche Szene irgendwo weit hinten auf — genau die Sorte Fehler,
+  // die dieses Projekt teuer gelernt hat.
+  const verbundGrund = pruefeVerbund(localeAuswahlen);
+  status(
+    verbundGrund
+      ? `⚠ ${verbundGrund}`
+      : `Locale-Verbund einheitlich: ${localeAuswahlen.map((a) => a.pfad).join(', ')}`,
+  );
 
   // Weltkarte (W1): Terrain UND Script als EIN Paar. Der Eintrag wird exakt
   // benannt; ein „erster .ev-Eintrag" ist TOC-Reihenfolge und damit wm2.

@@ -1712,3 +1712,94 @@ Die vollständige Fehlkette, die zu „BGROL ist nicht implementierbar" führte,
 steht als Lehrstück im Quelltext bei `SKIP_OPERAND_LEN` in
 `packages/interpreter/src/opcodes.ts`: zirkuläre Eichung, Phantom-Fundstellen,
 n=1 als disjunkte Intervalle, Pseudoreplikation, Fehlschluss.
+
+---
+
+## F-LOC — Der Sprachzweig: welche Datei die Engine wirklich liest (2026-08-15)
+
+Bis heute las **alles** im Projekt `data/kernel/…` und `data/battle/…`. Auf der
+Kalibrierinstallation ist das der **deutsche** Zweig. Das Original lädt
+nachweislich `data/lang-en/`.
+
+### Der Wahrheitstest ist eine Kreuzvalidierung, kein Größenvergleich
+
+`kernel.bin` Sektion 2 trägt bei `+0x0F1C` eine `0xFF`-terminierte Bytetabelle
+„Block → erste Szene". Ihre Eintragszahl mal `0x2000` muss die Dateigröße der
+`scene.bin` **desselben Zweigs** byteexakt treffen — eine externe Prüfmenge aus
+einer anderen Datei, die ein falsch gepaarter Zweig nicht zufällig trifft.
+
+| Zweig | Blockindex | `scene.bin` | Rechnung |
+|---|---:|---:|---|
+| `data/` | **34** Einträge | 278.528 B | 34 × 8192 ✅ |
+| `data/lang-en/` | **33** Einträge | 270.336 B | 33 × 8192 ✅ |
+
+**Kontrolle — die Kreuzpaarung scheitert** (34 ≠ 33, 33 ≠ 34). Ohne sie wäre
+der Befund wertlos; mit ihr trennt die Probe.
+
+### Sektion für Sektion: der Unterschied ist kleiner als erwartet, aber schärfer
+
+27 Sektionen in beiden Zweigen. **0, 1, 4, 5, 6, 7, 8 byteidentisch**,
+9–26 durchweg verschieden (auch in der Länge). Sektion 3 unterscheidet sich in
+**3** Byte (`Ex-SOLDAT` gegen `Ex-SOLDIER`), Sektion 2 in **28** — und **alle 28
+liegen im Blockindex**.
+
+Damit ist eine offene Frage geschlossen, die anderswo als „kumulatives
+Offset-/Breitenfeld, Leser unbekannt" geführt wurde: Es ist der
+scene.bin-Blockindex, und der Unterschied ist **keine Übersetzung, sondern eine
+Packungsfolge**. Die deutsche `scene.bin` braucht einen Block mehr.
+
+🟢 **Regel, die daraus folgt:** `kernel.bin` und `scene.bin` müssen aus
+demselben Zweig kommen. Gemischt zeigt der Blockindex in die falsche Datei.
+Durchgesetzt von `pruefeVerbund` in `packages/io/src/locale.ts`.
+
+### Was der Zweigwechsel in `scene.bin` ändert — und was nicht
+
+Gemessen über alle 256 Szenen, Partition für Partition:
+
+| Partition | Szenen mit Unterschied |
+|---|---:|
+| `enemyIds`, `setup`, `camera`, `formation`, `attack`, `formationAi` | **1** / 256 |
+| Gegnerrecords | 220 / 256 — davon **216 nur im Namensfeld** |
+| Attackennamen | 247 / 256 |
+| KI-Skripte | 76 / 256 |
+
+Die mechanischen Partitionen sind also gleich — bis auf **genau eine Szene**.
+**Szene 4 ist im englischen Zweig vollständig leergeräumt** (durchgehend
+`0xFFFF`), im deutschen trägt sie zwei Gegnertypen und alle vier Formationen.
+Dazu zwei Byte an einem Gegner (`Lessaloploth`, Record `+0x98`) in drei Szenen.
+
+Daraus folgen exakt drei geänderte Erwartungen im Bestand, **alle vollständig
+auf diese eine Szene zurückgeführt**:
+
+| Zahl | vorher | jetzt | Differenz |
+|---|---:|---:|---|
+| Gegnerrecords | 627 | **625** | −2 (die zwei Typen der Szene 4) |
+| KI-Skripte | 614 | **612** | −2 (dieselben) |
+| belegte Formationen | 1000 | **996** | −4 (alle vier der Szene 4) |
+| belegte Formationsplätze | 2414 | **2401** | −13 |
+
+Das ist keine Anpassung, sondern eine Erklärung: Die Differenz ist selbst die
+Gegenprobe.
+
+### Zwei Nebenbefunde
+
+- `camdat0.bin`, `camdat1.bin`, `camdat2.bin` sind zwischen den Zweigen
+  **byteidentisch**. Für K11 ist die Locale-Frage gegenstandslos.
+- **K8 ist unberührt.** Kamera und Formationen der Szene 75 (Formation 301 —
+  die Referenzaufnahme) sind in beiden Zweigen byteidentisch. Der 🟢-Befund
+  „keine der drei Blockkameras zeigt die Ansicht des Originals" hängt nicht am
+  Sprachzweig. Die Probe sichert das namentlich ab, damit es nicht wieder
+  gefragt werden muss.
+
+### Was offen bleibt
+
+🔴 Der **Mechanismus**: welche Aufrufstelle im Original die Sprachkomponente
+voranstellt. Das ist für uns folgenlos — wir lösen selbst auf —, steht aber
+hier, damit die geklärte Tatsache nicht mit der offenen Frage verwechselt wird.
+Die Auflösung ist ausdrücklich **je Datei**, nicht je Verzeichnis: `lang-en`
+führt nur `battle/`, `kernel/` und `movies/`, und `battle.lgp` liegt allein im
+Wurzelzweig.
+
+*Proben: `tools/realdata-scan/src/locale-probe.rdtest.ts` (3 Fälle) ·
+`packages/io/src/locale.test.ts` (15 Fälle) · gemeinsame Pfadauflösung in
+`tools/realdata-scan/src/real-pfade.ts`.*

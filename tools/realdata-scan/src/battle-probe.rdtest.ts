@@ -8,6 +8,7 @@ import { parseFieldEntry } from '@webmidgar/formats-field';
 import { buildAsciiTable, decodeFfText, germanLikeness, DEFAULT_ASCII_OFFSET } from '@webmidgar/formats-kernel';
 import { parseP, parseTex } from '@webmidgar/formats-model';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * S30 — Kampfdaten-Probe (VOR jeder Parserzeile, Methodik-Standard seit S7).
@@ -58,9 +59,6 @@ import { NodeDirectorySource } from './node-source.js';
  * keine Rohbytes über 16 B, keine Namen im Klartext.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const BATTLE_DIR = join(REAL_DIR, 'data', 'battle');
 const available = existsSync(BATTLE_DIR);
 
@@ -617,7 +615,7 @@ describe.skipIf(!available)('S30-Probe: battle.lgp — Namenskonvention und Mode
 
 describe.skipIf(!available)('S30-Probe: kernel.bin Sektionen 0–2 (Command/Attack/Growth)', () => {
   it('Record-Accounting und Growth-Struktur mit Kurvenbasis-Ableitung', async () => {
-    const kernelBytes = readFileSync(join(REAL_DIR, 'data', 'kernel', 'kernel.bin'));
+    const kernelBytes = readFileSync(realPfad('kernel/KERNEL.BIN'));
     const { parseKernelContainer } = await import('@webmidgar/formats-kernel');
     const container = await parseKernelContainer(new Uint8Array(kernelBytes), 'kernel.bin');
     expect(container).not.toBeNull();

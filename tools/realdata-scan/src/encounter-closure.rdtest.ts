@@ -7,6 +7,7 @@ import { IndexService } from '@webmidgar/io';
 import { parseFieldEntry, splitFormationId, type FieldBundle } from '@webmidgar/formats-field';
 import { IMPL_OPERAND_LEN, OP_KAWAI, SKIP_OPERAND_LEN } from '@webmidgar/interpreter';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * O3b-Probe II — **Referenzschluss** und die Frage, WO die Encounter-Daten
@@ -34,11 +35,8 @@ import { NodeDirectorySource } from './node-source.js';
  * Urheberrecht/Datenschutz: ausschließlich Zähler, Quoten, Wertebereiche.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
-const available = existsSync(join(REAL_DIR, 'data', 'battle', 'scene.bin'));
+const available = existsSync(realPfad('battle/scene.bin'));
 
 const BLOCK = 0x2000;
 const SCENE_LEN = 0x1e80;
@@ -51,7 +49,7 @@ const EMPTY = 0xffff;
 
 /** Lokaler, nur lesender Zugriff auf scene.bin (Blockzerlegung wie S30). */
 function ladeSzenen(): Uint8Array[] {
-  const bin = new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'battle', 'scene.bin')));
+  const bin = new Uint8Array(readFileSync(realPfad('battle/scene.bin')));
   const dv = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
   const out: Uint8Array[] = [];
   for (let b = 0; b < bin.length / BLOCK; b++) {

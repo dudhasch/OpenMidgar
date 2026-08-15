@@ -32,6 +32,7 @@ import {
   projektor,
   projiziere,
 } from './battle-sheet.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K3/K4/K5-ABNAHME — ein VOLLSTÄNDIGES Kampfbild: Bühne + Gegner + Party,
@@ -50,9 +51,6 @@ import {
  * eine Kalibrierung, kein Formatfakt.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 const OUT = process.env['WEBMIDGAR_VOLLBILD_OUT'] ?? join(tmpdir(), 'webmidgar-sheets', 'vollbild');
 
@@ -84,7 +82,7 @@ describe.skipIf(!available)('K3/K5: Vollbild eines Kampfes (Bühne + Gegner + Pa
     mkdirSync(OUT, { recursive: true });
 
     const container = await parseSceneBin(
-      await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+      await readFile(realPfad('battle/scene.bin')),
       'scene.bin',
     );
 

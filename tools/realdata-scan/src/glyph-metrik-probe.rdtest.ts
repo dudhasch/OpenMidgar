@@ -16,6 +16,7 @@ import {
   EXE_DEFAULTS,
 } from '@webmidgar/formats-kernel';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * Glyphenmetrik-Probe (Welle 2): Ist die aus `WINDOW.BIN` gelesene
@@ -36,9 +37,6 @@ import { NodeDirectorySource } from './node-source.js';
  *   - `low5`       — Konkurrenzauslegung des Tabellenbytes (nur untere 5 Bit).
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
@@ -69,7 +67,7 @@ describe.skipIf(!available)('Realdaten: Glyphenmetrik aus WINDOW.BIN gegen echte
     { timeout: 600_000 },
     async () => {
       // --- 1. WINDOW.BIN lesen und Accounting prüfen -------------------------
-      const winPath = join(REAL_DIR, 'data', 'kernel', 'WINDOW.BIN');
+      const winPath = realPfad('kernel/WINDOW.BIN');
       const winBytes = new Uint8Array(await readFile(winPath));
       const win = await parseWindowBin(winBytes, 'WINDOW.BIN');
       expect(win.diagnostics.map((d) => d.code)).toEqual([]);

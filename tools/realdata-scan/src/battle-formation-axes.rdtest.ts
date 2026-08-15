@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseSceneBin, type BattleFormation } from '@webmidgar/formats-battle';
 import { battleToScene, parseCameraBlock, placeFormation } from '@webmidgar/render-battle';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * S33/F13 — Abnahme der Battle-Basis (Slot-Achsen-Deutung) gegen ALLE 1024
@@ -15,7 +16,11 @@ import { battleToScene, parseCameraBlock, placeFormation } from '@webmidgar/rend
  * ff7ToScene-Deutung (F13-Sichtbefund: Gegner bei Szene-y −1700/−2000 unter
  * dem Boden, Party bei +3200 schwebend).
  *
- * Messbild (2026-08-10, 2414 belegte Slots / 1000 nicht-leere Formationen):
+ * Messbild (2026-08-10 gegen `data/battle/`, 2414 belegte Slots / 1000
+ * nicht-leere Formationen). **Seit 2026-08-15 liest die Probe den Zweig, den
+ * das Original lädt** (`data/lang-en/`) — dort sind es 2401 Slots / 996
+ * Formationen, weil Szene 4 dort leergeräumt ist. Alle Quoten unten sind
+ * relativ und dadurch unverändert gültig; nur die Absolutzahl wandert:
  *  - Boden: y exakt 0 in 2217/2414 (91,8 %); Kontrollen x 39,7 %, z 0,6 %.
  *  - Einseitigkeit der Höhenausschläge: y ≠ 0 → 196/197 negativ (y-ab).
  *  - Tiefe: row-Monotonie nur auf z (−1400 → −2450 → −3330); 910/1000
@@ -29,10 +34,7 @@ import { battleToScene, parseCameraBlock, placeFormation } from '@webmidgar/rend
  *    nicht auf den Gegner-Schwerpunkt). Er wird berichtet, nicht gegatet.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
-const available = existsSync(join(REAL_DIR, 'data', 'battle', 'scene.bin'));
+const available = existsSync(realPfad('battle/scene.bin'));
 
 interface SlotV {
   x: number;
@@ -42,7 +44,7 @@ interface SlotV {
 }
 
 async function loadFormations(): Promise<{ formations: { formation: BattleFormation; slots: SlotV[] }[]; slots: SlotV[] }> {
-  const bytes = new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'battle', 'scene.bin')));
+  const bytes = new Uint8Array(readFileSync(realPfad('battle/scene.bin')));
   const container = await parseSceneBin(bytes, 'scene.bin');
   expect(container.scenes.length).toBe(256);
   const formations: { formation: BattleFormation; slots: SlotV[] }[] = [];
@@ -189,7 +191,7 @@ describe.skipIf(!available)('S33/F13: Battle-Basis — Slot-Achsen aus scene.bin
   }, 120_000);
 
   it('Abnahme F13: placeFormation stellt > 90 % der Akteure exakt auf Bodenhöhe 0, Flieger darüber', async () => {
-    const bytes = new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'battle', 'scene.bin')));
+    const bytes = new Uint8Array(readFileSync(realPfad('battle/scene.bin')));
     const container = await parseSceneBin(bytes, 'scene.bin');
     let akteure = 0;
     let boden = 0;
@@ -212,7 +214,14 @@ describe.skipIf(!available)('S33/F13: Battle-Basis — Slot-Achsen aus scene.bin
       'Abnahme:',
       JSON.stringify({ akteure, boden, ueber, unter, encounter303: f303.map((a) => a.scenePosition) }),
     );
-    expect(akteure).toBe(2414);
+    /**
+     * 2401 statt 2414: Locale-Umstellung 2026-08-15. Die Probe liest seither
+     * `data/lang-en/battle/scene.bin`, wo Szene 4 leergeräumt ist; im
+     * deutschen Zweig trug sie 13 belegte Plätze in vier Formationen (F-LOC).
+     * Die Quoten darunter sind davon unberührt — sie waren schon vorher
+     * relativ formuliert, und genau deshalb muss hier nur eine Zahl weichen.
+     */
+    expect(akteure).toBe(2401);
     expect(boden / akteure).toBeGreaterThan(0.9);
     // Nicht-Boden-Akteure sind (bis auf den einen +1-Slot im Bestand) Flieger ÜBER dem Boden.
     expect(unter).toBeLessThanOrEqual(1);

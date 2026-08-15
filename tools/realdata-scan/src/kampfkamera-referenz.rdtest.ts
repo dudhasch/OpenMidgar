@@ -7,6 +7,7 @@ import { IndexService } from '@webmidgar/io';
 import { parseFieldEntry, type FieldBundle } from '@webmidgar/formats-field';
 import { formationAddress, parseSceneBin, type BattleScene } from '@webmidgar/formats-battle';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K8, Schritt 1 — WELCHE FORMATION zeigt die Referenzaufnahme?
@@ -29,10 +30,7 @@ import { NodeDirectorySource } from './node-source.js';
  * Bedingung die Menge zusammenzieht und welche nur mitläuft.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
-const available = existsSync(join(REAL_DIR, 'data', 'battle', 'scene.bin'));
+const available = existsSync(realPfad('battle/scene.bin'));
 
 /** Abgelesen aus dem Abschlussbildschirm `20260810223347_1.jpg`. */
 const REF_EXP = 32;
@@ -99,7 +97,7 @@ function infoZu(szenen: (BattleScene | null)[], battleId: number): FormationInfo
 describe.skipIf(!available)('K8/1: Referenzaufnahme → Formation', () => {
   it('sucht die Formation in den Encounter-Tabellen des Bahnhofsbogens', async () => {
     const container = await parseSceneBin(
-      await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+      await readFile(realPfad('battle/scene.bin')),
       'scene.bin',
     );
     const szenen = container.scenes;

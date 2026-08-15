@@ -10,6 +10,7 @@ import { parseFieldEntry } from '@webmidgar/formats-field';
 import { IMPL_OPERAND_LEN, OP_KAWAI, SKIP_OPERAND_LEN } from '@webmidgar/interpreter';
 import { NodeDirectorySource, NodeSourceFile } from './node-source.js';
 import { buildAsciiTable, decodeFfText, germanLikeness, DEFAULT_ASCII_OFFSET } from '@webmidgar/formats-kernel';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * S21-Vorprobe „Menü-Grundlagen": drei Messungen, die VOR dem Bau von
@@ -61,9 +62,6 @@ import { buildAsciiTable, decodeFfText, germanLikeness, DEFAULT_ASCII_OFFSET } f
  * aus Datensektionen.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
@@ -776,7 +774,7 @@ describe.skipIf(!available)('Realdaten S21: Menü-Grundlagen (Assets, Savemap, K
   });
 
   it('M3 — Kernel-Sektionsrollen bestimmen', { timeout: 900_000 }, async () => {
-    const kernelPfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+    const kernelPfad = realPfad('kernel/KERNEL.BIN');
     if (!existsSync(kernelPfad)) {
       console.log('M3: keine KERNEL.BIN — gültiger Negativbefund.');
       return;
@@ -835,7 +833,7 @@ describe.skipIf(!available)('Realdaten S21: Menü-Grundlagen (Assets, Savemap, K
 
   it('M4 — Inventarlage und Item-Namensliste aneinander binden', { timeout: 900_000 }, async () => {
     const saveDir = join(REAL_DIR, 'save');
-    const kernelPfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+    const kernelPfad = realPfad('kernel/KERNEL.BIN');
     if (!existsSync(saveDir) || !existsSync(kernelPfad)) {
       console.log('M4: Spielstände oder KERNEL.BIN fehlen — gültiger Negativbefund.');
       return;

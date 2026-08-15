@@ -11,6 +11,7 @@ import {
 } from '@webmidgar/formats-battle';
 import { parseKernelContainer } from '@webmidgar/formats-kernel';
 import { NodeDirectorySource } from './node-source.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * S30 — Sweep mit den PRODUKTIONSPARSERN über den Realbestand (die Probe
@@ -18,14 +19,11 @@ import { NodeDirectorySource } from './node-source.js';
  * dass die Parser exakt diese Grammatik implementieren).
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 
 describe.skipIf(!available)('S30-Sweep: Produktionsparser gegen Realdaten', () => {
   it('parseSceneBin: 256/256 Szenen, 0 Diagnosen; Gegner- und KI-Bestand', async () => {
-    const bytes = new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'battle', 'scene.bin')));
+    const bytes = new Uint8Array(readFileSync(realPfad('battle/scene.bin')));
     const container = await parseSceneBin(bytes, 'scene.bin');
     expect(container.diagnostics).toEqual([]);
     expect(container.scenes.length).toBe(256);
@@ -42,8 +40,24 @@ describe.skipIf(!available)('S30-Sweep: Produktionsparser gegen Realdaten', () =
       }
     }
     console.log('Sweep scene.bin:', JSON.stringify({ gegner, kiSkripte, formationenMitGegner }));
-    expect(gegner).toBe(627);
-    expect(formationenMitGegner).toBe(1000);
+    /**
+     * 625/612/996 statt 627/614/1000. Die Probe las bis 2026-08-15
+     * `data/battle/scene.bin` (deutscher Zweig); seit der Locale-Umstellung
+     * liest sie den Zweig, den das Original lädt.
+     *
+     * Der Unterschied ist **vollständig auf eine Szene zurückgeführt**:
+     * Szene 4 ist im englischen Zweig durchgehend `0xFFFF`, im deutschen trägt
+     * sie zwei Gegnertypen und alle vier Formationen. Das ergibt exakt
+     * −2 Gegnerrecords, −2 KI-Skripte, −4 belegte Formationen und
+     * −13 Formationsplätze. Keine andere Szene ist mechanisch betroffen
+     * (`locale-probe`, F-LOC: 1/256 in jeder mechanischen Partition).
+     *
+     * Die Zahlen sind damit nicht „angepasst", sondern erklärt — die Differenz
+     * ist selbst die Gegenprobe.
+     */
+    expect(gegner).toBe(625);
+    expect(kiSkripte).toBe(612);
+    expect(formationenMitGegner).toBe(996);
   }, 120_000);
 
   it('parseBattleSkeleton: 481/481 Skelette; parseKernelBattleData trägt', async () => {
@@ -66,7 +80,7 @@ describe.skipIf(!available)('S30-Sweep: Produktionsparser gegen Realdaten', () =
     expect(enemyModelPrefix(369)).toBe('of');
 
     const kernel = await parseKernelContainer(
-      new Uint8Array(readFileSync(join(REAL_DIR, 'data', 'kernel', 'kernel.bin'))),
+      new Uint8Array(readFileSync(realPfad('kernel/KERNEL.BIN'))),
       'kernel.bin',
     );
     const battle = parseKernelBattleData(kernel!.sections);

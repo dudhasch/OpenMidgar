@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formationAddress, parseSceneBin, type BattleFormation } from '@webmidgar/formats-battle';
 import { parseCameraBlock, type BattleCamera } from '@webmidgar/render-battle';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K8, Schritt 2 — DER ÖFFNUNGSWINKEL, GEGEN EINE ORIGINALAUFNAHME GERECHNET.
@@ -34,10 +35,7 @@ import { parseCameraBlock, type BattleCamera } from '@webmidgar/render-battle';
  * dem der Kontrollen, ist nichts belegt.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
-const available = existsSync(join(REAL_DIR, 'data', 'battle', 'scene.bin'));
+const available = existsSync(realPfad('battle/scene.bin'));
 
 /** 🟢 F40: vermessene Renderfläche des Originals (32-px-Balken unten). */
 const BREITE = 640;
@@ -183,7 +181,7 @@ function varianten(f: BattleFormation, kameras: BattleCamera[], etikett: string)
 }
 
 async function szenen(): Promise<ReturnType<typeof parseSceneBin> extends Promise<infer T> ? T : never> {
-  return parseSceneBin(await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')), 'scene.bin');
+  return parseSceneBin(await readFile(realPfad('battle/scene.bin')), 'scene.bin');
 }
 
 function formationVon(

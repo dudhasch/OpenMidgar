@@ -10,6 +10,7 @@ import { hasPSignature, hasTexSignature, parseP, parseTex, type TextureSource } 
 import { battleToScene, loadBattleStage, parseCameraBlock, STAGE_BAND_FIRST_INDEX, stagePrefixForLocation } from '@webmidgar/render-battle';
 import { NodeDirectorySource } from './node-source.js';
 import { rasterize, texRgb, type Dreieck, type Vec3 } from './sheet.js';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * K5 — DIE ECHTE KAMPFBÜHNE.
@@ -47,9 +48,6 @@ import { rasterize, texRgb, type Dreieck, type Vec3 } from './sheet.js';
  * Benutzungen) — und der Sichtvergleich im zweiten Test.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 const available = existsSync(join(REAL_DIR, 'data', 'battle'));
 const OUT = process.env['WEBMIDGAR_K5_OUT'] ?? join(tmpdir(), 'webmidgar-sheets', 'k5');
 
@@ -86,7 +84,7 @@ describe.skipIf(!available)('K5: Kampfbühne — location → Bühnenpräfix', (
     expect(band2[89]).toBe('rr');
 
     // --- location-Werte aus scene.bin -------------------------------------
-    const scenePfad = join(REAL_DIR, 'data', 'battle', 'scene.bin');
+    const scenePfad = realPfad('battle/scene.bin');
     const container = await parseSceneBin(await readFile(scenePfad), 'scene.bin');
     const haeufig = new Map<number, number>();
     let formationen = 0;
@@ -388,7 +386,7 @@ describe.skipIf(!available)('K5: Kampfbühne — location → Bühnenpräfix', (
     // erste Kampf des Spiels (Reaktor 1) — und von genau diesem Kampf liegt
     // eine Originalaufnahme vor. Damit wird der Sichtvergleich gerichtet.
     const container = await parseSceneBin(
-      await readFile(join(REAL_DIR, 'data', 'battle', 'scene.bin')),
+      await readFile(realPfad('battle/scene.bin')),
       'scene.bin',
     );
     const ersteLocations: number[] = [];

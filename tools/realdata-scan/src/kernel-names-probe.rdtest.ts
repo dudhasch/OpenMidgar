@@ -18,6 +18,7 @@ import {
   type KernelTextList,
 } from '@webmidgar/formats-kernel';
 import { readInventory } from '@webmidgar/formats-save';
+import { REAL_DIR, realPfad } from './real-pfade.js';
 
 /**
  * F18/F24-A — Realdatenabnahme „Inventarnamen".
@@ -39,9 +40,6 @@ import { readInventory } from '@webmidgar/formats-save';
  * Originaltexte; aus den Realdaten wird kein dekodierter Text protokolliert.
  */
 
-const REAL_DIR =
-  process.env['WEBMIDGAR_REAL_DIR'] ??
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\FINAL FANTASY VII';
 
 const available = existsSync(REAL_DIR);
 
@@ -50,7 +48,7 @@ const SLOT_COUNT = 15;
 const SAVE_HEADER_LEN = 9;
 
 async function ladeKernel(): Promise<NonNullable<Awaited<ReturnType<typeof parseKernelContainer>>> | null> {
-  const pfad = join(REAL_DIR, 'data', 'kernel', 'KERNEL.BIN');
+  const pfad = realPfad('kernel/KERNEL.BIN');
   if (!existsSync(pfad)) return null;
   return parseKernelContainer(await readFile(pfad), 'KERNEL.BIN');
 }
