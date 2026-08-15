@@ -102,7 +102,7 @@ export type KernelNameRole = keyof typeof NAME_LIST_COUNTS;
 /**
  * Reihenfolge des Namensblocks. 🟢 Realdaten: Die acht Listen liegen in genau
  * dieser Folge unmittelbar hintereinander (gemessen an den Sektionen 17…24 der
- * deutschen Fassung); unabhängig beschrieben in `docs/fremdquellen/elena.md`
+ * deutschen Fassung); unabhängig beschrieben in `docs/quellen/elena.md`
  * §2.1. Der Code verlässt sich auf die **Reihenfolge**, nicht auf die Nummern.
  */
 export const NAME_ROLE_ORDER: readonly KernelNameRole[] = [

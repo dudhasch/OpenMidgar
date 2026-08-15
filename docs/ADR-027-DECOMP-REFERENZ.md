@@ -5,7 +5,7 @@
 **Entscheider:** Projektinhaber
 **Löst ab:** die Clean-Room-Klausel in [WEBMIDGAR-MASTERPLAN.md](WEBMIDGAR-MASTERPLAN.md)
 (Kopfzeile und Phase 4) sowie die Sperrvermerke 1, 2 und 4 aus
-[FREMDQUELLEN-SICHTUNG.md](FREMDQUELLEN-SICHTUNG.md)
+[QUELLEN-SICHTUNG.md](QUELLEN-SICHTUNG.md)
 
 ---
 
@@ -96,7 +96,7 @@ Clean-Room-Position:
 ## Konsequenzen
 
 - **Dokumentation:** README-Kopf, Masterplan-Kopf und Masterplan Phase 4
-  verlieren die Clean-Room-Aussage; `FREMDQUELLEN-SICHTUNG.md` verliert die
+  verlieren die Clean-Room-Aussage; `QUELLEN-SICHTUNG.md` verliert die
   Sperrvermerke 1, 2 und 4 und verweist stattdessen hierher. Das ist kein
   Schönheitsfehler: Eine öffentlich behauptete Arbeitsweise, die nicht mehr
   praktiziert wird, ist eine Falschaussage über das Projekt. Mitgeändert:

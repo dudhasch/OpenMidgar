@@ -1,20 +1,31 @@
-# Fremdquellen-Sichtung — 14 Repositorien + „Gears"-Dokument
+# Quellen-Sichtung — 14 Repositorien, „Gears"-Dokument, eigene EXE-Analyse
 
 Vollständige Auswertung externer Reverse-Engineering-Projekte auf verwertbare
 Befunde für WebMidgar. Erhoben am 2026-08-10, je ein Rechercheauftrag pro Quelle.
+Am 2026-08-15 um die **eigene** Ghidra-Analyse der PC-EXE ergänzt (ADR-028) —
+deshalb heißt dieses Register seither „Quellen" und nicht mehr „Fremdquellen":
+Ein Register, das eigene Erhebung unter „fremd" führt, benennt seinen Inhalt
+falsch.
 
 **Zweck:** Fakten über die Originaldaten und die Original-Engine sammeln, die
-eigene Messungen bestätigen, widerlegen oder abkürzen. **Kein Codeimport.**
+eigene Messungen bestätigen, widerlegen oder abkürzen.
 
 ---
 
 ## 1. Rechtslage — verbindlich
 
-WebMidgar ist eine Clean-Room-Reimplementierung. Aus keiner der folgenden
-Quellen darf Quelltext übernommen, übersetzt oder strukturell nachgebaut
-werden. Verwertbar sind ausschließlich **Tatsachen über die Originaldaten**
-(Offsets, Layouts, Opcode-Bedeutungen, Formeln) — solche Tatsachen sind nicht
-urheberrechtlich geschützt, die Formulierung ihrer Beschreibung schon.
+Der Begriff „Clean-Room" wird im Projekt **nicht mehr geführt**
+([ADR-027](ADR-027-DECOMP-REFERENZ.md)); die Selbstbeschreibung lautet:
+Reimplementierung aus dokumentierten und rekonstruierten Formatfakten,
+Originaldaten werden weder eingebettet noch verteilt.
+
+Für die **Fremdquellen** dieser Tabelle bleibt es dabei, dass nur **Tatsachen
+über die Originaldaten** verwertbar sind (Offsets, Layouts,
+Opcode-Bedeutungen, Formeln) — solche Tatsachen sind nicht urheberrechtlich
+geschützt, die Formulierung ihrer Beschreibung schon. Für die **eigene
+EXE-Analyse** gilt diese Einschränkung seit
+[ADR-028](ADR-028-EIGENE-CODEANALYSE.md) **nicht mehr**; sie ist ohne Auflagen
+freigegeben, und was damit aufgegeben wurde, steht dort.
 
 | Quelle | Lizenz | Einstufung |
 |---|---|---|
@@ -34,6 +45,7 @@ urheberrechtlich geschützt, die Formulierung ihrer Beschreibung schon.
 | ff7-coaster | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme** |
 | ff7-decomp (PSX) | **keine** | all rights reserved; lesbar seit ADR-027, **keine Textübernahme**, Plattformvorbehalt |
 | gears.pdf | keine Gesamtangabe; Kapitel Battle Mechanics © T. Fergusson 2001–2003 | Fakten ja, Prosa nein |
+| **`ff7_en.exe` — eigene Ghidra-Analyse** | n/a (eigene Erhebung, kein Dritter) | **ohne Auflagen freigegeben** seit [ADR-028](ADR-028-EIGENE-CODEANALYSE.md); Bestand wird **nicht** eingecheckt |
 
 ### ⛔ Sperrvermerke
 
@@ -58,6 +70,17 @@ urheberrechtlich geschützt, die Formulierung ihrer Beschreibung schon.
    eigene `formats-field/src/lzs.ts` ist realdaten-belegt und bleibt.
 5. **ff7tk** führt Sonys PSV/VMP-Signierschlüssel mit. Nicht in unseren Baum.
    **Bleibt in Kraft.**
+6. **Eigene Codeanalyse der PC-EXE** (`decomp\`, extern gehalten): **kein
+   Sperrvermerk**, [ADR-028](ADR-028-EIGENE-CODEANALYSE.md) gibt sie ohne
+   Auflagen frei. Eine Sache bleibt trotzdem: Der Bestand wird **nicht** in
+   diesen Baum eingecheckt — er ist Dokumentation über ein geschütztes
+   Binärprogramm, und sein `pseudocode\`-Zweig enthält dekompiliertes C. Das ist
+   derselbe Grund wie bei Sperre 3, nicht derselbe wie bei 1/2/4.
+
+Die Sperren 1, 2 und 4 fielen, weil die Clean-Room-Position aufgegeben wurde.
+Sperre 3 und 5 stehen aus einem anderen Grund — echte Spieldateien bzw. fremde
+Signierschlüssel — und sind davon unberührt. Eintrag 6 hat wieder einen eigenen
+Grund: nicht Recht am Text, sondern Nichtverteilung des Bestands.
 
 ---
 
@@ -347,19 +370,27 @@ Skript-Wartewerte sind Ticks dieser Rate.
 ## 7. Detailnotizen
 
 Je Quelle liegt eine ausführliche Notiz (Layouttabellen, Opcodetabellen,
-Fundstellenverweise, offene Fragen) unter [`docs/fremdquellen/`](fremdquellen/)
-— zusammen 10.854 Zeilen:
+Fundstellenverweise, offene Fragen) unter [`docs/quellen/`](quellen/)
+— zusammen 11.127 Zeilen:
 
 | Notiz | Zeilen | Notiz | Zeilen |
 |---|---:|---|---:|
-| [makoureactor.md](fremdquellen/makoureactor.md) | 1903 | [ff7tk.md](fremdquellen/ff7tk.md) | 671 |
-| [ff7-scarlet.md](fremdquellen/ff7-scarlet.md) | 1199 | [kujata.md](fremdquellen/kujata.md) | 640 |
-| [ff7-landscaper.md](fremdquellen/ff7-landscaper.md) | 974 | [touphscript.md](fremdquellen/touphscript.md) | 629 |
-| [gears-pdf.md](fremdquellen/gears-pdf.md) | 944 | [ff7-coaster.md](fremdquellen/ff7-coaster.md) | 578 |
-| [kimeracs.md](fremdquellen/kimeracs.md) | 897 | [ffnx.md](fremdquellen/ffnx.md) | 576 |
-| [elena.md](fremdquellen/elena.md) | 543 | [gaia.md](fremdquellen/gaia.md) | 457 |
-| [aeris.md](fremdquellen/aeris.md) | 422 | [ff7snd.md](fremdquellen/ff7snd.md) | 284 |
-| [workers.md](fremdquellen/workers.md) | 137 | | |
+| [makoureactor.md](quellen/makoureactor.md) | 1903 | [ff7tk.md](quellen/ff7tk.md) | 671 |
+| [ff7-scarlet.md](quellen/ff7-scarlet.md) | 1199 | [kujata.md](quellen/kujata.md) | 640 |
+| [ff7-landscaper.md](quellen/ff7-landscaper.md) | 974 | [touphscript.md](quellen/touphscript.md) | 629 |
+| [gears-pdf.md](quellen/gears-pdf.md) | 944 | [ff7-coaster.md](quellen/ff7-coaster.md) | 578 |
+| [kimeracs.md](quellen/kimeracs.md) | 897 | [ffnx.md](quellen/ffnx.md) | 576 |
+| [elena.md](quellen/elena.md) | 543 | [gaia.md](quellen/gaia.md) | 457 |
+| [aeris.md](quellen/aeris.md) | 422 | [ff7snd.md](quellen/ff7snd.md) | 284 |
+| [workers.md](quellen/workers.md) | 137 | | |
+
+Dazu die **eigene** Erhebung, die keine Fremdquelle ist und deshalb außerhalb
+der Tabelle steht:
+[ff7-exe-eigenanalyse.md](quellen/ff7-exe-eigenanalyse.md) (273 Zeilen) —
+Sichtung des lokalen Ghidra-Bestands zu `ff7_en.exe`, freigegeben durch
+[ADR-028](ADR-028-EIGENE-CODEANALYSE.md). Sie führt als einzige Notiz einen
+eigenen Zuverlässigkeitsabschnitt, weil der Bestand seine Fehlerquote selbst
+beziffert (131 Defekte in den eigenen Spezifikationen).
 
 Alle Notizen sind Beschreibungen mit Fundstellenverweisen — **kein
 Fremdquelltext**. Die Verweise der Form `pfad/datei.cpp:zeile` zeigen in die

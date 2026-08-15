@@ -19,7 +19,7 @@ import { dreiecke, rasterize, type Dreieck, type Modell, type Vec3 } from './she
  * Ausgangslage (gemessen, `battle-model-loader.rdtest.ts`): battle.lgp hat 481
  * Präfixe in drei scharf getrennten Bändern. Das dritte Band (21 Präfixe,
  * Index 460…480) enthält die spielbaren Figuren. Bekannt war nur die
- * BEHAUPTUNG „rt = Cloud" aus `docs/fremdquellen/gears-pdf.md` §9 — unbelegt.
+ * BEHAUPTUNG „rt = Cloud" aus `docs/quellen/gears-pdf.md` §9 — unbelegt.
  *
  * Drei unabhängige Achsen, damit keine Zeile auf einer einzigen Stütze steht:
  *  1. **Sichtbefund** — jedes Präfix wird in Bindpose gerendert

@@ -2171,7 +2171,7 @@ function tick(): void {
     /**
      * **Kampf-Bildrate (gemessen, dann geaendert).** Das Original begrenzt
      * den Kampf auf 15 fps, Field und Weltkarte auf 30
-     * (`docs/fremdquellen/ffnx.md`, `ff7_limit_fps`). Bis hierher lief der
+     * (`docs/quellen/ffnx.md`, `ff7_limit_fps`). Bis hierher lief der
      * Kampf in DIESER 30-Hz-Schleife mit, also doppelt so schnell wie im
      * Original. `isBattleTickDue` halbiert ihn.
      *

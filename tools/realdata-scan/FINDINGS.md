@@ -489,7 +489,7 @@ Stringanzahl sowie die Gegenstandsliste zusätzlich gegen die **Belegungsgrenze
 
 ### M4-R — Recordtabellen der Kernel-Sektionen 5…9 (1-basiert) typisiert
 
-Quelle der Feldlagen: `docs/fremdquellen/elena.md` §4 (Tatsachenbeschreibung).
+Quelle der Feldlagen: `docs/quellen/elena.md` §4 (Tatsachenbeschreibung).
 Belegt wurde an den Realdaten:
 
 | Befund | Status |
@@ -891,7 +891,7 @@ sind die Kontrolle).
 
 Probe: `tools/realdata-scan/src/world-fieldtbl-probe.rdtest.ts`.
 Gegenstand: `field.tbl` aus `world_us.lgp` sowie das Dreiecks-Texturwort in
-WM0/WM2/WM3.MAP. Hypothesengeber waren `docs/fremdquellen/ff7-landscaper.md`
+WM0/WM2/WM3.MAP. Hypothesengeber waren `docs/quellen/ff7-landscaper.md`
 §3.1/§5 und `gaia.md` §5 — belegt wurde ausschließlich gegen die eigenen Daten.
 
 ### `field.tbl` — Accounting

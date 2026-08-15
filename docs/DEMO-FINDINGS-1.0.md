@@ -619,7 +619,7 @@ wurde. Eine Quote ohne Kontrollniveau wäre hier wertlos gewesen.
 1. 🔴 **Die Hauptmenü-Aufteilung.** Unter den 18 Referenzbildern
    (`apps/demo/.shots/ref/`) ist **keine Menüaufnahme** — gesichtet wurden
    Sternenhimmel, sechs Field-Szenen, drei Kampfszenen, ein Dialogfenster, drei
-   Kampfabschluss-Bildschirme. `docs/fremdquellen/makoureactor.md` dokumentiert
+   Kampfabschluss-Bildschirme. `docs/quellen/makoureactor.md` dokumentiert
    ebenfalls keine Menüaufteilung; Abschnitt 19.7 beschreibt die Fenstergeometrie
    des **FIELD**-Skripts (Fläche 320×224), also eine andere Fläche und einen
    anderen Bildschirm. Alle Zahlen liegen deshalb in **einem** austauschbaren

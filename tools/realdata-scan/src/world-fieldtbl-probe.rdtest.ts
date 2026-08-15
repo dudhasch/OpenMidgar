@@ -9,7 +9,7 @@ import { parseFieldEntry, parseMaplist, type FieldDiagnostic, type FieldMaplist 
  * F06/F11a — Probe VOR dem Parser (Methodik-Standard seit S7).
  *
  * Gegenstand 1: `field.tbl` aus `world_us.lgp` — die behauptete Quelle der
- * World→Field-Einstiegspunkte (docs/fremdquellen/ff7-landscaper.md §3.1).
+ * World→Field-Einstiegspunkte (docs/quellen/ff7-landscaper.md §3.1).
  * HYPOTHESE H-FTBL: 64 Datensätze à 24 B; Datensatz = 2 Einträge à 12 B
  * (default/alternative); Eintrag = i16 x · i16 y · u16 triangle · u16 fieldId
  * · u8 direction · 3 B Padding, wobei das Padding dreimal die Richtung

@@ -1,7 +1,7 @@
 /**
  * Taktrate des Kampfmodus.
  *
- * 🟢 **Formatfakt** (`docs/fremdquellen/ffnx.md`, Abschnitt „Zielraten pro
+ * 🟢 **Formatfakt** (`docs/quellen/ffnx.md`, Abschnitt „Zielraten pro
  * Modus", rekonstruiert aus `ff7_limit_fps`): Das Original begrenzt jeden
  * Modus auf eine EIGENE Bildrate — FIELD 30, WORLDMAP 30, **BATTLE 15**,
  * SWIRL 30, MENU 60, CREDITS 39, SUBMARINE 30. Und weiter: „Alle Zeitangaben

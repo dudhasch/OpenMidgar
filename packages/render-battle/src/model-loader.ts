@@ -43,7 +43,7 @@ import type { BattleModelFiles } from './battle-actor.js';
  *    872 Rest — und dieser Rest ist ZU 100 % die `ab`/`da`-Familie
  *    (Animationsformate, Grammatik 🔴). Die drei Signaturen sind am
  *    Gesamtbestand paarweise disjunkt (0 Mehrfachtreffer).
- *  - 🟢 Der Namensraum aus `docs/fremdquellen/gears-pdf.md` §9 ist damit an
+ *  - 🟢 Der Namensraum aus `docs/quellen/gears-pdf.md` §9 ist damit an
  *    den Daten bestätigt UND präzisiert: `am`…`cj` Körperteile, `ck`…`cz`
  *    Waffen. Für **391/391 Modellpräfixe** gilt exakt
  *    `Flag-Bones == Anzahl .p im Band am…cj` (Cloud `rt`: 17 = 17, dazu

@@ -7,22 +7,26 @@ einem.
 **Stand:** 2026-08-11 · abgeleitet aus `WEBMIDGAR-MASTERPLAN.md`,
 `ROADMAP-OFFENE-POSTEN.md`, `ROADMAP-S27-S36.md`, `ROADMAP-S37-EXE-ANALYSE.md`,
 `ADR-S28-S29-WELTKARTE.md`, `ADR-S33-KAMPFINTEGRATION.md`,
-`decompile-findings.md`, `DEMO-FINDINGS-1.0.md`, `FREMDQUELLEN-SICHTUNG.md`,
+`decompile-findings.md`, `DEMO-FINDINGS-1.0.md`, `QUELLEN-SICHTUNG.md`,
 `tools/realdata-scan/FINDINGS.md`.
 
 ---
 
 ## 0. Vorbemerkung — die Zwei-Kanal-Regel
 
-WebMidgar ist eine **Clean-Room**-Reimplementierung. Der Masterplan sagt
-wörtlich: Semantiktabellen werden aus öffentlicher Dokumentation und
-Verhaltensbeobachtung abgeleitet, **nie aus Original-Disassembly des
-Engine-Codes**. Und in `FREMDQUELLEN-SICHTUNG` stehen bereits Sperrvermerke
-gegen dekompilierten Originalcode (`ff7-coaster`, `ff7-worldmap`,
-`ff7-chocobo`, eine Hex-Rays-Passage in `makoureactor`).
+> **Stand 2026-08-15 überholt, aber nicht wertlos.** Die Trennung unten war mit
+> der Clean-Room-Position begründet. Diese Position ist aufgegeben:
+> [ADR-027](ADR-027-DECOMP-REFERENZ.md) hat dekompilierte Fremdquellen
+> zugelassen, [ADR-028](ADR-028-EIGENE-CODEANALYSE.md) die eigene Analyse der
+> PC-EXE ohne Auflagen. **K2 ist damit kein Sperrkanal mehr.** Die Tabelle
+> bleibt trotzdem stehen, weil ihre *zweite* Begründung unberührt gilt: Eine
+> Aussage aus zweiter Hand ist eine **Hypothese, keine Autorität** — auch dann,
+> wenn sie vom Originalentwickler kommt. Erst recht nach 28 Jahren.
 
-Ein Originalentwickler kann diese Trennung mit einem Satz aufheben. Deshalb
-gilt für dieses Interview:
+Der Masterplan sagte wörtlich: Semantiktabellen werden aus öffentlicher
+Dokumentation und Verhaltensbeobachtung abgeleitet, **nie aus
+Original-Disassembly des Engine-Codes**. Diese Regel gilt nicht mehr. Was
+weiterhin für dieses Interview gilt:
 
 | Kanal | Inhalt | Verwendung |
 |---|---|---|
@@ -484,6 +488,6 @@ unerreichbar.
 
 *Verweise: [WEBMIDGAR-MASTERPLAN.md](WEBMIDGAR-MASTERPLAN.md) ·
 [ROADMAP-OFFENE-POSTEN.md](ROADMAP-OFFENE-POSTEN.md) ·
-[FREMDQUELLEN-SICHTUNG.md](FREMDQUELLEN-SICHTUNG.md) ·
+[QUELLEN-SICHTUNG.md](QUELLEN-SICHTUNG.md) ·
 [decompile-findings.md](decompile-findings.md) ·
 [DEMO-FINDINGS-1.0.md](DEMO-FINDINGS-1.0.md)*

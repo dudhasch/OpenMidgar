@@ -4,7 +4,7 @@ import { SECTION } from '../nam.js';
 /**
  * AKAO-/Tutorial-Blöcke — die „Sektion 2" **innerhalb** von Sektion 1.
  *
- * 🟢 **Formatfakt (Makou, `docs/fremdquellen/makoureactor.md` §3.2/§4).**
+ * 🟢 **Formatfakt (Makou, `docs/quellen/makoureactor.md` §3.2/§4).**
  * Hinter der Entity-Namenstabelle steht eine Tabelle aus `nAkao` u32-Offsets,
  * jeder **relativ zum Sektionsanfang**. Beide Blocksorten — Musik/Klang und
  * Tutorial-Bytecode — liegen in DERSELBEN Tabelle; unterschieden wird am

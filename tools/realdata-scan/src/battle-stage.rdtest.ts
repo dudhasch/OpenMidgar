@@ -16,7 +16,7 @@ import { rasterize, texRgb, type Dreieck, type Vec3 } from './sheet.js';
  *
  * Vorhersage aus der Aktenlage: battle.lgp hat GENAU 90 skelettlose Präfixe
  * (`og`…`rr`, Bandindex 370…459), und das Setup-Feld `location` der
- * Formationen soll laut `docs/fremdquellen/gears-pdf.md` §8 einen Wertebereich
+ * Formationen soll laut `docs/quellen/gears-pdf.md` §8 einen Wertebereich
  * 0x00…0x59 = 90 Einträge haben. Wenn beides dieselbe Tabelle ist, muss
  * `Präfixindex = 370 + location` gelten.
  *

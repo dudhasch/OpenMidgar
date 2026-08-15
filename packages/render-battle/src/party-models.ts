@@ -5,7 +5,7 @@
  * nicht weil der Lader fehlte — der ist seit K1/K2 vollständig (8979/8979
  * Teile) —, sondern weil die ZUORDNUNG fehlte: welches der 481 Präfixe in
  * battle.lgp welche Figur trägt. Belegt war nur die BEHAUPTUNG „rt = Cloud"
- * aus `docs/fremdquellen/gears-pdf.md` §9.
+ * aus `docs/quellen/gears-pdf.md` §9.
  *
  * MESSUNG (`tools/realdata-scan/src/battle-party-id.rdtest.ts`, 2026-08-11),
  * drei unabhängige Achsen:

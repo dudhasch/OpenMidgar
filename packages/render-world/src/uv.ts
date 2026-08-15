@@ -1,7 +1,7 @@
 /**
  * UV-Auflösung der Weltkarte (F11a).
  *
- * 🟢 FORMATFAKT (docs/fremdquellen/ff7-landscaper.md §5.2, gaia.md §5.2 —
+ * 🟢 FORMATFAKT (docs/quellen/ff7-landscaper.md §5.2, gaia.md §5.2 —
  * zwei unabhängige Beschreibungen desselben Verhaltens): Die sechs u/v-Bytes
  * eines Weltdreiecks sind **VRAM-SEITEN-ABSOLUT**, nicht texturlokal. Jede
  * Textur hat einen Ursprung (`uOffset`, `vOffset`) innerhalb ihrer VRAM-Seite;

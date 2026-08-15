@@ -216,7 +216,7 @@ export const DISC_OFFSET = 0x0ea4;
 
 /**
  * Reihenfolge der Menüeinträge, auf die sich `menuVisible`/`menuLocked`
- * beziehen. 🟡 Aus `docs/fremdquellen/ff7tk.md` §2.5 übernommene
+ * beziehen. 🟡 Aus `docs/quellen/ff7tk.md` §2.5 übernommene
  * Tatsachenangabe; an den Realdaten **nicht** nachgemessen — dafür müsste man
  * ein Spiel mit gesperrten Menüpunkten aufzeichnen.
  */

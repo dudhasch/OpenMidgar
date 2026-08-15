@@ -7,7 +7,7 @@ import { NAME_LIST_COUNTS } from './records.js';
  *
  * Bis hierher kannte `formats-kernel` von diesen Sektionen nur die
  * *Schrittweitenerkennung* (`smallestStride`) — eine Zahl ohne Belegung. Die
- * Feldlagen stammen aus `docs/fremdquellen/elena.md` §4 (Tatsachenbeschreibung,
+ * Feldlagen stammen aus `docs/quellen/elena.md` §4 (Tatsachenbeschreibung,
  * kein Fremdcode). Übernommen wird davon **nichts ungeprüft**: Was an den
  * Realdaten nachgemessen ist, steht als 🟢 an der Zeile, alles andere als 🟡.
  *

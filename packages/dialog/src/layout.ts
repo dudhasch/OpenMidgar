@@ -10,7 +10,7 @@ import {
  *
  * ⚠️ **Regelwechsel gegenüber Welle 1.** Dieses Modul hat Text bis dahin
  * *umgebrochen*: Wörter wurden auf eine vorgegebene Fensterbreite verteilt.
- * Das ist nicht, was FF7 tut. Belegt (docs/fremdquellen/touphscript.md §4.3
+ * Das ist nicht, was FF7 tut. Belegt (docs/quellen/touphscript.md §4.3
  * und nachgemessen an 9 417 Originaldialogen):
  *
  *   **FF7 hat keinen Autowrap.** Zeilenumbrüche stehen als Byte 0xE7 fest im

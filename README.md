@@ -9,6 +9,9 @@ verarbeitet — kein Upload, keine Verteilung proprietärer Daten.
 **Architekturreferenz:** [docs/WEBMIDGAR-MASTERPLAN.md](docs/WEBMIDGAR-MASTERPLAN.md)
 · **Umgang mit Fremdquellen:** [ADR-027](docs/ADR-027-DECOMP-REFERENZ.md)
 (dekompilierte Quellen als Referenz zugelassen, Textübernahme ausgeschlossen)
+· **Eigene Analyse der PC-EXE:** [ADR-028](docs/ADR-028-EIGENE-CODEANALYSE.md)
+(ohne Auflagen freigegeben; der Bestand selbst wird nicht eingecheckt)
+· **Quellenregister:** [docs/QUELLEN-SICHTUNG.md](docs/QUELLEN-SICHTUNG.md)
 
 ## Stand
 

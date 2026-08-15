@@ -25,7 +25,7 @@ export const FONT_CELLS_PER_ROW = 21;
  * Breite eines Zeichens aus dem Tabellenbyte.
  *
  * 🟢 **Unabhängig belegt.** Die Regel stammt aus einer Fremdbeschreibung
- * (docs/fremdquellen/touphscript.md §4.1), ist hier aber gegen die
+ * (docs/quellen/touphscript.md §4.1), ist hier aber gegen die
  * Spieldateien nachgemessen worden — ohne sie zu übernehmen: Für 194 der
  * 212 belegten Glyphen der deutschen Fassung gilt exakt
  * `Breite = Tintenbreite_im_Fontblatt + 1`, wobei die Tintenbreite direkt
