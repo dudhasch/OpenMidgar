@@ -2017,3 +2017,84 @@ und `data/lang-en/battle/` byteidentisch (F-LOC).
 
 *Proben: `tools/realdata-scan/src/camdat-probe.rdtest.ts` (5 Fälle) ·
 `packages/formats-battle/src/camdat.test.ts` (10 Fixturefälle).*
+
+---
+
+## K9 — Negativbefund: das Kampf-Animationsformat ist NICHT das Field-Format (2026-08-15)
+
+Der größte verbliebene Sichtmangel der 1.0-Demo ist die Bindpose: Alle
+Kampffiguren stehen mit senkrecht erhobenen Armen. Die Geometrie steht
+(K1/K2), die Bewegung fehlt — sie liegt in den **872 `ab`/`da`-Einträgen**
+von `battle.lgp` (481 `ab` + 391 `da`).
+
+### Die Hypothese und warum sie naheliegend war
+
+Der Kampf-Modellbank hält im Speicher `struct Animation *` — **dieselbe**
+Struktur wie die Field-`.a`-Dateien, die seit S7 geparst werden. Auf der Platte
+wäre das:
+
+```
+0x00 u32 version == 1
+0x04 u32 frameCount
+0x08 u32 boneCount
+0x0C 3 B Rotationsreihenfolge {0,1,2}, 1 B ungenutzt
+0x10..0x23 Laufzeitzeiger (auf der Platte veraltet)
+0x24 frameCount · (0x18 + boneCount·0x0C) Byte Rahmendaten
+```
+
+Gütefunktion ist das **Accounting**: Die Rechnung muss die Eintragslänge
+byteexakt treffen. Plausible Zahlen kann man haben; ein Accounting geht nicht
+zufällig auf.
+
+### Ergebnis: 0 von 872
+
+| Menge | Einträge | Accounting trifft |
+|---|---:|---:|
+| `ab`/`da` | **872** | **0** |
+| alle übrigen 4-Zeichen-Einträge | 10.247 | 0 |
+| `ab`/`da` mit Kopfversatz +4 / +8 | 872 | 0 / 0 |
+
+**Damit ist das Field-`.a`-Format als Containergrammatik ausgeschlossen.** Der
+Bestand hält im Speicher dieselbe Struktur, aber der Weg von der Datei dorthin
+ist nicht die Identität — dazwischen liegt eine Umsetzung, und die ist K9s
+eigentlicher Gegenstand.
+
+### Was die Familie stattdessen zeigt
+
+| | |
+|---|---:|
+| gelesene Einträge | 872 |
+| kleinster | **8 B** |
+| Median | 512 B |
+| größter | 54.584 B |
+
+Häufigste erste Doppelworte: `0` (226×), `1281` (74×), `14` (57×), `10` (53×),
+`11` (37×). Kein `version == 1`-Muster — die Dateien beginnen nicht mit einer
+Versionskennung.
+
+### ⚠ Der Merkposten, und er ist der eigentliche Ertrag dieses Postens
+
+Der **erste** Anlauf las `battle.lgp` mit einem eigens geschriebenen LGP-Leser
+und meldete „0 von 11.119" — scheinbar derselbe saubere Negativbefund.
+
+Er war keiner. Derselbe Leser fand auch **0** `.p`-Dateien, wo das Projekt
+**8979** belegt hat. Der Fehler lag im Leser, nicht in der Hypothese, und das
+Ergebnis war reines Rauschen, das wie ein Befund aussah.
+
+**Fehlerklasse 1 — falsche Suchmenge**, diesmal rechtzeitig gesehen, und nur
+deshalb, weil eine unabhängig belegte Zahl (8979) zum Gegenprüfen bereitstand.
+Ein Negativbefund braucht denselben Nachweis über seine Suchmenge wie ein
+Positivbefund; hier läuft die Probe deshalb über den **Projektparser** statt
+über eine zweite eigene Implementierung.
+
+### Was daraus folgt
+
+🔴 **K9 bleibt offen**, aber enger: Das Field-Format ist ausgeschlossen, die
+Suchmenge ist gesichert, und die Formmaße stehen fest. Der nächste Schritt ist
+eine Grammatik aus diesen 872 Dateien selbst — nicht die nächste übernommene
+Vermutung. Zu beachten: Der Bestand kennzeichnet `pseudocode/animation.md`
+selbst als sein **am wenigsten gehärtetes** Dokument (keine gegnerische Runde,
+kein Korrekturabschnitt) — von dort kommt kein besseres Urteil als eine
+Hypothese.
+
+*Probe: `tools/realdata-scan/src/k9-anim-probe.rdtest.ts` (2 Fälle).*

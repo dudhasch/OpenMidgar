@@ -136,8 +136,8 @@
 </table>
 
 <h2>Kampf</h2>
-<div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:15.4%"></span><span class="b-offen" style="width:38.5%"></span><span class="b-sperre" style="width:7.6%"></span></div>
-<p class="zaehler">13 Posten — 5 steht · 2 teilweise · 6 offen (davon 1 versperrt)</p>
+<div class="balken"><span class="b-ok" style="width:38.5%"></span><span class="b-teil" style="width:23.1%"></span><span class="b-offen" style="width:30.8%"></span><span class="b-sperre" style="width:7.6%"></span></div>
+<p class="zaehler">13 Posten — 5 steht · 3 teilweise · 5 offen (davon 1 versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
@@ -147,11 +147,11 @@
 <tr class="ok"><td class="was">ATB, Kommandos, Gegner-KI, Verbuchung</td><td class="status">steht</td><td class="notiz">Voller Ablauf inkl. EXP/AP/Gil und Stufenaufstieg — reproduzierbar, aber <em>nicht zahlengleich</em> mit dem Original</td></tr>
 <tr class="ok"><td class="was">Kampf-HUD</td><td class="status">steht</td><td class="notiz">K6, Originaloptik über dieselbe Fensterschale wie Dialog und Menü</td></tr>
 <tr class="offen"><td class="was">Kampfkamera</td><td class="status">offen</td><td class="notiz"><strong>K8 (Welle 5):</strong> Keine der drei Blockkameras zeigt die Ansicht des Originals — bei keinem Öffnungswinkel. Richtungsinvariante 1,381 gegen 0,826 bzw. 2,81</td></tr>
-<tr class="offen"><td class="was"><code>camdat</code> / Kamerabewegungen</td><td class="status">offen</td><td class="notiz">K11, folgt aus K8: Die Gegnerrecords tragen 16 Kamerabewegungs-IDs je Attacke (@0x68) — es gibt nachweislich Kameraskripte</td></tr>
-<tr class="offen"><td class="was">Battle-Animationen (<code>da</code>/<code>ab</code>)</td><td class="status">offen</td><td class="notiz">K9: 872 Dateien ungedeutet. <strong>Alle Kampffiguren stehen in der Bindpose</strong>, Arme senkrecht nach oben</td></tr>
+<tr class="teil"><td class="was"><code>camdat</code> / Kamerabewegungen</td><td class="status">teilweise</td><td class="notiz">K11: Der <strong>Container steht</strong> — vier PSX-absolute Zeiger gegen <code>0x801A0000</code>, fünf Invarianten, in allen drei Dateien byteexakt (394/375/374 Takes, 2364 Verzeichnisplätze auf 1020 geteilte Körper). Kontrolle: <strong>0 von 18</strong> falschen Zeigerbasen bestehen, auch die um nur 4 Byte. <strong>Offen bleiben die Opcodes</strong> der beiden Kamera-VMs — der Parser liefert Grenzen, nicht Bedeutung</td></tr>
+<tr class="offen"><td class="was">Battle-Animationen (<code>da</code>/<code>ab</code>)</td><td class="status">offen</td><td class="notiz">K9: 872 Dateien, <strong>alle Kampffiguren stehen in der Bindpose</strong>. Eingegrenzt: Das Field-<code>.a</code>-Format ist <strong>ausgeschlossen</strong> — das Accounting trifft 0 von 872 (und 0 von 10.247 in den übrigen Familien). Suchmenge über den Projektparser gesichert; Formmaße stehen (8 B bis 54.584 B, Median 512)</td></tr>
 <tr class="offen"><td class="was">Magie- und Effektdarstellung</td><td class="status">offen</td><td class="notiz"><code>magic.lgp</code> ist nicht erschlossen — keine Zauber-, Treffer- oder Beschwörungseffekte</td></tr>
 <tr class="offen"><td class="was">Zauber, Limitbrüche, Beschwörungen</td><td class="status">offen</td><td class="notiz">Als Kommandos vorhanden, als Wirkung nicht — die Wirkungsdaten sind ungemessen</td></tr>
-<tr class="teil"><td class="was">Statuseffekte</td><td class="status">teilweise</td><td class="notiz">Immunitätsfeld (u32@0xB0) roh gelesen, Semantik ist Community-Stand</td></tr>
+<tr class="teil"><td class="was">Statuseffekte</td><td class="status">teilweise</td><td class="notiz">K10 hat hier ein <strong>Vorzeichen korrigiert</strong>: u32@0xB0 sind die <em>erlaubten</em> Zustände, nicht die Immunitäten (26,2 von 32 Bits gesetzt, ein Drittel aller Gegner <code>0xFFFFFFFF</code> — als Immunitätsmaske absurd). Feld heißt jetzt <code>statusesAllowed</code>. Die Wirkung im Kampf ist weiter nicht umgesetzt</td></tr>
 <tr class="teil"><td class="was">z-Spiegelung des Kampfraums</td><td class="status">teilweise</td><td class="notiz">Aus den Daten allein nicht entscheidbar; gewählt ist die händigkeitserhaltende Variante</td></tr>
 <tr class="sperre"><td class="was">Zahlengleiche Schadensformeln, ATB-Timing</td><td class="status">offen · versperrt</td><td class="notiz">Bleibt Ziel. Über Datenlesung allein nicht erreichbar, und die EXE-Analyse ist per Zusatzregel 4 ausgeschlossen. Gangbar wäre eine <em>Verhaltensmessung am laufenden Original</em> (Eingabe → Schadenszahl, über viele Fälle) — das umgeht die Regel nicht, sondern misst statt zu disassemblieren</td></tr>
 </tbody>
@@ -170,7 +170,7 @@
 <tr class="offen"><td class="was">„Benutzen“ (Gegenstände)</td><td class="status">offen</td><td class="notiz">Bewusst nicht gebaut: <code>ItemRecord</code> trägt keine belegte Wirkungsangabe. Ein Trank, der verbraucht wird und nichts tut, wäre schlechter als kein Trank</td></tr>
 <tr class="offen"><td class="was">Materia-System</td><td class="status">offen</td><td class="notiz">Umverteilung beim Waffenwechsel ungemessen; Wachstum und AP-Vergabe nicht umgesetzt</td></tr>
 <tr class="offen"><td class="was">Hauptmenü-Aufteilung</td><td class="status">offen</td><td class="notiz">Unter den 18 Referenzbildern ist <em>keine</em> Menüaufnahme. Alle Zahlen liegen in einem austauschbaren Objekt; ob die Kommandospalte links oder rechts steht, ist offen</td></tr>
-<tr class="teil"><td class="was">HP-/MP-Maxima nach Ausrüstungswechsel</td><td class="status">teilweise</td><td class="notiz">@56/@58 tragen die Boni; die Formel ist ungemessen, die Werte bleiben stehen — und die Ansicht sagt das</td></tr>
+<tr class="teil"><td class="was">HP-/MP-Maxima nach Ausrüstungswechsel</td><td class="status">teilweise</td><td class="notiz">@56/@58 tragen die Boni; die Formel ist ungemessen, die Werte bleiben stehen — und die Ansicht sagt das. <strong>Neu abgesichert:</strong> <code>0xFFFF</code> heißt dort „noch nicht berechnet“, nicht 65535 — in <strong>24 von 63</strong> echten Records. Lesend ging sonst <code>maxHp&nbsp;=&nbsp;65535</code> in den Kampf, schreibend klemmte „auf voll heilen“ gegen 65535, also gar nicht</td></tr>
 <tr class="teil"><td class="was">PHS / Party-Wechsel, Konfiguration</td><td class="status">teilweise</td><td class="notiz">Ansichten vorhanden, Wirkung teils nur anzeigend</td></tr>
 </tbody>
 </table>
@@ -234,12 +234,13 @@
 </table>
 
 <h2>Unterbau</h2>
-<div class="balken"><span class="b-ok" style="width:66.6%"></span><span class="b-teil" style="width:16.7%"></span><span class="b-sperre" style="width:16.7%"></span></div>
-<p class="zaehler">6 Posten — 4 steht · 1 teilweise · 1 offen (versperrt)</p>
+<div class="balken"><span class="b-ok" style="width:71.4%"></span><span class="b-teil" style="width:14.3%"></span><span class="b-sperre" style="width:14.3%"></span></div>
+<p class="zaehler">7 Posten — 5 steht · 1 teilweise · 1 offen (versperrt)</p>
 <table>
 <thead><tr><th>Bereich</th><th>Status</th><th>Notiz</th></tr></thead>
 <tbody>
 <tr class="ok"><td class="was">Import, Fingerprint, Fähigkeitsmatrix</td><td class="status">steht</td><td class="notiz">R5-Matrix über 57 Archive, 5 registrierte Release-Fingerprints; Diagnose-Export beweisbar assetfrei</td></tr>
+<tr class="ok"><td class="was">Sprachzweig-Auflösung (<code>lang-en</code>)</td><td class="status">steht</td><td class="notiz">F-LOC: Auflösung <code>data/lang-&lt;code&gt;/</code> vor <code>data/</code>, je Datei statt je Verzeichnis, ohne hartkodiertes <code>lang-en</code>. Kreuzvalidierung: Der Blockindex in <code>kernel.bin</code>+0x0F1C trifft die Größe der <code>scene.bin</code> <em>desselben</em> Zweigs byteexakt (34×8192 und 33×8192); die Kreuzpaarung scheitert. Bis dahin las alles den <strong>deutschen</strong> Zweig</td></tr>
 <tr class="ok"><td class="was">Determinismus &amp; Replay</td><td class="status">steht</td><td class="notiz">Fixed-Tick; Digests identisch über Node 22, Chromium 148 und 151 (R9)</td></tr>
 <tr class="ok"><td class="was">Leistung (NFR)</td><td class="status">steht</td><td class="notiz">Feldwechsel p95 10,12 ms gegen 500 ms Budget; Soak über 500 Wechsel, +1,07 % Heap</td></tr>
 <tr class="ok"><td class="was">Modding-MVP</td><td class="status">steht</td><td class="notiz">Manifest-Validierung, fünfstufige Auflösungskette mit Herkunfts-Tags, explizite Load-Order</td></tr>
@@ -250,8 +251,8 @@
 
 <h2>Zusammen</h2>
 <div class="gesamt">
-  <div class="balken"><span class="b-ok" style="width:49.2%"></span><span class="b-teil" style="width:19.7%"></span><span class="b-offen" style="width:24.6%"></span><span class="b-sperre" style="width:6.5%"></span></div>
-  <p class="zaehler"><strong>61 Posten — 30 steht · 12 teilweise · 19 offen (davon 4 versperrt)</strong></p>
+  <div class="balken"><span class="b-ok" style="width:50.0%"></span><span class="b-teil" style="width:21.0%"></span><span class="b-offen" style="width:22.6%"></span><span class="b-sperre" style="width:6.4%"></span></div>
+  <p class="zaehler"><strong>62 Posten — 31 steht · 13 teilweise · 18 offen (davon 4 versperrt)</strong></p>
   <p class="zaehler" style="margin-top:.7rem">
     Das Fundament — Formate lesen, deterministisch laufen, Felder begehen, kämpfen, speichern —
     ist weitgehend belegt. Was bis zum vollständigen Klon fehlt, ist überwiegend
