@@ -2238,3 +2238,116 @@ Erwartungen sind als Dauerbefund eingefroren — steigt die Verzeichnisquote je
 je, hat sich der Wertebereich geändert und die Messung ist neu zu lesen.
 
 *Probe: `tools/realdata-scan/src/k9-animzahl.rdtest.ts` (2 Fälle).*
+
+---
+
+## K9 gelöst — die Bitpackung der Kampfanimationen (2026-08-15)
+
+Drei Anläufe haben eingekreist, dieser trifft. Der Unterschied ist die Quelle:
+Statt die Grammatik aus den Dateien zu raten, steht sie im **eigenen
+EXE-Bestand** (ADR-028). Vier Funktionen tragen sie:
+
+| Adresse | Name | was sie beisteuert |
+|---|---|---|
+| `0x005E82DE` | `BattleModel_LoadAnimBank` | die Satzkette der Datei |
+| `0x005E7DE4` | `BattleModel_DecodeAnimation` | Rahmenschleife, 4096 → Grad |
+| `0x005E7680` | `BattleModel_DecodeAnimFrame` | Schlüssel- gegen Deltarahmen |
+| `0x005E7C40` · `0x005E7B7B` · `0x005E7CE4` | die drei Bitleser | die Packung |
+
+Die Signatur allein beantwortet zwei alte Fragen: `DecodeAnimation(negateRootY,
+**boneCountPlus1**, **frameCount**, packedData)` — beide Kopffelder tragen
+ihren Namen im Code.
+
+### Das Format 🟢
+
+```
+Datei:  u32 animCount
+        je Animation: u32 jointCount · u32 frameCount · u32 packedSize · u8 packed[packedSize]
+
+Block:  +0x00 u16 kopfWort     der Dekoder liest ihn nie
+        +0x02 u16 stromBytes   Länge des Bitstroms ab +0x05 — das Abbruchmaß
+        +0x04 u8  shift        Quantisierung der Winkel
+        +0x05 Bitstrom, MSB zuerst
+```
+
+Winkel in PSX-Einheiten (4096 = Vollkreis), gespeichert mit `12 − shift` Bit
+und um `shift` nach links geschoben. **Rahmen 0** ist der Schlüsselrahmen: drei
+16-Bit-Werte Wurzelverschiebung, dann `jointCount` × 3 Winkel. Gelenk 0 ist die
+Wurzeldrehung. **Jeder weitere Rahmen** ist ein Delta auf den Vorgänger, mit
+`short`-Überlauf.
+
+Verschiebungsdelta: `0` + 7 Bit oder `1` + 16 Bit. Drehdelta: ein `0`-Bit heißt
+unverändert, sonst 3 Bit `k` — `k=0` → `−1<<shift`, `k=1…6` → `k` Bit
+vorzeichenbehaftet plus `±2^(k−1)`, `k=7` → volle `12−shift` Bit.
+
+### Die Gütefunktion ist eine doppelte Abrechnung
+
+Der Strom nennt seine Rahmenzahl **nicht** — er endet, wenn `(bitCursor+7)/8`
+das Maß `stromBytes` erreicht. Die Zahl der dabei dekodierten Rahmen muss
+`frameCount` aus dem Satzkopf **auf den Rahmen genau** treffen. Dazu die
+Satzkette, die das Dateiende byteexakt treffen muss.
+
+| | Ergebnis |
+|---|---:|
+| `da`-Dateien vollständig abgerechnet | **391 / 391 = 100 %** |
+| Animationen mit Bitstrom · Rahmen | **7.130 · 99.400** |
+| **Kontrolle 1** — `shift`-Byte je Block +1 | 1 / 391 = **0,3 %** |
+| **Kontrolle 2** — Strombytes je Block umgedreht | 14 / 391 = **3,6 %** |
+| **Kontrolle 3** — derselbe Parser auf `ab` | 0 / 481 = **0 %** |
+
+**Faktor 28** über der stärksten Kontrolle. Beide Kontrollen lassen den
+Container unangetastet und greifen ausschließlich die Packung an — sie messen
+also wirklich die Bitdeutung und nicht die Containerform.
+
+Ein **unabhängiger Gegenbeleg**: Das Original dekodiert in einen Kratzpuffer
+von 500 dwords bei 0x28 Byte Satzbreite, fasst also genau **50 Gelenke**. Der
+Bestand geht bis **49**. Diese Schranke steht im Code, nicht in den Daten — und
+die Daten bleiben darunter.
+
+### Was dabei neu herausfiel
+
+🟢 **`u32@0` ist die Animationszahl.** Die Frage aus dem vorigen Anlauf ist
+beantwortet — nicht durch die Enthaltensein-Prüfung, die nachweislich blind
+war, sondern durch die Containerabrechnung. Der alte Befund über die *Methode*
+bleibt richtig; die Antwort kam von anderswoher.
+
+🟢 **`packedSize == align4(5 + stromBytes)`** — 7.129/7.130. Der eine
+Ausreißer (`rsda`, Satz 15) ist zu groß, nicht zu klein; die Kette bleibt heil.
+
+🟢 **707 Sätze sind leere Platzhalter**: `packedSize == 4`, `stromBytes == 0`,
+**kein `shift`-Byte**, `frameCount == 1` (707/707). Das Original merkt das
+nicht — es liest `shift` und die Winkelbits über die Satzgrenze hinweg aus dem
+Folgesatz und erzeugt einen Rahmen aus Nachbarbytes. Unser Parser gibt hier
+`frames: []` zurück, statt Unsinn nachzubauen.
+
+🟢 **Die Gelenkzahl ist ein Parameter der Animation, kein Verweis aufs
+Skelett.** Zwei geratene Erwartungen sind daran gefallen: **35 Banken tragen
+mehrere verschiedene Gelenkzahlen** in derselben Datei, und die Streuung kommt
+**nicht** von den Platzhaltern (nachgemessen: dieselben 35). Alle Abweichungen
+liegen **unter** `boneCount + 1` — Animationen, die nur den vorderen Teil der
+Kette bewegen. Wo eine Bank einheitlich ist, gilt `jointCount == boneCount + 1`
+in 348/356 = 97,8 %.
+
+🟢 **Der Einknochenfall ist aufgelöst.** Die 8 Ausreißer von vorhin waren kein
+Defekt: Ein Modell mit einem Knochen darf Sätze mit `jointCount == 1` (nur
+Wurzel) tragen. Derselbe Mechanismus, am unteren Rand.
+
+⚠️ **Ein alter K9-Posten war falsch gestellt.** „Das `ab`-Format vollständig"
+gibt es nicht: Die Namensbildung des Originals vergibt Suffixcode 0 an `.D`
+(→ `aa`), **1 an `.B`** (→ `ab`) und 78 an `.A` (→ `da`). `ab` ist der
+Infoblock des Modells, keine zweite Animationsfamilie.
+
+### Was offen bleibt
+
+🔴 `kopfWort` (`u16@0` des Blocks). Er ist in 7.113/7.130 = 99,8 % gleich
+`frameCount`, aber der Dekoder liest ihn **nie**. Die 17 Abweichungen (z. B.
+`ccda`: 25 statt 22, 33 statt 29) sprechen gegen eine bloße Kopie.
+
+🟡 Die 16 `animationIds` der Gegnerrecords sind in 312/337 = 92,6 % kleiner als
+`animCount` — jetzt keine blinde Prüfung mehr, aber sie geht **nicht auf**:
+25 Gegner nennen Indizes jenseits der eigenen Bank. Das gehört zur
+Attackenanbindung, nicht zum Format.
+
+*Parser: `packages/formats-battle/src/battle-anim.ts` · Fixtures:
+`battle-anim.test.ts` (11 Fälle, mit unabhängigem Kodierer) · Probe:
+`tools/realdata-scan/src/k9-bitpackung.rdtest.ts` (4 Fälle).*

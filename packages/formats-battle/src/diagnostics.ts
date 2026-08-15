@@ -18,7 +18,9 @@ export type BattleDiagnosticCode =
   /** Battle-Skelett verletzt die 52+12·n-Grammatik. */
   | 'E-BTL-SKELETON'
   /** `camdat*.bin` verletzt eine der fünf Containerinvarianten (K11). */
-  | 'E-BTL-CAMDAT';
+  | 'E-BTL-CAMDAT'
+  /** Animationsbank `<präfix>da` verletzt Satzkette, Kopf oder Rahmenabrechnung (K9). */
+  | 'E-BTL-ANIM';
 
 export interface BattleDiagnostic {
   code: BattleDiagnosticCode;
