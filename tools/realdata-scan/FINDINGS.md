@@ -2561,3 +2561,82 @@ Posten teilt.
 *Modul: `packages/battle-runtime/src/ff7-schaden.ts` · Fixtures:
 `ff7-schaden.test.ts` (23 Fälle) · Probe:
 `tools/realdata-scan/src/schadensbyte.rdtest.ts` (2 Fälle).*
+
+---
+
+## Zufallsgenerator und physischer Trefferwurf (2026-08-15)
+
+Ohne den Generator nützt die zahlengleiche Schadensrechnung wenig: Zwei der
+drei Würfe eines Treffers kosten **je zwei** Tabellenbytes und wechseln
+siebenmal von acht zusätzlich die Bank. Wer `roll1To100` als einen Zug
+modelliert, trifft beim ersten Schlag noch dieselbe Zahl und ab dem zweiten
+nie wieder. **Die Reihenfolge der Ziehungen ist Teil der Formel.**
+
+### Die Tabelle steht nicht im Repository — und ist trotzdem byteexakt belegt
+
+Die 256 Bytes sind Originaldaten. Der Bestand druckt sie wörtlich ab; sie hier
+abzulegen hieße, Originaldaten auszuliefern. Der Code trägt deshalb die
+**Fundstelle** — `KERNEL.BIN`, Sektion mit **Typfeld 2**, Versatz `0xE1C`,
+256 Byte — und die Invarianten. Gelesen wird zur Laufzeit aus der
+Installation des Anwenders.
+
+**Wie man byteexakt prüft, ohne die Bytes zu haben:** über einen
+Fingerabdruck. Der FNV-1a der abgedruckten Tabelle wurde **außerhalb des
+Repositoriums** ausgerechnet und mit unserer Extraktion verglichen:
+
+```
+Vorlage (abgedruckt) : 0x5D181049
+Extraktion aus KERNEL.BIN : 0x5D181049
+```
+
+Identisch. Damit ist belegt, dass wir dieselben 256 Bytes haben — ohne sie
+auszuliefern. Im Repository steht nur der Hash.
+
+| Prüfung | Ergebnis |
+|---|---|
+| Permutation von `0x00`…`0xFF` | ✅ |
+| Bytesumme | 32640 ✅ |
+| Sektionen mit Typfeld 2 | genau eine (Index 2) |
+| Tabelle `data/` gegen `lang-en/` | **identisch** ✅ |
+| **Umfeld** derselben Sektion | **verschieden** ✅ |
+
+Die letzte Zeile macht die vorletzte erst nichttrivial: Wären die Dateien
+insgesamt gleich, bewiese die gleiche Tabelle nichts. Beide Sektionen sind
+3988 B lang und unterscheiden sich — nur die 256 Bytes nicht.
+
+### Zwei eigene Irrtümer, beide vom Test gefangen
+
+⚠️ **`(seed >> i) & 0xFF` ist ein gleitendes Bytefenster, keine Bitauslese.**
+Ich hatte es als „jedes Bit setzt einen Lesekopf" gelesen und im Kommentar so
+geschrieben. Für Startwert `0x35` sind die acht Köpfe `53, 26, 13, 6, 3, 1,
+0, 0` — stark überlappend — und nicht `1, 0, 1, 0, 1, 1, 0, 0`. Der Irrtum
+hätte einen völlig anderen Strom ergeben; er ist jetzt als Testfall
+eingefroren.
+
+⚠️ **Die Heilungsmaske war um ein Bit zu breit.** `0x00404044` statt
+`0x00400044` — das enthält Bit 14 (Versteinerung), die ein Treffer **nicht**
+heilt. Gefunden vom Fixture, das jeden der drei geheilten Zustände einzeln
+prüft und Versteinerung als Gegenprobe mitführt.
+
+### Der Trefferwurf: drei Stellen, an denen es still schiefgeht
+
+1. **Beide Glückstests teilen sich einen Zug.** Zweimal ziehen verschiebt den
+   Strom.
+2. **Beide Züge fallen immer** — auch bei längst erzwungenem Treffer. Ein
+   Kurzschluss spart genau die Bytes, die alles Folgende verschieben.
+3. **Der Vergleich ist streng** (`wurf < rate`). Eine Rate von exakt 1 trifft
+   deshalb **nie** — darum liegt die Untergrenze bei 1 und nicht bei 0.
+
+`rate` wird nach oben nicht geklemmt: Ein erzwungener Treffer trägt 255, und
+weil der Wurf nie über 100 geht, trifft er immer.
+
+🟡 **Was der Trefferwurf nicht selbst entscheidet:** den Rückenangriff (das
+Original leitet ihn aus drei Seitenmasken und dem „schaut weg"-Bit ab —
+Aufstellungszustand, den unsere Sitzung nicht führt) sowie Trefferquote,
+Geschick und die beiden Ausweichwerte (abgeleitete Statuskette, §9, steht
+noch nicht). Sie sind **Parameter**, damit die Grenze sichtbar bleibt, statt
+sie mit einem Platzhalter zu verwischen.
+
+*Module: `packages/battle-runtime/src/ff7-zufall.ts`, `ff7-treffer.ts` ·
+Fixtures: `ff7-zufall.test.ts`, `ff7-treffer.test.ts` (19 Fälle) · Probe:
+`tools/realdata-scan/src/zufallstabelle.rdtest.ts` (3 Fälle).*
