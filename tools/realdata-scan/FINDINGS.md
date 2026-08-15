@@ -2125,16 +2125,21 @@ Skelett eines anderen Präfixes.
 Zwei Größenordnungen Unterschied im Umfang. Der Kopftest unten trennt sie
 zusätzlich sauber: 0 % gegen 98 %.
 
-### Befund 2 🟢 — `da`: `u32@4` ist die Knochenzahl **+ 1**
+### Befund 2 🟢 — `da`: `u32@4` ist die Knochenzahl **+ 1**, für `n > 1` ausnahmslos
 
 | | Treffer | Kontrolle (verwürfelt) |
 |---|---:|---:|
-| `da` | **383 / 391 = 98,0 %** | 68 = 17,4 % |
+| `da`, gesamt | 383 / 391 = 98,0 % | 68 = 17,4 % |
+| **`da`, `n > 1`** | **378 / 378 = 100 %** | — |
 | `ab` | 0 / 391 = 0,0 % | 0 |
 
 **Faktor 5,6** über der Kontrolle, über der Projektschwelle 3. Die „+1" ist der
 Wurzelrahmen: Das Skelett zählt `n` Knochen, die Animation `n` Gelenke plus die
 Wurzel — dieselbe Aufteilung wie im Field-Format (`0x18` Wurzel + `n`·`0x0C`).
+
+**Die 98 % waren ein Artefakt der Vermischung.** Alle acht Abweichungen haben
+ein Skelett mit **genau einem** Knochen. Trennt man den entarteten Fall ab,
+gilt die Regel für `n > 1` **ausnahmslos: 378 von 378**.
 
 ⚠ **Der erste Durchlauf fand nichts**, weil er nur `wert === boneCount` prüfte.
 Erst der Lauf über die Verschiebungen −2…+2 traf. **Das ist Fehlertyp 4 aus der
@@ -2159,7 +2164,12 @@ feste 12 B je Knochen ab, dieses Format offenbar nicht.
 größere Werte (15/964 bzw. 32/3900), Deutung offen.
 🔴 Die Bitpackung selbst — das ist der eigentliche Rest von K9.
 🔴 Das `ab`-Format vollständig.
-🔴 Die **8 Ausreißer** unter den `da`-Dateien, die `n+1` nicht tragen.
+🟡 Der **Einknochenfall**. Von 13 `da`-Dateien mit `n == 1` lesen **8 den Wert
+1 und 5 den Wert 2**. Die naheliegende Erklärung — „bei einem Knochen gibt es
+keine Gelenkkette, also nur der Wurzelrahmen" — ist von dieser Messung
+**widerlegt**: Sie sagt 13 von 13 vorher, gemessen sind 8. Der Fall bleibt
+offen, ist aber ein benannter Sonderfall über 13 Dateien statt Rauschen über
+391.
 
 Der Bindpose-Mangel bleibt damit bestehen. Aber K9 ist nicht mehr „872 Dateien
 ungedeutet": Zwei Formate sind getrennt, ein Kopffeld ist belegt, und die

@@ -155,6 +155,11 @@ describe.skipIf(!available)('K9 — Kopfgrammatik der ab/da-Familie', () => {
          * Das Skelett zählt `n` Knochen, die Animation `n` Gelenke plus den
          * Wurzelrahmen. Die Prüfgröße stammt aus einer **anderen Datei**
          * (`<präfix>aa`), die verwürfelte Paarung fällt deutlich ab.
+         *
+         * Die 98 % hier sind der Wert über den GESAMTEN `da`-Bestand. Getrennt
+         * nach Knochenzahl gilt die Regel für `n > 1` **ausnahmslos**
+         * (378/378); die Abweichungen liegen alle im Einknochenfall — s. den
+         * Fall „erklärt die acht Ausreißer".
          */
         expect(treffer / sub.length).toBeGreaterThan(0.95);
         expect(treffer).toBeGreaterThan(3 * kontrolle);
@@ -163,6 +168,70 @@ describe.skipIf(!available)('K9 — Kopfgrammatik der ab/da-Familie', () => {
         expect(treffer / sub.length).toBeLessThan(0.1);
       }
     }
+  }, 300_000);
+
+  it('erklärt die acht Ausreißer, statt sie als Rauschen abzutun', async () => {
+    const alle = await sammle();
+    const da = alle.filter((p) => p.suffix === 'da');
+    const u32 = (b: Uint8Array, o: number): number =>
+      new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(o, true);
+
+    const ausreisser = da.filter((p) => u32(p.anim, 4) !== p.bones + 1);
+    console.log(`[K9-X] ${ausreisser.length} von ${da.length} da-Dateien tragen nicht n+1`);
+
+    /** Alle Knochenzahlen des Bestands — für die Frage „passt ein ANDERES Skelett?" */
+    const alleBones = new Set(alle.map((p) => p.bones));
+
+    for (const p of ausreisser) {
+      const wert = u32(p.anim, 4);
+      const kopf = [0, 4, 8, 12].map((o) => u32(p.anim, o));
+      const passtAnderswo = alleBones.has(wert - 1);
+      console.log(
+        `[K9-X]   ${p.prefix}da: Skelett ${p.bones} Knochen ⇒ erwartet ${p.bones + 1}, gelesen ${wert}` +
+          ` · Kopf [${kopf.join(', ')}] · Länge ${p.anim.length} B` +
+          ` · ${wert - 1} kommt als Knochenzahl ${passtAnderswo ? 'VOR' : 'nicht vor'}`,
+      );
+    }
+
+    /**
+     * 🟢 **Die Ausreißer haben ausnahmslos ein Einknochen-Skelett — und das
+     * schärft die Regel, statt sie aufzuweichen.**
+     *
+     * Getrennt nach Knochenzahl:
+     *  - `n > 1`: **378 von 378**, ausnahmslos `n+1`. Die vorher berichteten
+     *    98 % waren ein Artefakt der Vermischung mit dem entarteten Fall.
+     *  - `n == 1`: 13 Dateien, davon lesen **8 den Wert 1 und 5 den Wert 2**.
+     *
+     * ⚠ Die naheliegende Erklärung „bei einem Knochen gibt es keine Gelenkkette,
+     * also nur der Wurzelrahmen" wurde von dieser Messung **widerlegt**: Sie
+     * würde 13 von 13 vorhersagen, gemessen sind 8. Der Einknochenfall bleibt
+     * damit offen — aber er ist ein *benannter* Sonderfall über 13 Dateien und
+     * kein Rauschen über 391.
+     */
+    const einknochen = da.filter((p) => p.bones === 1);
+    const einknochenLesen1 = einknochen.filter((p) => u32(p.anim, 4) === 1);
+    const mehrknochen = da.filter((p) => p.bones > 1);
+    const mehrknochenRegel = mehrknochen.filter((p) => u32(p.anim, 4) === p.bones + 1);
+    console.log(
+      `[K9-X] n == 1: ${einknochen.length} Dateien, davon lesen ${einknochenLesen1.length} den Wert 1 ` +
+        `und ${einknochen.length - einknochenLesen1.length} den Wert 2`,
+    );
+    console.log(
+      `[K9-X] n > 1: ${mehrknochen.length} Dateien, davon ${mehrknochenRegel.length} = n+1 ` +
+        `(${((100 * mehrknochenRegel.length) / mehrknochen.length).toFixed(1)} %)`,
+    );
+
+    // Jeder Ausreißer hat n == 1 — die Regel bricht NUR im entarteten Fall.
+    expect(ausreisser.every((p) => p.bones === 1)).toBe(true);
+    /** 🟢 Für `n > 1` gilt sie ausnahmslos. Das ist der eigentliche Befund. */
+    expect(mehrknochenRegel.length).toBe(mehrknochen.length);
+    /**
+     * DAUERBEFUND für den offenen Sonderfall: die 8/5-Spaltung. Ändert sie
+     * sich, ist der Einknochenfall verstanden oder der Bestand ein anderer —
+     * beides wäre eine Nachricht.
+     */
+    expect(einknochen.length).toBe(13);
+    expect(einknochenLesen1.length).toBe(8);
   }, 300_000);
 
   it('sucht ein Accounting über die Gelenkzahl und findet keines', async () => {
