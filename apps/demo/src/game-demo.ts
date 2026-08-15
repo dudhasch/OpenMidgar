@@ -1503,7 +1503,16 @@ async function handleFieldChange(change: FieldChange): Promise<void> {
   const { bundle } = await data.loadFieldBundle(targetName);
   const plan = planTransition(change, data.maplist, bundle, fieldName);
   const arrival = plan?.arrival ?? undefined;
-  log(`Gateway ${change.gatewayIndex} → ${targetName}${arrival ? ' (Gegen-Gateway-Ankunft)' : ''}`);
+  // Herkunft der Ankunft mitschreiben: `record` ist der Normalweg (Zielpunkt
+  // aus dem Gateway-Record, 100 % belegt), `gegen-gateway` der Rückfall.
+  const herkunft = plan?.source === 'record'
+    ? ' (Zielpunkt aus dem Record)'
+    : plan?.source === 'gegen-gateway'
+      ? ' (Rückfall: Gegen-Gateway)'
+      : plan?.reason
+        ? ` (ohne Ankunftspunkt: ${plan.reason})`
+        : '';
+  log(`Gateway ${change.gatewayIndex} → ${targetName}${herkunft}`);
   await enterField(targetName, arrival);
 }
 
@@ -2659,7 +2668,14 @@ function codeForAction(action: SemanticAction): string | null {
   },
   gateways: (): object[] =>
     (fieldBundle?.triggers?.gateways ?? [])
-      .map((g, i) => ({ i, used: g.used, exitLine: g.exitLine, dest: g.destMaplistIndex, destName: data?.fieldNameByMaplist(g.destMaplistIndex) ?? null }))
+      .map((g, i) => ({
+        i,
+        used: g.used,
+        austritt: g.exitPoint,
+        ziel: g.destPoint,
+        dest: g.destMaplistIndex,
+        destName: data?.fieldNameByMaplist(g.destMaplistIndex) ?? null,
+      }))
       .filter((g) => g.used),
   placeAt: (x: number, y: number): boolean => fieldSession?.placeAt(x, y) ?? false,
   readBattle: async (name: string): Promise<number | null> => {

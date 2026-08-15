@@ -737,3 +737,96 @@ Ohne `WINDOW.BIN` bleibt es bei der Systemschrift — sichtbar und begründet: D
 Bootlog schreibt entweder „Spielschrift aus WINDOW.BIN (212 belegte Zellen,
 Palettenzeile 7, Vorschub aus der Breitentabelle)" oder den Grund, warum nicht.
 Ein stiller Rückfall existiert nicht.
+
+---
+
+## Welle 4 — Durchstich: O11 und F15 (2026-08-15)
+
+### O11 ✅ — Rücksprünge zählen vom Opcode-Byte
+
+Der Posten stand seit dem 11.08. als belegter, aber **bewusst nicht behobener**
+Defekt: `vm.ts` rechnete `ip + 1 − offset`, richtig ist `ip − offset`. Grund für
+das Aufschieben war, dass der Fixture-Assembler dieselbe falsche Konvention
+kodierte — beide Seiten waren konsistent falsch, eine einseitige Korrektur
+hätte jede Fixture-Schleife zerrissen. Jetzt sind **beide in einem Zug**
+korrigiert (`packages/interpreter/src/vm.ts`,
+`tools/fixture-gen/src/script-assembler.ts`).
+
+Die Messung ist als Dauerprobe verankert
+(`tools/realdata-scan/src/sprungziel-probe.rdtest.ts`, 702 Fields):
+
+| Sprungart | implementierte Regel | Kontrolle (um 1 verschoben) |
+|---|---|---|
+| `JMPB` | `ip − off` → **99,5 %** (5270/5298) | `ip + 1 − off` → 0,7 % |
+| `JMPBL` | `ip − off` → **80,2 %** (97/121) | `ip + 1 − off` → **0,0 %** |
+| `JMPF`/`JMPFL` (Eichung) | `ip + 1 + off` → **98,8 %** (10970/11105) | `ip + off` → 4,9 % |
+
+Die Vorwärtsrichtung ist die **Eichung der Messanlage**: Sie war schon vorher
+richtig und muss es bleiben, sonst misst die Rückwärtsaussage nichts.
+
+**Alle drei Replay-Digests sind gewandert** — das ist das erwartete Ergebnis und
+zugleich die Probe darauf, dass die Assembler-Seite mitgezogen wurde. Ein
+stillstehender Digest wäre hier der Alarm gewesen. Verhalten unverändert:
+die Schleifentests in `interpreter.test.ts` sind vor wie nach der Änderung grün.
+
+### F15 ✅ — Der Gateway-Record war zur Hälfte falsch gedeutet
+
+**Ausgangspunkt.** Die Austrittslinie von `md1stin` las sich als
+(353, 3669, 29368) → (353, 1049, 400): eine Diagonale über die halbe Karte. Der
+Übertritt feuerte nie.
+
+**Gemessen** (`gateway-linie-probe`, `gateway-zielpunkt-probe`; alle 1095
+belegten Records, elf mögliche `i16`-Paare, Punkt-in-Dreieck gegen das
+begehbare Netz):
+
+| Feld | Versatz | Beleg | Kontrolle |
+|---|---|---|---|
+| Austrittsstelle im **eigenen** Netz | @2/@4 | **85,5 %** (936/1095) | Fremdfeld 27,0 %; alle übrigen Versätze ≤ Kontrolle |
+| Ankunftsstelle im **Ziel**netz | @8/@10 | **100,0 %** (978/978) | Maplist-Nachbar 33,1 % · eigenes Field 36,2 % · verschobene Zuordnung 46,2 % |
+
+**Kohärenzprobe** über 771 Gegen-Gateway-Paare: Der Zielpunkt von A liegt im
+Median **142 Einheiten** vom Austrittspunkt des Gegen-Gateways entfernt (82,7 %
+unter 300); Kontrolle „anderes Gateway desselben Zielfields": Median **1107**,
+nur 8,8 % unter 300. Beide Deutungen stützen sich gegenseitig.
+
+**Damit ist ein eigener Befund aus S11 widerlegt** — dort stand „der Zielpunkt
+steht NICHT im Record". Er war nicht falsch gemessen, sondern zu eng: geprüft
+wurden @12, @16 und @18; **@8 stand nie in der Kandidatenmenge.** Das ist ein
+vierter Fehlertyp neben „falsche Suchmenge", „blinde Gütefunktion" und „die
+Antwort stand schon in einer Rechnung": **eine Kandidatenmenge, die den
+richtigen Platz gar nicht enthält, erzeugt einen sauberen Negativbefund.**
+
+**Zwei Hypothesen sind dabei gefallen, beide vermessen statt verworfen:**
+
+- *Endpunkte sind Walkmesh-Vertices*: an keinem Versatz (Bestwert 2/1095,
+  Fremdfeld-Kontrolle gleichauf).
+- *@0/@6 sind Dreiecksnummern*: 0,8 % bzw. 0,9 % gegen Nachbarkontrollen von
+  0,4 % / 1,8 %. Sie bleiben roh und 🟡.
+
+🔴 **Eine Austrittslinie ist nicht auffindbar.** Für einen zweiten Punkt im
+eigenen Netz trägt kein Versatz (bester Kandidat @20: 70,4 % gegen 37,0 %), und
+als Strecke gerechnet verbessern **alle** Kandidaten den Abstand zum
+Gegen-Gateway gleich stark (Median 87–119 gegen 142 für den Punkt allein) — das
+ist keine Trennung, sondern der Gewinn, den jede Verlängerung bringt.
+
+**Folgen im Code.** Der Übertritt läuft über den **Punkt**: Ein Gateway feuert,
+wenn der Bewegungsschritt in den Kreis mit `GATEWAY_RADIUS` = 300 um den
+Austrittspunkt **eintritt** (Schrittanfang außerhalb). Drei naheliegendere
+Formulierungen scheitern und stehen als Test: „Abstand < R" feuert in jedem
+Takt; „Abstand < R und Annäherung" feuert innerhalb des Kreises weiter; der
+reine Endpunktvergleich verpasst schnelle Schritte. Der Radius ist 🔵, aber
+**beidseitig aus den Daten eingegrenzt**: nach unten durch die Ankunftsstreuung
+(Median 142, 82,7 % unter 300), nach oben durch den Abstand benachbarter
+Gateways (Median 1107 ⇒ Radius < 553).
+
+**Abnahme** (`field-transition.rdtest.ts`):
+
+| Größe | vorher | jetzt |
+|---|---|---|
+| Kanten mit begehbarer Ankunft | 510 (46,6 %) | **978 (89,3 %)** — das sind **alle** auflösbaren; die restlichen 117 nennen Fields, die das Archiv nicht führt |
+| Herkunft der Ankunft | Gegen-Gateway | **978× aus dem Record**, 0× Rückfall |
+| Ankunft pendelt sofort zurück | 0 | 3 (0,3 %) — die Ankunft liegt dort, wo das Spiel sie hinsetzt; ein Schritt genau darauf zu ist erlaubtes Spielverhalten, kein Selbstlauf |
+
+**Sichtnachweis:** `md1stin` → `md1_1` läuft in der Demo, Ankunft exakt auf
+(1049, 400), Protokollzeile „Zielpunkt aus dem Record". `md1_1` führt weiter
+nach `md1_2` — die Kette des Demo-Ziels steht.

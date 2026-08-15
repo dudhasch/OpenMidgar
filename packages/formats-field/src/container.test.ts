@@ -55,7 +55,7 @@ function fullFieldSpec(): FieldContainerSpec {
         cameraFocusHeight: -50,
         cameraRange: [-160, -120, 160, 120],
         gateways: [
-          { exitLine: [[0, 0, 0], [0, 100, 0]], destMaplistIndex: 123 },
+          { exit: [40, 60], dest: [10, 20], destMaplistIndex: 123 },
         ],
         triggers: [{ corners: [[10, 10, 0], [20, 20, 10]], bgGroup: 2, bgFrame: 1, behavior: 3, soundId: 4 }],
       }),
@@ -98,6 +98,8 @@ describe('Field-Container: Golden Roundtrip', () => {
     expect(trg.cameraRange).toEqual([-160, -120, 160, 120]);
     expect(trg.gateways[0]!.used).toBe(true);
     expect(trg.gateways[0]!.destMaplistIndex).toBe(123);
+    expect(trg.gateways[0]!.exitPoint).toEqual([40, 60]);
+    expect(trg.gateways[0]!.destPoint).toEqual([10, 20]);
     expect(trg.gateways.filter((g) => g.used)).toHaveLength(1);
     expect(trg.triggers[0]!.behavior).toBe(3);
 

@@ -136,29 +136,24 @@ export function stepInstruction(
     bank === 0 ? raw : readBank(rt, bank, raw & 0xff, word);
   const jumpForward = (argOffset: number, offset: number): number => ctx.ip + 1 + argOffset + offset;
   /**
-   * 🔴 **Belegter Defekt, hier bewusst NICHT behoben (2026-08-11).**
+   * ✅ **O11 behoben (2026-08-15, Welle 4).** Rückwärtssprünge zählen vom
+   * **Opcode-Byte**, nicht vom Operandenbyte: `ip − offset`.
    *
-   * Rückwärtssprünge rechnen bei uns vom Operandenbyte (`ip + 1 − offset`).
-   * Gemessen über alle 5286 im Instruktionsstrom erreichten `JMPB` des
-   * Bestands landet dieses Ziel in **39 Fällen (0,7 %)** auf einer
-   * Instruktionsgrenze; die Alternative `ip − offset` (vom Opcode-Byte aus) in
-   * **5266 (99,6 %)**. Bei `JMPBL` ist es 0/97 gegen 97/97.
+   * Der Beleg ist eine Trefferquote auf echten Daten mit geeichter Messanlage:
+   * Über alle 5286 im Instruktionsstrom erreichten `JMPB` des Bestands landet
+   * `ip − offset` in **5266 Fällen (99,6 %)** auf einer Instruktionsgrenze,
+   * die frühere Rechnung `ip + 1 − offset` in **39 (0,7 %)**; bei `JMPBL`
+   * 97/97 gegen 0/97. Geeicht ist die Anlage an den Vorwärtssprüngen, wo die
+   * unveränderte Rechnung `ip + 1 + offset` 7809/7876 (99,1 %) trifft und die
+   * um eins verschobene nur 974/7876. Vorwärts war richtig, rückwärts um genau
+   * ein Byte daneben.
    *
-   * Die Messanlage ist an den Vorwärtssprüngen geeicht und besteht dort: Für
-   * `JMPF` trifft die heutige Rechnung `ip + 1 + offset` 7809/7876 (99,1 %),
-   * die um eins verschobene nur 974/7876. Vorwärts ist also richtig, rückwärts
-   * um genau ein Byte daneben.
-   *
-   * **Warum es trotzdem stehen bleibt:** Der Fixture-Assembler
-   * (`tools/fixture-gen/src/script-assembler.ts`) erzeugt Rücksprünge mit
-   * derselben Konvention. Beide Seiten sind konsistent falsch, alle Fixtures
-   * laufen. Eine einseitige Korrektur hier würde jede Fixture-Schleife
-   * zerreißen; die Korrektur gehört in einem Zug mit dem Assembler gemacht,
-   * und der liegt außerhalb dieses Reviers. Als Posten geführt in
-   * `docs/ROADMAP-OFFENE-POSTEN.md`. Auf **echten** Field-Daten läuft die VM
-   * mit dieser Rechnung heute in fast jedem Rücksprung ins Leere.
+   * **In einem Zug mit `tools/fixture-gen/src/script-assembler.ts` korrigiert.**
+   * Der Assembler kodierte Rücksprünge mit derselben falschen Konvention; beide
+   * Seiten waren konsistent falsch, weshalb keine Fixture-Schleife aufgefallen
+   * war. Eine einseitige Korrektur hätte jede Fixture-Schleife zerrissen.
    */
-  const jumpBackward = (argOffset: number, offset: number): number => ctx.ip + 1 + argOffset - offset;
+  const jumpBackward = (argOffset: number, offset: number): number => ctx.ip + argOffset - offset;
 
   switch (op) {
     case OP.RET: {

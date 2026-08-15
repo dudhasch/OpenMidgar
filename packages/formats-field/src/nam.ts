@@ -47,29 +47,51 @@ export interface FieldCameraSet {
  * Gateway-Record (24 B). Jede Triggersektion führt 12 Slots; belegt sind im
  * Gesamtbestand nur 1095 davon.
  *
- * ✅ Belegt: `exitLine` @0…@11 und das Belegungsmerkmal — ein ungenutzter Slot
- *   hat eine entartete (punktförmige) Austrittslinie. Über 8424 Records
- *   trennt das sauber: alle 740 Records mit auffälligem Zielfeld-Wert sind
- *   nicht entartet, alle 7329 entarteten tragen den Nullwert.
- * ✅ Belegt: `destMaplistIndex` = u16@14 ist ein **0-basierter Index in die
- *   `maplist`** (nicht in die Archivreihenfolge). Nachgewiesen über
- *   Graph-Symmetrie: Fasst man die Ziele als gerichteten Graphen auf, haben
- *   **78,8 %** der Kanten eine Gegenkante — gegen ein Kontrollniveau von
- *   **0,2 %** bei verwürfelten Zielen. Alle anderen Offsets und
- *   Indexdeutungen bleiben unter 3 %.
- * 🔴 **Der Zielpunkt steht NICHT im Record** — das ist gemessen, nicht
- *   vermutet: Alle prüfbaren Vec3-i16-Offsets (@12, @16, @18) liegen mit
- *   34,3 % / 14,4 % / 12,0 % Treffern *unter* ihrer jeweiligen Kontrollquote
- *   (36,8 % / 17,3 % / 14,2 %), und die Fehlschläge liegen im Median 99
- *   Einheiten neben der Ziel-Bounding-Box — also kein Skalierungsproblem.
- *   Die Ankunftsposition wird deshalb aus dem **Gegen-Gateway** des
- *   Zielfields abgeleitet (`planTransition` in `@webmidgar/field-runtime`).
- *   Die verbleibenden Bytes bleiben in `raw`; @16/@18 tragen identische
- *   Verteilungen und sehen nach Flags aus, nicht nach Koordinaten.
+ * **Neu vermessen 2026-08-15 (F15).** Die vorige Deutung „zwei Vec3 ab @0 und
+ * @6 bilden eine Austrittslinie" war falsch: Sie ergab Linien quer über die
+ * halbe Karte, und der Übertritt feuerte nie. Gemessen wurde mit
+ * Punkt-in-Dreieck gegen das begehbare Netz, über alle 1095 belegten Records
+ * und alle elf möglichen `i16`-Paare:
+ *
+ * | Feld | Versatz | Beleg | Kontrolle |
+ * |---|---|---|---|
+ * | `exitPoint` (x, y) im **eigenen** Netz | @2/@4 | **85,5 %** (936/1095) | Fremdfeld 27,0 %; alle übrigen Versätze ≤ Kontrolle |
+ * | `destPoint` (x, y) im **Ziel**netz | @8/@10 | **100,0 %** (978/978) | Maplist-Nachbar 33,1 % · eigenes Field 36,2 % · verschobene Zuordnung 46,2 % |
+ * | `destMaplistIndex` | @14 | 78,8 % Rückkanten (S11) | verwürfelt 0,2 % |
+ *
+ * **Kohärenzprobe** über 771 Gegen-Gateway-Paare: Der Zielpunkt von A liegt im
+ * Median **142 Einheiten** vom Austrittspunkt des Gegen-Gateways entfernt
+ * (82,7 % unter 300) — Kontrolle „anderes Gateway desselben Zielfields":
+ * Median 1107, nur 8,8 % unter 300. Beide Deutungen stützen sich also
+ * gegenseitig, ohne dass eine dritte Annahme nötig wäre.
+ *
+ * ⚠️ **Damit ist der S11-Befund „der Zielpunkt steht NICHT im Record"
+ * widerlegt.** Er war nicht falsch gemessen, sondern zu eng: Geprüft worden
+ * waren die Versätze @12, @16 und @18 — @8 stand nie in der Kandidatenmenge.
+ * Die Lehre steht in `docs/ROADMAP-OFFENE-POSTEN.md`.
+ *
+ * 🔴 **Offen: eine Austrittsli­nie gibt es nicht — jedenfalls nicht auffindbar.**
+ * Für einen *zweiten* Punkt im eigenen Netz trägt kein Versatz (bester
+ * Kandidat @20 mit 70,4 % gegen 37,0 % Kontrolle, alle übrigen auf
+ * Kontrollniveau), und als Strecke gerechnet verbessern alle Kandidaten den
+ * Abstand zum Gegen-Gateway gleich stark (Median 87–119 gegen 142 für den
+ * Punkt allein) — das ist keine Trennung, sondern der übliche Gewinn, den jede
+ * Verlängerung bringt. Der Übertritt läuft deshalb über den **Punkt** (siehe
+ * `detectGatewayCrossings`), nicht über eine Linie.
+ *
+ * 🟡 @0 und @6 sind die je zugehörigen dritten Komponenten (vermutlich Höhen);
+ * die Deutung als **Dreiecksnummer** ist gemessen und widerlegt (0,8 % bzw.
+ * 0,9 % gegen Nachbarkontrollen von 0,4 % / 1,8 %). Sie bleiben roh.
  */
 export interface FieldGateway {
-  exitLine: [Vec3, Vec3];
-  /** false = ungenutzter Slot (entartete Austrittslinie). */
+  /** ✅ Austrittsstelle im eigenen Grundriss — `i16`@2 / `i16`@4. */
+  exitPoint: [number, number];
+  /** ✅ Ankunftsstelle im Grundriss des Zielfields — `i16`@8 / `i16`@10. */
+  destPoint: [number, number];
+  /** 🟡 `i16`@0 und `i16`@6 — dritte Komponente je Punkt, Deutung offen. */
+  exitZRaw: number;
+  destZRaw: number;
+  /** false = ungenutzter Slot (Austritts- und Zielpunkt byteidentisch). */
   used: boolean;
   /** u16@14 — 0-basierter Index in die `maplist`. ✅ */
   destMaplistIndex: number;

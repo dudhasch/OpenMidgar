@@ -206,8 +206,13 @@ export function baueFakeInstallation(opts: FakeInstallationOptionen = {}): FakeI
         control: 1,
         cameraRange: [-160, -120, 160, 120],
         gateways: [
-          { exitLine: [[spanne - 1, 0, 0], [spanne - 1, spanne, 0]], destMaplistIndex: naechstes },
-          { exitLine: [[1, 0, 0], [1, spanne, 0]], destMaplistIndex: vorheriges },
+          // Austritt am rechten Rand, Ankunft links im Zielfeld (und umgekehrt).
+          {
+            exit: [spanne - 1, spanne / 2],
+            dest: [8, spanne / 2],
+            destMaplistIndex: naechstes,
+          },
+          { exit: [1, spanne / 2], dest: [spanne - 8, spanne / 2], destMaplistIndex: vorheriges },
         ],
         triggers: [{ corners: [[10, 10, 0], [60, 60, 10]], behavior: 1, soundId: 2 }],
       }),

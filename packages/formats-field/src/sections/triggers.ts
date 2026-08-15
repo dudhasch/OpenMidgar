@@ -75,13 +75,22 @@ export function parseTriggersSection(
   const gateways: FieldGateway[] = [];
   for (let g = 0; g < TRG_GATEWAY_COUNT; g++) {
     const o = gwBase + g * TRG_GATEWAY_LEN;
-    const exitLine: [Vec3, Vec3] = [readVec3(o), readVec3(o + 6)];
+    // Zwei 6-B-Blöcke: (z, x, y) der Austrittsstelle im eigenen Grundriss und
+    // (z, x, y) der Ankunftsstelle im Zielfield — beides realdaten-belegt, s.
+    // `FieldGateway`. Die dritten Komponenten (@0, @6) bleiben roh.
+    const aus = readVec3(o);
+    const ziel = readVec3(o + 6);
     gateways.push({
-      exitLine,
-      // Belegungsmerkmal: entartete Austrittslinie = nie beschriebener Slot.
-      // Der frühere Sentinel-Test (destFieldId !== 0x7FFF) griff nicht: über
-      // 8424 Records taucht 0x7FFF nie auf, während 7329 Slots entartet sind.
-      used: !isDegenerateLine(exitLine),
+      exitPoint: [aus[1], aus[2]],
+      destPoint: [ziel[1], ziel[2]],
+      exitZRaw: aus[0],
+      destZRaw: ziel[0],
+      // Belegungsmerkmal UNVERÄNDERT: Ein nie beschriebener Slot trägt in
+      // beiden 6-B-Blöcken dieselben Bytes. Der frühere Sentinel-Test
+      // (destFieldId !== 0x7FFF) griff nicht: über 8424 Records taucht 0x7FFF
+      // nie auf, während 7329 Slots entartet sind. Dieselbe Bytebedingung wie
+      // vorher — die Zahl der belegten Slots (1095) bleibt damit gleich.
+      used: !isDegenerateLine([aus, ziel]),
       destMaplistIndex: view.getUint16(o + 14, true),
       raw: data.slice(o, o + TRG_GATEWAY_LEN),
     });

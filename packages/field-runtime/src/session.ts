@@ -76,6 +76,8 @@ export interface TriggerEvent {
 export interface FieldChange {
   gatewayIndex: number;
   destMaplistIndex: number;
+  /** Ankunftsstelle im Zielfield — `i16`@8/@10 des Records (100 % belegt). */
+  destPoint: [number, number];
 }
 
 /**
@@ -428,6 +430,7 @@ export class FieldSession {
           fieldChange = {
             gatewayIndex: first.gatewayIndex,
             destMaplistIndex: first.gateway.destMaplistIndex,
+            destPoint: first.gateway.destPoint,
           };
         }
       }

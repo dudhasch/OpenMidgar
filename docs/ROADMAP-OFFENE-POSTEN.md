@@ -631,7 +631,16 @@ Eintrittspunkt bei 2145. Korpusweit enthalten **26,7 % aller Spannen**
 unerreichbare Instruktionen (32,5 % aller Instruktionen). Der Rollblock ist
 eine stillgelegte Animationsschleife.
 
-### 🔴 NEU: O11 — Rückwärtssprünge liegen um ein Byte daneben
+### ✅ O11 — Rückwärtssprünge lagen um ein Byte daneben (behoben 2026-08-15)
+
+**Behoben in einem Zug mit dem Fixture-Assembler** (Welle 4). `vm.ts` rechnet
+jetzt `ip − offset`, `script-assembler.ts` kodiert entsprechend ab dem
+Opcode-Byte. Dauerprobe: `tools/realdata-scan/src/sprungziel-probe.rdtest.ts`
+— `JMPB` 99,5 % (5270/5298) gegen 0,7 %, `JMPBL` 80,2 % gegen 0,0 %, Eichung an
+`JMPF`/`JMPFL` 98,8 % gegen 4,9 %. Alle drei Replay-Digests sind dabei
+gewandert; das war die Probe darauf, dass beide Seiten mitgezogen haben.
+
+Der ursprüngliche Befund:
 
 | Posten | Befund | Wirkung |
 |---|---|---|
@@ -687,3 +696,37 @@ Fehlkette steht als Lehrstück in `packages/interpreter/src/opcodes.ts`.
 [ROADMAP-S20-S26.md](ROADMAP-S20-S26.md) ·
 [WEBMIDGAR-MASTERPLAN.md](WEBMIDGAR-MASTERPLAN.md) ·
 [FINDINGS.md](../tools/realdata-scan/FINDINGS.md)*
+
+
+---
+
+## F15 — der Gateway-Record, und was er über Negativbefunde lehrt (2026-08-15)
+
+Der Übertritt zwischen Fields feuerte nie. Ursache war eine zur Hälfte falsche
+Deutung des 24-B-Records; die Messung steht in
+[DEMO-FINDINGS-1.0.md](DEMO-FINDINGS-1.0.md) (Welle 4). Hierher gehört die
+**methodische** Lehre, weil sie sich einreiht in die drei Fehlertypen, die
+dieses Dokument schon führt:
+
+1. falsche Suchmenge (O2),
+2. blinde Gütefunktion (O9, BGROL),
+3. die Antwort stand längst in einer Rechnung (O1, zweimal).
+
+**Neu, Typ 4: eine Kandidatenmenge, die den richtigen Platz nicht enthält.**
+S11 hielt fest, der Zielpunkt stehe *nicht* im Gateway-Record — sauber gemessen,
+mit Kontrollniveau, und trotzdem falsch. Geprüft worden waren die Versätze @12,
+@16 und @18. Der Zielpunkt steht an **@8** und trifft dort 978 von 978. Der
+Negativbefund war nicht das Ergebnis einer schlechten Messung, sondern einer
+Menge, die den richtigen Kandidaten gar nicht enthielt.
+
+**Was daraus für künftige Messungen folgt.** Ein Negativbefund über eine
+*Position* ist erst dann einer, wenn die Kandidatenmenge **erschöpfend** ist —
+bei einem 24-B-Record sind das elf `i16`-Paare, nicht drei. Wo das zu teuer
+ist, gehört die Menge ausdrücklich in den Befund („geprüft wurden @12/@16/@18"),
+damit der nächste Durchgang sie erweitern kann, statt sie zu glauben.
+
+**Zwei weitere Hypothesen sind an derselben Stelle gefallen** — beide vermessen,
+nicht verworfen: Die Endpunkte sind **keine** Walkmesh-Vertices (Bestwert
+2/1095), und @0/@6 sind **keine** Dreiecksnummern (0,8 % / 0,9 % gegen
+Nachbarkontrollen 0,4 % / 1,8 %). Eine Austritts**linie** ist im Record nicht
+auffindbar; der Übertritt läuft deshalb über den Punkt.

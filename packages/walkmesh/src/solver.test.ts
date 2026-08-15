@@ -193,19 +193,25 @@ describe('Gateway-/Trigger-Querung', () => {
     const section = composeTriggersSection({
       name: 'gwtest',
       gateways: [
-        { exitLine: [[100, -50, 0], [100, 50, 0]], destMaplistIndex: 7 },
-        { exitLine: [[200, -50, 0], [200, 50, 0]], destMaplistIndex: 8 },
+        { exit: [1000, 0], dest: [10, 0], destMaplistIndex: 7 },
+        { exit: [2000, 0], dest: [20, 0], destMaplistIndex: 8 },
       ],
     });
     const triggers = parseTriggersSection(section, 'gwtest', [])!;
-    // Schritt quert BEIDE Linien: Reihenfolge nach t (erst Feld 7, dann 8).
-    const both = detectGatewayCrossings({ x: 50, y: 0 }, { x: 250, y: 0 }, triggers);
+    // Ein Schritt, der beide Kreise betritt: Reihenfolge nach der Lage
+    // entlang des Schritts (erst Ziel 7 bei x = 1000, dann 8 bei x = 2000).
+    const both = detectGatewayCrossings({ x: 500, y: 0 }, { x: 1900, y: 0 }, triggers);
     expect(both.map((e) => e.gateway.destMaplistIndex)).toEqual([7, 8]);
-    // Schritt ohne Querung: nichts feuert (inaktive Slots ebenfalls nicht).
-    expect(detectGatewayCrossings({ x: 110, y: 0 }, { x: 190, y: 0 }, triggers)).toHaveLength(0);
-    // Hin und zurück: je Querung genau ein Ereignis.
-    const back = detectGatewayCrossings({ x: 150, y: 0 }, { x: 50, y: 0 }, triggers);
-    expect(back).toHaveLength(1);
-    expect(back[0]!.gatewayIndex).toBe(0);
+    // Schritt außerhalb beider Radien: nichts feuert.
+    expect(detectGatewayCrossings({ x: 1400, y: 0 }, { x: 1500, y: 0 }, triggers)).toHaveLength(0);
+    // Aus dem Kreis heraus: kein Ereignis (der Anfang lag innen).
+    expect(detectGatewayCrossings({ x: 1000, y: 0 }, { x: 1250, y: 0 }, triggers)).toHaveLength(0);
+    // Weiterbewegung INNERHALB des Kreises: ebenfalls keines — sonst feuerte
+    // ein Gateway in jedem Takt, den man daneben steht.
+    expect(detectGatewayCrossings({ x: 1250, y: 0 }, { x: 1000, y: 0 }, triggers)).toHaveLength(0);
+    // Eintritt von außen: genau ein Ereignis.
+    const hin = detectGatewayCrossings({ x: 1400, y: 0 }, { x: 1000, y: 0 }, triggers);
+    expect(hin).toHaveLength(1);
+    expect(hin[0]!.gatewayIndex).toBe(0);
   });
 });

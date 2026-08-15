@@ -73,7 +73,13 @@ export class ScriptAssembler {
       const dest = labels.get(target);
       if (dest === undefined) throw new Error(`Unbekanntes Label: ${target}`);
       const argPos = pos + 1;
-      const offset = backward ? argPos - dest : dest - argPos;
+      // O11 (2026-08-15): Rücksprünge zählen vom **Opcode-Byte** (`pos`),
+      // Vorwärtssprünge vom Operandenbyte (`argPos`). Beides ist auf echten
+      // Field-Daten gemessen (JMPB 5266/5286 gegen 39/5286, JMPF 7809/7876);
+      // die VM rechnet seit derselben Änderung genauso. Vorher stand hier für
+      // beide Richtungen `argPos` — konsistent falsch mit der VM, weshalb es
+      // an keiner Fixture-Schleife auffiel.
+      const offset = backward ? pos - dest : dest - argPos;
       if (offset < 0 || offset > (wide ? 0xffff : 0xff)) {
         throw new Error(`Sprungweite ${offset} außerhalb (${target})`);
       }

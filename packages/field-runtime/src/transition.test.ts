@@ -12,9 +12,9 @@ import { FieldSession } from './session.js';
 import { planTransition, resolveGatewayTarget } from './transition.js';
 
 /**
- * S11: Field-Wechsel. Die Zielfield-Nummer kommt aus der `maplist`, die
- * Ankunftsposition aus dem Gegen-Gateway des Zielfields — der Zielpunkt im
- * Record ist realdaten-seitig widerlegt und wird bewusst nicht benutzt.
+ * Field-Wechsel. Zielfield-Nummer aus der `maplist`, Ankunftspunkt aus dem
+ * Record (`i16`@8/@10, 100 % im Zielnetz belegt — F15). Das Gegen-Gateway ist
+ * seit 2026-08-15 nur noch der **Rückfall** für Punkte außerhalb des Netzes.
  */
 
 const rect = (x0: number, y0: number, x1: number, y1: number): WalkmeshSpec => ({
@@ -42,12 +42,12 @@ function pairFixture(): { maplistBytes: Uint8Array; a: FieldBundle; b: FieldBund
   const a = bundle('felda', rect(0, 0, 600, 400), {
     name: 'a',
     // Zeigt auf Index 1 = feldb.
-    gateways: [{ exitLine: [[500, -200, 0], [500, 600, 0]], destMaplistIndex: 1 }],
+    gateways: [{ exit: [500, 200], dest: [150, 200], destMaplistIndex: 1 }],
   });
   const b = bundle('feldb', rect(0, 0, 600, 400), {
     name: 'b',
     // Rückkante bei x = 100, zeigt auf Index 0 = felda.
-    gateways: [{ exitLine: [[100, -200, 0], [100, 600, 0]], destMaplistIndex: 0 }],
+    gateways: [{ exit: [100, 200], dest: [450, 200], destMaplistIndex: 0 }],
   });
   return { maplistBytes: composeMaplist(names), a, b };
 }
@@ -56,20 +56,20 @@ describe('Field-Wechsel', () => {
   it('löst den Zielfieldnamen über den maplist-Index auf', () => {
     const { maplistBytes } = pairFixture();
     const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
-    expect(resolveGatewayTarget({ gatewayIndex: 0, destMaplistIndex: 1 }, maplist)).toBe('feldb');
-    expect(resolveGatewayTarget({ gatewayIndex: 0, destMaplistIndex: 9 }, maplist)).toBeNull();
+    expect(resolveGatewayTarget({ gatewayIndex: 0, destMaplistIndex: 1, destPoint: [150, 200] }, maplist)).toBe('feldb');
+    expect(resolveGatewayTarget({ gatewayIndex: 0, destMaplistIndex: 9, destPoint: [150, 200] }, maplist)).toBeNull();
   });
 
-  it('setzt die Ankunft neben das Gegen-Gateway, nicht darauf', () => {
+  it('nimmt den Ankunftspunkt aus dem Record', () => {
     const { maplistBytes, a, b } = pairFixture();
     const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
-    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1 }, maplist, b, a.fieldId)!;
+    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1, destPoint: [150, 200] }, maplist, b, a.fieldId)!;
     expect(plan.targetField).toBe('feldb');
-    expect(plan.returnGatewayIndex).toBe(0);
-    expect(plan.arrival).not.toBeNull();
-    // Neben der Linie bei x = 100, nicht darauf — sonst feuerte sie sofort.
-    expect(Math.abs(plan.arrival!.x - 100)).toBeGreaterThan(1);
-    // Und im begehbaren Bereich.
+    expect(plan.source).toBe('record');
+    expect(plan.arrival).toEqual({ x: 150, y: 200 });
+    // Der Rückfall wurde nicht gebraucht.
+    expect(plan.returnGatewayIndex).toBeNull();
+    // Und der Punkt liegt im begehbaren Bereich.
     const session = new FieldSession(b, { runScript: false, start: plan.arrival! });
     expect(session.player).not.toBeNull();
   });
@@ -77,7 +77,7 @@ describe('Field-Wechsel', () => {
   it('die Ankunft löst beim ersten Schritt kein Gateway aus', () => {
     const { maplistBytes, a, b } = pairFixture();
     const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
-    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1 }, maplist, b, a.fieldId)!;
+    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1, destPoint: [150, 200] }, maplist, b, a.fieldId)!;
     for (const [mx, my] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const session = new FieldSession(b, { runScript: false, start: plan.arrival! });
       const result = session.tick({ moveX: mx, moveY: my, confirm: false, cancel: false });
@@ -85,12 +85,34 @@ describe('Field-Wechsel', () => {
     }
   });
 
+  it('weicht auf das Gegen-Gateway aus, wenn der Zielpunkt außerhalb liegt', () => {
+    const { maplistBytes, a, b } = pairFixture();
+    const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
+    const plan = planTransition(
+      // Zielpunkt weit außerhalb des Netzes von feldb.
+      { gatewayIndex: 0, destMaplistIndex: 1, destPoint: [9000, 9000] },
+      maplist,
+      b,
+      a.fieldId,
+    )!;
+    expect(plan.source).toBe('gegen-gateway');
+    expect(plan.returnGatewayIndex).toBe(0);
+    expect(plan.arrival).not.toBeNull();
+    const session = new FieldSession(b, { runScript: false, start: plan.arrival! });
+    expect(session.player).not.toBeNull();
+  });
+
   it('meldet fehlendes Gegen-Gateway, statt zu raten', () => {
     const { maplistBytes, a } = pairFixture();
     const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
     // Zielfield ohne jedes Gateway.
     const lonely = bundle('feldb', rect(0, 0, 600, 400), { name: 'b' });
-    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1 }, maplist, lonely, a.fieldId)!;
+    const plan = planTransition(
+      { gatewayIndex: 0, destMaplistIndex: 1, destPoint: [9000, 9000] },
+      maplist,
+      lonely,
+      a.fieldId,
+    )!;
     expect(plan.targetField).toBe('feldb');
     expect(plan.returnGatewayIndex).toBeNull();
     expect(plan.arrival).toBeNull();
@@ -100,7 +122,7 @@ describe('Field-Wechsel', () => {
   it('meldet ungeladenes Zielfield ohne Ausnahme', () => {
     const { maplistBytes, a } = pairFixture();
     const maplist = parseMaplist(maplistBytes, 'maplist', [])!;
-    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1 }, maplist, null, a.fieldId)!;
+    const plan = planTransition({ gatewayIndex: 0, destMaplistIndex: 1, destPoint: [150, 200] }, maplist, null, a.fieldId)!;
     expect(plan.targetField).toBe('feldb');
     expect(plan.arrival).toBeNull();
     expect(plan.reason).toBe('Zielfield nicht geladen');

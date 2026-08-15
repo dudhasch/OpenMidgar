@@ -119,7 +119,7 @@ function baueBundle(name: string, spec: WalkmeshSpec, mitSkript: boolean): Field
     [SECTION.TRIGGERS]: composeTriggersSection({
       name,
       control: 1,
-      gateways: [{ exitLine: [[200, 0, 0], [200, 200, 0]], destMaplistIndex: 1 }],
+      gateways: [{ exit: [200, 100], dest: [20, 100], destMaplistIndex: 1 }],
       triggers: [{ corners: [[10, 10, 0], [50, 50, 5]], behavior: 1 }],
     }),
   };
@@ -312,10 +312,32 @@ export function berechneReplayVektoren(): ReplayVektor[] {
  * bewegt damit bewusst die Digest-Menge — dann gehört ein eigener Eintrag an
  * diese Stelle.
  */
+/**
+ * **Fortschreibung 2026-08-15 (O11: Rücksprungziel).** Alle drei Digests sind
+ * gewandert. Das ist der erwartete Ausgang und zugleich die Probe darauf, dass
+ * die Korrektur wirklich beide Seiten erfasst hat.
+ *
+ * Geändert wurde in **einem** Zug die Rechnung für Rückwärtssprünge in der VM
+ * (`ip − offset` statt `ip + 1 − offset`, gemessen 5266/5286 gegen 39/5286) und
+ * die Kodierung im `ScriptAssembler` (Offset ab Opcode-Byte statt ab
+ * Operandenbyte). Damit ändert sich das **Bytebild jedes Fixture-Skripts mit
+ * Rücksprung** — und alle drei Vektoren enthalten eine Warteschleife. Ein
+ * stillstehender Digest wäre hier der Alarm gewesen: Er hätte geheißen, dass
+ * die Assembler-Seite nicht mitgezogen wurde.
+ *
+ * **Verhalten unverändert, Bytebild verschoben.** Dass die Schleifen weiterhin
+ * ihr Ziel treffen, hängt nicht an diesen Zahlen, sondern an den Schleifentests
+ * in `packages/interpreter/src/interpreter.test.ts` („Zählschleife: IFUB + JMPB
+ * zählt exakt bis 10"), die vor wie nach der Änderung grün sind. Die Wirkung
+ * auf echte Field-Daten misst `tools/realdata-scan/src/sprungziel-probe.rdtest.ts`.
+ *
+ * Vorherige Werte (bis 2026-08-15): `264718afa7d478d5`, `430f8b8a0770156f`,
+ * `dfdfd745ed5452e0`.
+ */
 export const ERWARTETE_DIGESTS: Readonly<Record<string, string>> = {
-  diagonal: '264718afa7d478d5',
-  gleiten: '430f8b8a0770156f',
-  skript: 'dfdfd745ed5452e0',
+  diagonal: '6e1a6ae14a1ff54b',
+  gleiten: '40d2295b518298f5',
+  skript: 'c2f1db77a9eab698',
 };
 
 export interface VektorVergleich {

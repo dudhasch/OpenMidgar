@@ -161,7 +161,7 @@ describe('Gateway', () => {
       walkmesh: flatRect(0, 0, 1200, 300),
       triggers: {
         name: 'gw',
-        gateways: [{ exitLine: [[500, -1000, 0], [500, 1000, 0]], destMaplistIndex: 42 }],
+        gateways: [{ exit: [500, 150], dest: [50, 150], destMaplistIndex: 42 }],
       },
     });
     const session = new FieldSession(bundle, { start: { x: 100, y: 150 } });
@@ -282,7 +282,7 @@ describe('Replay', () => {
       walkmesh: flatRect(0, 0, 2000, 400),
       triggers: {
         name: 'replay',
-        gateways: [{ exitLine: [[900, -1000, 0], [900, 1000, 0]], destMaplistIndex: 55 }],
+        gateways: [{ exit: [900, 200], dest: [80, 200], destMaplistIndex: 55 }],
         // y-Spanne bewusst über die volle Feldhöhe, damit die Vertikaldrift
         // des Zufallswegs die Querung nicht verhindert.
         triggers: [{ corners: [[300, 0, 0], [600, 400, 0]] }],
