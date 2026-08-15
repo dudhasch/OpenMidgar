@@ -1933,3 +1933,87 @@ Quellensichtung: nicht Bestätigung, sondern Hypothesen, auf die man selbst
 nicht gekommen wäre.
 
 *Probe: `tools/realdata-scan/src/gegnerrecord-k10.rdtest.ts` (2 Fälle).*
+
+---
+
+## K11 — `camdat` ist aufgeschlossen: der Container steht, die Opcodes nicht (2026-08-15)
+
+K8 hat die Frage umbenannt statt sie zu lösen: Keine der drei Kameras aus dem
+48-B-Block der Szene zeigt die Ansicht der Originalaufnahme, bei keinem
+Öffnungswinkel. Die Frage lautet seither „welche Kamera", und die
+Gegnerrecords zeigen mit 16 Kamerabewegungs-IDs je Attacke (`+0x68`) hierher.
+
+### Die Grammatik
+
+```
++0x0000  u32 eyeDir       Verzeichnis der Augen-Skripte
++0x0004  u32 focusDir     Verzeichnis der Fokus-Skripte
++0x0008  u32 altEyeDir    3 Einträge, einer je Kanal
++0x000C  u32 altFocusDir  dito
++0x0010  Skriptkörper, dicht gepackt und GETEILT
+```
+
+**Alle Zeiger sind PSX-Absolutadressen**, Dateiversatz = `Zeiger − 0x801A0000`.
+Dieselbe Erblast wie `xbinadr.bin` im Coaster — dort rebasiert die Datei sich
+selbst über Eintrag 0, hier ist die Basis eine feste Konstante.
+`takeCount = (focusDir − eyeDir) / 12`.
+
+### Fünf Invarianten, alle drei Dateien erfüllen alle fünf
+
+| Datei | Bytes | eyeDir | focusDir | altEyeDir | altFocusDir | Takes | Plätze | eigene Körper |
+|---|---:|---|---|---|---|---:|---:|---:|
+| `camdat0.bin` | 49.044 | `0x99FC` | `0xAC74` | `0xBF7C` | `0xBF88` | **394** | 2364 | **1020** |
+| `camdat1.bin` | 42.552 | `0x8278` | `0x940C` | `0xA620` | `0xA62C` | **375** | 2250 | **860** |
+| `camdat2.bin` | 42.760 | `0x837C` | `0x9504` | `0xA6F0` | `0xA6FC` | **374** | 2244 | **866** |
+
+Invariante 3 ist die schärfste: `altFocusDir + 12` trifft die Dateilänge
+**byteexakt**, in allen drei Dateien. Das ist Accounting, keine Plausibilität.
+
+**Körper sind geteilt.** In `camdat0.bin` lösen 2364 Verzeichnisplätze auf nur
+1020 eigene Körper auf. Wer sie je bearbeitbar macht, muss sie als geteilten
+Speicher behandeln — eine Änderung trifft mehrere Takes.
+
+### Das Kontrollniveau ist die Zeigerbasis — 0 von 18
+
+Die Behauptung „PSX-Absolutadressen gegen `0x801A0000`" ist genau dann etwas
+wert, wenn eine falsche Basis durchfällt. Geprüft: fünf Verschiebungen
+(±4, ±0x10000, +0x100000) plus die Lesart „Zeiger sind schlichte
+Dateiversätze", über alle drei Dateien.
+
+**Keine einzige der 18 Varianten besteht die fünf Invarianten.** Schon eine
+Verschiebung um **4 Byte** fällt durch. Die Invariantenmenge ist also nicht zu
+schwach — genau die Prüfung, die dieses Projekt sonst als „blinde Gütefunktion"
+vermisst.
+
+### Was die Fixture gefunden hat und die Realdaten nicht
+
+Der erste Parser suchte den `0xFF`-Abschluss eines Körpers **in der ganzen
+Datei** statt in dessen Bereich. An den drei echten Dateien fiel das nicht auf:
+Es findet sich immer irgendwo ein `0xFF`, also war I5 praktisch immer bestanden
+— und damit blind. Erst eine selbst gebaute Fixture mit ausgelöschten
+Abschlüssen zeigte es. **Die Realdatenprobe kann einen Test nicht als blind
+entlarven, wenn die Realdaten ihn erfüllen.**
+
+Zweiter Fall derselben Sorte, kleiner: Der kürzeste Körper wurde als 1 Byte
+erwartet (reines END) — gemessen sind es **2**. Ein sofort endendes Skript
+kommt im Archiv nicht vor, obwohl das Format es zuließe; der Selektor `−1`
+liefert so einen Körper, aber aus der EXE, nicht aus der Datei.
+`camdat0.bin`: 1020 Körper, 28.162 B, kürzester 2, längster 265.
+
+### Was offen bleibt
+
+🔴 **Die Opcodes der beiden Kamera-VMs.** Der Parser liefert Container und
+Körpergrenzen, nicht deren Bedeutung. Ein Körper ist hier eine Bytefolge mit
+belegtem Anfang und belegtem Ende — mehr nicht.
+
+🟡 **Layout-ID → Datei.** Die Zuordnung (0/1/8 → `camdat0`, 2 → `camdat1`,
+3–7 → `camdat2`) ist übernommen und an unseren Daten **nicht** prüfbar: Die
+Layout-ID steht im Setup-Record, aber welche Datei das Original daraufhin
+öffnet, steht nirgends in den Daten. Prüfbar ist nur die Vollständigkeit der
+Tabelle.
+
+🟢 **Locale ist gegenstandslos:** `camdat0/1/2.bin` sind zwischen `data/battle/`
+und `data/lang-en/battle/` byteidentisch (F-LOC).
+
+*Proben: `tools/realdata-scan/src/camdat-probe.rdtest.ts` (5 Fälle) ·
+`packages/formats-battle/src/camdat.test.ts` (10 Fixturefälle).*

@@ -16,7 +16,9 @@ export type BattleDiagnosticCode =
   /** kernel.bin-Sektion hat nicht die belegte Recordaufteilung. */
   | 'E-BTL-KERNEL'
   /** Battle-Skelett verletzt die 52+12·n-Grammatik. */
-  | 'E-BTL-SKELETON';
+  | 'E-BTL-SKELETON'
+  /** `camdat*.bin` verletzt eine der fünf Containerinvarianten (K11). */
+  | 'E-BTL-CAMDAT';
 
 export interface BattleDiagnostic {
   code: BattleDiagnosticCode;
