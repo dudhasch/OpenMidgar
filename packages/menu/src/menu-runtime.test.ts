@@ -122,7 +122,11 @@ describe('S21 Menü ist ein reines Overlay', () => {
     for (const [i, e] of eingaben.entries()) {
       mit.tick(e);
       // Das Menü wird parallel bedient: öffnen, blättern, wählen, schließen.
-      menu.step(press({ toggle: i === 0, right: i === 3, down: i === 5, confirm: i === 7, cancel: i === 15 }));
+      // Zweimal Abbrechen, weil der Gegenstands-Bildschirm zweistufig ist wie
+      // im Original: erst zurück in die Reiterzeile, dann hinaus.
+      menu.step(
+        press({ toggle: i === 0, right: i === 3, down: i === 5, confirm: i === 7, cancel: i === 15 || i === 17 }),
+      );
       menu.step(NEUTRAL_MENU_INPUT);
     }
 

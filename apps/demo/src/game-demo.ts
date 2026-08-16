@@ -123,12 +123,15 @@ import {
 import { enemyModelPrefix, formationAddress, parseGrowthSection, type GrowthSection } from '@webmidgar/formats-battle';
 import { Box3, BoxGeometry, Vector3 } from 'three';
 import {
+  GLYPH_HEIGHT,
   MenuSession,
   NEUTRAL_MENU_INPUT,
+  scrollThumb,
   VIEW_ORDER,
   type MenuData,
   type MenuInput,
   type MenuActionHost,
+  type MenuPanel,
   type MenuScreen,
   type MenuViewId,
   type SaveSlotChoice,
@@ -598,6 +601,9 @@ function menuData(): MenuData {
     savemap: savemapAktuell ?? readSavemap(composeSavemapSlot(MENU_FIXTURE))!,
     itemName: data?.itemName ?? (() => null),
     itemDescription: data?.itemDescription,
+    keyItemName: data?.keyItemName,
+    keyItemDescription: data?.keyItemDescription,
+    itemUsableInMenu: data?.itemUsableInMenu,
     materiaName: data?.materiaName,
     magicName: data?.magicName,
     materiaRecords: data?.materiaRecords,
@@ -799,11 +805,25 @@ function renderMenu(): void {
   paintBoxes(menuHost, menuBoxes(bild), fontKontext);
 }
 
-/** `MenuScreen` → Kastenliste des gemeinsamen Malers. */
+/**
+ * `MenuScreen` → Kastenliste des gemeinsamen Malers.
+ *
+ * Zwei Bauformen laufen hier durch. Die **allgemeine** rechnet Zeilen relativ
+ * zur Textfläche eines Fensters in der Zeilenhöhe der Schale; die **absolute**
+ * (`panel.absolute`) bringt Bildschirmkoordinaten mit und ihr eigenes Raster.
+ * Letztere kam mit dem Gegenstands-Bildschirm, dessen Anker im Original
+ * absolut gesetzt sind und dessen Zeilenabstand nicht die Zeilenhöhe der
+ * Schale ist — würde er hier auf sie gerechnet, sähe er im Standbild richtig
+ * aus und liefe erst beim Blättern auseinander.
+ */
 function menuBoxes(bild: MenuScreen): HudBox[] {
   const boxen: HudBox[] = [];
   const zeilenHoehe = FF7_WINDOW_SKIN.lineHeight;
   for (const panel of bild.panels) {
+    if (panel.absolute) {
+      boxen.push(...absoluteBoxes(panel));
+      continue;
+    }
     /**
      * 🟡 Der Maler kennt bisher nur die Normaldarstellung. Alle Fenster, die
      * `buildMainScreen`/`buildViewScreen` heute liefern, sind Normal; ein
@@ -882,6 +902,106 @@ function menuBoxes(bild: MenuScreen): HudBox[] {
    * WINDOW.BIN", „Ort vom Wirt geraten", „Zauberzuordnung 🔴". Ein Menü, das
    * seine Unsicherheiten verschweigt, ist genau der Fehler von Welle 1.
    */
+  boxen.push(...menuNotizen(bild));
+  return boxen;
+}
+
+/**
+ * Ein Fenster mit absoluten Ankern. Alles ist hier schon entschieden: Zeilen
+ * tragen Bildschirm-`y`, Läufe Bildschirm-`x`, der Zeiger sein eigenes
+ * Rechteck. Diese Funktion setzt nur um und rechnet nichts nach.
+ */
+function absoluteBoxes(panel: MenuPanel): HudBox[] {
+  const boxen: HudBox[] = [];
+  boxen.push({
+    id: `menu.${panel.id}`,
+    kind: 'window',
+    rect: { x: panel.rect.x, y: panel.rect.y, w: panel.rect.width, h: panel.rect.height },
+  });
+
+  const clip = panel.clip;
+  const sichtbar = (y: number, h: number): boolean =>
+    !clip || (y + h > clip.y && y < clip.y + clip.height);
+
+  for (const zeile of panel.lines) {
+    const hoehe = zeile.height ?? FF7_WINDOW_SKIN.lineHeight;
+    if (!sichtbar(zeile.y, hoehe)) continue;
+    if (zeile.cursor) {
+      const c = zeile.cursorRect;
+      boxen.push({
+        id: `menu.${panel.id}.${zeile.key}.cursor`,
+        kind: 'cursor',
+        rect: c
+          ? { x: c.x, y: c.y, w: c.width, h: c.height }
+          : { x: panel.content.x, y: zeile.y, w: CURSOR_SPALTE, h: hoehe },
+        text: FF7_WINDOW_SKIN.cursor.trim(),
+        align: 'left',
+        fontSize: FF7_WINDOW_SKIN.fontSize,
+      });
+    }
+    zeile.bars.forEach((balken, k) => {
+      const h = balken.height ?? 12;
+      const y = balken.y ?? zeile.y + Math.round((hoehe - h) / 2);
+      // Spur zuerst, Füllung darüber. Kein `barFrame`: der bringt die
+      // dreilagige Bordüre der Kampf-HUD-Balken mit, und die hat ein 2 px
+      // hoher Menübalken nicht.
+      boxen.push({
+        id: `menu.${panel.id}.${zeile.key}.bar${k}.spur`,
+        kind: 'barFill',
+        rect: { x: balken.x, y, w: balken.width, h },
+        background: MENU_BAR_TRACK,
+      });
+      const breite = Math.round(balken.width * Math.max(0, Math.min(1, balken.fill)));
+      if (breite <= 0) return;
+      boxen.push({
+        id: `menu.${panel.id}.${zeile.key}.bar${k}`,
+        kind: 'barFill',
+        rect: { x: balken.x, y, w: breite, h },
+        background: MENU_BAR_COLORS[balken.tone] ?? MENU_BAR_COLORS['hp']!,
+      });
+    });
+    zeile.runs.forEach((lauf, k) => {
+      const y = zeile.y + (lauf.dy ?? 0);
+      const id = `menu.${panel.id}.${zeile.key}.${k}`;
+      if (lauf.kind === 'icon' || lauf.kind === 'portrait') {
+        const seite = lauf.size ?? hoehe;
+        boxen.push({ id, kind: 'icon', rect: { x: lauf.x, y, w: seite, h: seite } });
+        return;
+      }
+      if (lauf.text.length === 0) return;
+      boxen.push({
+        id,
+        kind: 'value',
+        rect: { x: lauf.x, y, w: Math.max(lauf.width, 1), h: lauf.dy === undefined ? hoehe : GLYPH_HEIGHT },
+        text: lauf.text,
+        align: lauf.align,
+        fontSize: FF7_WINDOW_SKIN.fontSize,
+        ...(lauf.palette === undefined ? {} : { palette: lauf.palette }),
+        ...(lauf.dim ? { opacity: 0.45 } : {}),
+      });
+    });
+  }
+
+  if (panel.scroll) {
+    const s = panel.scroll;
+    const daumen = scrollThumb(s.rect, s.visible, s.total, s.first);
+    boxen.push({
+      id: `menu.${panel.id}.scroll.track`,
+      kind: 'scrollTrack',
+      rect: { x: s.rect.x, y: s.rect.y, w: s.rect.width, h: s.rect.height },
+    });
+    boxen.push({
+      id: `menu.${panel.id}.scroll.thumb`,
+      kind: 'scrollThumb',
+      rect: { x: s.rect.x + 2, y: daumen.y, w: Math.max(1, s.rect.width - 4), h: daumen.height },
+    });
+  }
+  return boxen;
+}
+
+/** Die Hinweiszeilen unten — dieselben für beide Bauformen. */
+function menuNotizen(bild: MenuScreen): HudBox[] {
+  const boxen: HudBox[] = [];
   bild.notes.slice(0, 3).forEach((note, i) => {
     boxen.push({
       id: `menu.note${i}`,
@@ -899,6 +1019,14 @@ function menuBoxes(bild: MenuScreen): HudBox[] {
 function escapeHtml(s: string): string {
   return s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!);
 }
+
+/**
+ * 🟡 Spur unter den Wertebalken der Figurenspalte. Dass es eine gibt, ist an
+ * Original-Aufnahmen sichtbar („HP-/MP-Zeile mit unterlegtem Balkenstrich");
+ * ihr Ton ist geschätzt — die Zeichenroutine des Originals (`0x006F638C`) ist
+ * nicht gelesen.
+ */
+const MENU_BAR_TRACK = 'rgba(0,0,0,0.55)';
 
 /** 🟡 Balkenfarben des Menüs — an EINER Stelle, nicht je Ansicht. */
 const MENU_BAR_COLORS: Record<string, string> = {
@@ -2603,10 +2731,16 @@ function codeForAction(action: SemanticAction): string | null {
       renderMenu();
     }
     const bild = menuSession!.screen();
+    const kaesten = bild ? menuBoxes(bild) : [];
+    const arten: Record<string, number> = {};
+    for (const k of kaesten) arten[k.kind] = (arten[k.kind] ?? 0) + 1;
     return {
       ansicht: menuSession!.state.view,
       wurzel: menuSession!.state.root,
       zeiger: menuSession!.state.cursor,
+      // Der Gegenstands-Bildschirm hat einen eigenen Zeiger (Reiter, Fenster,
+      // Zeile). Ohne ihn ließe sich seine Bedienung von außen nicht prüfen.
+      gegenstand: { ...menuSession!.state.item },
       metrikGemessen: bild?.metricsMeasured ?? null,
       hinweise: bild?.notes ?? [],
       fenster:
@@ -2615,9 +2749,27 @@ function codeForAction(action: SemanticAction): string | null {
           rect: p.rect,
           zeilen: p.lines.length,
           erstesLabel: p.lines[0]?.runs[0]?.text ?? null,
+          ...(p.scroll ? { bildlauf: p.scroll } : {}),
         })) ?? [],
-      kaesten: bild ? menuBoxes(bild).length : 0,
+      kaesten: kaesten.length,
+      kastenarten: arten,
     };
+  },
+  /**
+   * Tasten in die Menüsitzung geben, ohne Tastatur. Derselbe Haken wie
+   * `walkerDebug` aus S5: Eine Prüfung soll den Bildschirm bedienen können,
+   * ohne von Fokus und Tastaturlayout abzuhängen.
+   */
+  menueTaste: (taste: keyof MenuInput): object => {
+    if (!menuSession) return { fehler: 'Menü ist zu' };
+    menuSession.step({ ...NEUTRAL_MENU_INPUT, [taste]: true });
+    menuSession.step(NEUTRAL_MENU_INPUT);
+    if (!menuSession.state.open) {
+      closeMenuOverlay();
+      return { offen: false };
+    }
+    renderMenu();
+    return { offen: true, ansicht: menuSession.state.view, gegenstand: { ...menuSession.state.item } };
   },
   /** F11b/F25: Darstellungsart der Weltkarte umschalten und lesen. */
   setWeltDarstellung: (art: WeltDarstellung): object => {

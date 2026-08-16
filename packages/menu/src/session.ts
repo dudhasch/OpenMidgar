@@ -1,13 +1,22 @@
 import {
   buildItemsView,
+  buildKeyItemsView,
   buildPartyView,
   buildStatusView,
   buildTimeView,
-  itemPageCount,
+  MAX_ITEM_SCROLL,
+  VISIBLE_ITEM_ROWS,
   type MenuData,
   type MenuViewId,
   type MenuViewModel,
 } from './model.js';
+import {
+  buildItemScreen,
+  createItemScreenState,
+  type ItemScreenState,
+  type ItemSubmode,
+  type ItemTab,
+} from './item-screen.js';
 import {
   buildConfigView,
   buildEquipView,
@@ -118,8 +127,15 @@ export interface MenuState {
   root: MenuViewId;
   /** Zeilenzeiger innerhalb der aktuellen Ansicht. */
   cursor: number;
-  /** Seitenzeiger der Gegenstandsliste. */
+  /**
+   * Seitenzeiger — für die übrigen Listenansichten. Die Gegenstandsliste
+   * blättert seit dieser Welle **nicht** mehr seitenweise, sondern läuft mit
+   * einem Fenster von zehn Zeilen über alle 320 Plätze; ihr Stand steht in
+   * {@link MenuState.item}.
+   */
   page: number;
+  /** Zustand des Gegenstands-Bildschirms (Reiter, Bildlauf, Untermodus). */
+  item: ItemScreenState;
   /** Angezeigter Charakter der Statusansicht (Index im Recordarray). */
   characterIndex: number;
   /**
@@ -141,6 +157,7 @@ export function createMenuState(): MenuState {
     root: 'party',
     cursor: 0,
     page: 0,
+    item: createItemScreenState(),
     characterIndex: 0,
     pending: null,
     message: null,
@@ -178,6 +195,11 @@ export class MenuSession {
     if (view) this.state.view = view;
     this.state.root = this.state.view;
     this.state.cursor = 0;
+    // 🟢 Der Gegenstands-Bildschirm setzt sich beim Betreten zurück und startet
+    // in der Liste, nicht in der Reiterzeile (`Menu_ItemScreenInit`).
+    if (this.state.view === 'items' || this.state.view === 'keyItems') {
+      this.state.item = createItemScreenState();
+    }
     this.clampCursor();
   }
 
@@ -191,7 +213,13 @@ export class MenuSession {
       case 'party':
         return buildPartyView(this.data);
       case 'items':
-        return buildItemsView(this.data, this.state.page);
+        // Der dritte Reiter zeigt eine andere Liste, aber denselben
+        // Bildschirm — deshalb entscheidet der Reiter, nicht die Ansichts-ID.
+        return this.state.item.tab === 2
+          ? buildKeyItemsView(this.data, this.state.item.keyScroll)
+          : buildItemsView(this.data, this.state.item.scroll);
+      case 'keyItems':
+        return buildKeyItemsView(this.data, this.state.item.keyScroll);
       case 'status':
         return buildStatusView(this.data, this.state.characterIndex);
       case 'time':
@@ -259,6 +287,10 @@ export class MenuSession {
     }
     const vm = this.viewModel();
     if (!vm) return null;
+    if (this.state.view === 'items' || this.state.view === 'keyItems') {
+      const mit = this.state.message ? { ...vm, notes: [this.state.message, ...(vm.notes ?? [])] } : vm;
+      return buildItemScreen(mit, this.data, this.state.item);
+    }
     // Die Rückmeldung einer Handlung gehört in die Ansicht, nicht in ein
     // Protokoll — dieselbe Regel, nach der `notes` überhaupt eingeführt wurde.
     const mit = this.state.message ? { ...vm, notes: [this.state.message, ...(vm.notes ?? [])] } : vm;
@@ -266,12 +298,23 @@ export class MenuSession {
   }
 
   private clampCursor(): void {
+    if (this.state.view === 'items' || this.state.view === 'keyItems') return this.clampItem();
     const vm = this.viewModel();
     if (!vm || vm.selectable.length === 0) {
       this.state.cursor = 0;
       return;
     }
     this.state.cursor = Math.max(0, Math.min(vm.selectable.length - 1, this.state.cursor));
+  }
+
+  /** Der Gegenstands-Bildschirm hat einen eigenen Zeiger — Fenster plus Zeile. */
+  private clampItem(): void {
+    const s = this.state.item;
+    s.scroll = Math.max(0, Math.min(MAX_ITEM_SCROLL, s.scroll));
+    s.row = Math.max(0, Math.min(VISIBLE_ITEM_ROWS - 1, s.row));
+    const schluesselZeilen = Math.ceil(this.data.savemap.keyItems.length / 2);
+    s.keyScroll = Math.max(0, Math.min(Math.max(0, schluesselZeilen - VISIBLE_ITEM_ROWS), s.keyScroll));
+    s.keyRow = Math.max(0, Math.min(VISIBLE_ITEM_ROWS - 1, s.keyRow));
   }
 
   /**
@@ -286,6 +329,14 @@ export class MenuSession {
       if (this.state.open) this.close();
       else this.open();
     } else if (this.state.open) {
+      // Der Gegenstands-Bildschirm hat eine eigene Bedienung: Reiterzeile,
+      // Listenfenster und Aufklappfenster sind Untermodi wie im Original und
+      // lassen sich nicht auf den einen Zeilenzeiger der übrigen Ansichten
+      // abbilden. Erst wenn er selbst hinauswill, greift der allgemeine Weg.
+      if (this.state.view === 'items' && this.gegenstandsSchritt(flanke)) {
+        this.prev = { ...input };
+        return { changed: JSON.stringify(this.state) !== before };
+      }
       if (flanke('cancel')) {
         /**
          * Zweistufig — aber **nur** im Hauptmenüfluss: Wurde das Menü mit
@@ -330,9 +381,104 @@ export class MenuSession {
   }
 
   /**
+   * Ein Bedienschritt im Gegenstands-Bildschirm. Rückgabe `true` heißt: Der
+   * Bildschirm hat die Eingabe verbraucht. `false` gibt sie an den allgemeinen
+   * Weg weiter — das passiert genau einmal, nämlich beim Abbrechen aus der
+   * Reiterzeile, denn dann verlässt man den Bildschirm.
+   *
+   * 🟢 Die Übergänge stehen so im Original (Sprungtabelle `0x007175CA`):
+   * Reiterzeile → Liste (Reiter 0) · → Sortierfenster (Reiter 1) · →
+   * Schlüsselliste (Reiter 2); Abbrechen führt aus jedem der drei zurück in die
+   * Reiterzeile und erst von dort aus dem Bildschirm heraus.
+   */
+  private gegenstandsSchritt(flanke: (key: keyof MenuInput) => boolean): boolean {
+    const s = this.state.item;
+
+    if (s.submode === 0) {
+      // 🟢 Der Reitercursor läuft um (colWrapMode 1) und hat nur eine Zeile.
+      if (flanke('left')) s.tab = ((s.tab + 2) % 3) as ItemTab;
+      if (flanke('right')) s.tab = ((s.tab + 1) % 3) as ItemTab;
+      if (flanke('confirm')) {
+        s.submode = (s.tab === 0 ? 1 : s.tab === 1 ? 4 : 3) as ItemSubmode;
+        if (s.tab === 1) s.arrangeRow = 0;
+      }
+      // Abbrechen verlässt den Bildschirm — das erledigt der allgemeine Weg.
+      return !flanke('cancel');
+    }
+
+    if (flanke('cancel')) {
+      s.submode = 0;
+      // 🟢 Der Reiter bleibt stehen, wo er stand; das Original setzt ihn nicht
+      // zurück (es schreibt in den Abbruchzweigen nur den Untermodus).
+      return true;
+    }
+
+    if (s.submode === 4) {
+      const n = 8;
+      // 🟢 Der Zeiger des Aufklappfensters läuft um (rowWrapMode 1).
+      if (flanke('up')) s.arrangeRow = (s.arrangeRow + n - 1) % n;
+      if (flanke('down')) s.arrangeRow = (s.arrangeRow + 1) % n;
+      // Bestätigen bliebe wirkungslos: Sortieren schreibt in den Spielstand und
+      // ist in dieser Welle nicht umgesetzt (siehe `buildItemScreen`).
+      return true;
+    }
+
+    if (s.submode === 3) {
+      const zeilen = Math.max(1, Math.ceil(this.data.savemap.keyItems.length / 2));
+      const maxScroll = Math.max(0, zeilen - VISIBLE_ITEM_ROWS);
+      // 🟢 Zwei Spalten mit Übertrag in die Zeile (colWrapMode 2).
+      if (flanke('left') && s.keyCol === 1) s.keyCol = 0;
+      else if (flanke('left')) {
+        s.keyCol = 1;
+        this.keyHoch(maxScroll);
+      }
+      if (flanke('right') && s.keyCol === 0) s.keyCol = 1;
+      else if (flanke('right')) {
+        s.keyCol = 0;
+        this.keyRunter(maxScroll, zeilen);
+      }
+      if (flanke('up')) this.keyHoch(maxScroll);
+      if (flanke('down')) this.keyRunter(maxScroll, zeilen);
+      return true;
+    }
+
+    // Untermodus 1 — die Gegenstandsliste.
+    // 🟢 Kein Umlauf: Am oberen bzw. unteren Rand des Fensters wird gescrollt
+    // (rowWrapMode 0 bei 320 Gesamtzeilen), der Zeiger bleibt dabei stehen.
+    if (flanke('up')) {
+      if (s.row > 0) s.row -= 1;
+      else s.scroll = Math.max(0, s.scroll - 1);
+    }
+    if (flanke('down')) {
+      if (s.row < VISIBLE_ITEM_ROWS - 1) s.row += 1;
+      else s.scroll = Math.min(MAX_ITEM_SCROLL, s.scroll + 1);
+    }
+    // 🟢 Der Seitensprung des Originals liegt auf L1/R1 und verschiebt **nur**
+    // die Oberkante um die Fensterhöhe; die Zeigerzeile bleibt stehen. Unser
+    // Eingabemodell kennt keine Schultertasten, deshalb liegt er hier auf
+    // links/rechts. Das kostet den Ansichtswechsel per Seitwärtsdruck — der
+    // führt in diesem Bildschirm über die Reiterzeile und Abbrechen.
+    if (flanke('left')) s.scroll = Math.max(0, s.scroll - VISIBLE_ITEM_ROWS);
+    if (flanke('right')) s.scroll = Math.min(MAX_ITEM_SCROLL, s.scroll + VISIBLE_ITEM_ROWS);
+    return true;
+  }
+
+  private keyHoch(maxScroll: number): void {
+    const s = this.state.item;
+    if (s.keyRow > 0) s.keyRow -= 1;
+    else s.keyScroll = Math.max(0, Math.min(maxScroll, s.keyScroll - 1));
+  }
+
+  private keyRunter(maxScroll: number, zeilen: number): void {
+    const s = this.state.item;
+    if (s.keyRow < Math.min(VISIBLE_ITEM_ROWS, zeilen) - 1) s.keyRow += 1;
+    else s.keyScroll = Math.min(maxScroll, s.keyScroll + 1);
+  }
+
+  /**
    * Links/rechts blättert **innerhalb** einer Ansicht, wenn sie Seiten hat, und
-   * sonst zwischen den Ansichten. Ohne diese Unterscheidung wäre die
-   * Gegenstandsliste ab Seite 2 nur über einen Umweg erreichbar.
+   * sonst zwischen den Ansichten. Der Gegenstands-Bildschirm kommt hier nicht
+   * mehr an: Er verbraucht links/rechts selbst (siehe `gegenstandsSchritt`).
    */
   private blaettern(richtung: number): void {
     /**
@@ -342,24 +488,10 @@ export class MenuSession {
      * mit einer `pending`-Handlung, die dann nirgends mehr sichtbar ist.
      */
     if (this.state.view === 'pick' || this.state.view === 'save') return;
-    if (this.state.view === 'items') {
-      const seiten = itemPageCount(this.data);
-      const naechste = this.state.page + richtung;
-      if (naechste >= 0 && naechste < seiten) {
-        this.state.page = naechste;
-        this.state.cursor = 0;
-        return;
-      }
-    }
     const i = VIEW_ORDER.indexOf(this.state.view);
     const j = (i + richtung + VIEW_ORDER.length) % VIEW_ORDER.length;
     this.state.view = VIEW_ORDER[j]!;
     this.state.cursor = 0;
-    if (this.state.view === 'items') {
-      // Beim Rückwärtsblättern in die Gegenstandsliste auf deren letzte Seite
-      // springen — sonst überspringt ein Rückwärtslauf den Listeninhalt.
-      this.state.page = richtung < 0 ? itemPageCount(this.data) - 1 : 0;
-    }
     this.clampCursor();
   }
 
@@ -386,6 +518,7 @@ export class MenuSession {
       this.state.view = ziel;
       this.state.cursor = 0;
       this.state.page = 0;
+      if (ziel === 'items') this.state.item = createItemScreenState();
       this.clampCursor();
       return;
     }

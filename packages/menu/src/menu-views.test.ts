@@ -430,18 +430,19 @@ describe('F24-B Bildschirmaufbau', () => {
 
   it('legt Listenansichten als Titel-, Listen- und Beschreibungsfenster an', () => {
     const s = new MenuSession(menuData());
-    s.open('items');
+    // Die Gegenstandsansicht hat seit dieser Welle eine eigene, gemessene
+    // Aufteilung; geprüft wird hier die allgemeine Bauform an einer Ansicht,
+    // die sie noch benutzt.
+    s.open('materia');
     const bild = s.screen()!;
     expect(bild.panels.map((p) => p.id)).toEqual(['title', 'list', 'description']);
-    // Die Beschreibungszeile zeigt den Text der markierten Zeile.
-    expect(bild.panels[2]!.lines[0]!.runs[0]!.text).toMatch(/^Heilt etwas Leben, 0$/);
     // Fenster stapeln sich lückenlos und bleiben auf der Fläche.
     for (const p of bild.panels) expect(rectInSurface(p.rect)).toBe(true);
   });
 
   it('Wertespalte ist rechtsbündig an der Textflächenkante verankert', () => {
     const s = new MenuSession(menuData());
-    s.open('items');
+    s.open('materia');
     const liste = s.screen()!.panels[1]!;
     const wert = liste.lines[0]!.runs[1]!;
     expect(wert.align).toBe('right');

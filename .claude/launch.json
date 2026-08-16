@@ -18,6 +18,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--config", "apps/demo/vite.config.ts", "--port", "5202", "--strictPort"],
       "port": 5202
+    },
+    {
+      "name": "demo-item",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "apps/demo/vite.config.ts", "--port", "5203", "--strictPort"],
+      "port": 5203
     }
   ]
 }

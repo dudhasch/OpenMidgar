@@ -18,6 +18,8 @@ import {
   type KernelNameLists,
 } from '@webmidgar/formats-kernel';
 import {
+  INVENTORY_SLOT_COUNT,
+  MAX_ITEM_SCROLL,
   MenuSession,
   NEUTRAL_MENU_INPUT,
   buildItemsView,
@@ -25,6 +27,7 @@ import {
   buildStatusView,
   buildTimeView,
   formatNumber,
+  inventorySlots,
   type MenuData,
   type MenuInput,
 } from './index.js';
@@ -322,7 +325,10 @@ describe('S21 Menü-Ansichten (Golden)', () => {
 
   it('Gegenstandsliste löst alle vier Kennungsbereiche auf und macht Lücken sichtbar', () => {
     const vm = buildItemsView(menuData());
-    expect(vm.rows.map((r) => [r.label, r.value])).toEqual([
+    // Zehn Zeilen, immer — das Fenster des Originals ist zehn Plätze hoch,
+    // unabhängig davon, wie viele davon belegt sind.
+    expect(vm.rows).toHaveLength(10);
+    expect(vm.rows.slice(0, 6).map((r) => [r.label, r.value])).toEqual([
       ['Trank', '×12'],
       ['Äther', '×3'],
       ['4-Spitz-Shuriken', '×1'],
@@ -331,6 +337,40 @@ describe('S21 Menü-Ansichten (Golden)', () => {
       // Kennung außerhalb aller Bereiche: sichtbar als Lücke, nicht ausgelassen.
       ['?500', '×1'],
     ]);
+    // Die Bereiche stehen auch als Feld da — daraus wählt der Bildschirm die
+    // Symbolkachel, und eine Kennung außerhalb aller Bereiche bekommt keine.
+    expect(vm.rows.slice(0, 6).map((r) => r.iconCategory)).toEqual([
+      'item',
+      'item',
+      'weapon',
+      'armor',
+      'accessory',
+      undefined,
+    ]);
+    // Die vier unbelegten Plätze bleiben sichtbar leer und anspringbar.
+    expect(vm.rows.slice(6).every((r) => r.empty === true)).toBe(true);
+    expect(vm.selectable).toHaveLength(10);
+    expect(vm.rows.map((r) => r.slot)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it('legt die 320 Inventarplätze mit ihren Lücken zurück, statt sie zu verdichten', () => {
+    const d = menuData({ ...BASIS, inventory: [{ itemId: 0, count: 1 }, { itemId: 1, count: 2 }] });
+    const plaetze = inventorySlots(d);
+    expect(plaetze).toHaveLength(INVENTORY_SLOT_COUNT);
+    expect(plaetze[0]).toMatchObject({ itemId: 0, count: 1 });
+    expect(plaetze[1]).toMatchObject({ itemId: 1, count: 2 });
+    expect(plaetze.filter((p) => p !== null)).toHaveLength(2);
+  });
+
+  it('graut nur, was die Recordtabelle als im Menü gesperrt ausweist — und sagt es, wenn sie fehlt', () => {
+    const ohne = buildItemsView(menuData());
+    expect(ohne.rows.every((r) => r.usable === undefined)).toBe(true);
+    expect(ohne.notes?.some((n) => n.includes('Recordtabelle'))).toBe(true);
+
+    const mit = buildItemsView({ ...menuData(), itemUsableInMenu: (id) => id !== 1 });
+    expect(mit.rows[0]!.usable).toBe(true);
+    expect(mit.rows[1]!.usable).toBe(false);
+    expect(mit.notes?.some((n) => n.includes('Recordtabelle'))).toBe(false);
   });
 
   it('Übersicht formatiert Gil und Spielzeit umgebungsunabhängig', () => {
@@ -395,17 +435,64 @@ describe('S21 Menü-Bedienung', () => {
     expect(s.viewModel()!.title).toBe('Status — Tifa');
   });
 
-  it('blättert innerhalb der Gegenstandsliste, bevor es die Ansicht wechselt', () => {
+  it('läuft mit einem Fenster von zehn Zeilen über alle 320 Plätze, statt zu blättern', () => {
     const viele = Array.from({ length: 25 }, (_, i) => ({ itemId: i, count: 1 }));
     const s = new MenuSession(menuData({ ...BASIS, inventory: viele }));
     s.open('items');
-    expect(s.viewModel()!.title).toBe('Gegenstände (1/3)');
+    expect(s.state.item.submode).toBe(1); // Original startet in der Liste
+    expect(s.state.item.scroll).toBe(0);
+
+    // Neunmal abwärts: der Zeiger läuft bis zur letzten Fensterzeile, ohne zu scrollen.
+    for (let i = 0; i < 9; i++) tap(s, { down: true });
+    expect(s.state.item.row).toBe(9);
+    expect(s.state.item.scroll).toBe(0);
+    // Erst der zehnte Druck schiebt das Fenster weiter — der Zeiger bleibt stehen.
+    tap(s, { down: true });
+    expect(s.state.item.row).toBe(9);
+    expect(s.state.item.scroll).toBe(1);
+    expect(s.viewModel()!.rows[0]!.slot).toBe(1);
+
+    // Seitensprung (im Original L1/R1) verschiebt nur die Oberkante.
     tap(s, { right: true });
-    expect(s.viewModel()!.title).toBe('Gegenstände (2/3)');
+    expect(s.state.item.scroll).toBe(11);
+    expect(s.state.item.row).toBe(9);
+
+    // Am Listenende wird geklemmt, nicht umgelaufen.
+    for (let i = 0; i < 40; i++) tap(s, { right: true });
+    expect(s.state.item.scroll).toBe(MAX_ITEM_SCROLL);
+    expect(s.viewModel()!.rows[9]!.slot).toBe(INVENTORY_SLOT_COUNT - 1);
+    // Und die Ansicht bleibt dabei die Gegenstandsliste.
+    expect(s.state.view).toBe('items');
+  });
+
+  it('führt Abbrechen zweistufig aus der Liste heraus — erst in die Reiterzeile, dann hinaus', () => {
+    const s = new MenuSession(menuData());
+    s.open('items');
+    tap(s, { cancel: true });
+    expect(s.state.item.submode).toBe(0);
+    expect(s.state.open).toBe(true);
+    tap(s, { cancel: true });
+    expect(s.state.open).toBe(false);
+  });
+
+  it('wechselt in der Reiterzeile den Reiter und öffnet den zugehörigen Untermodus', () => {
+    const s = new MenuSession(menuData());
+    s.open('items');
+    tap(s, { cancel: true }); // in die Reiterzeile
+    expect(s.state.item.tab).toBe(0);
     tap(s, { right: true });
+    expect(s.state.item.tab).toBe(1); // Sortieren
+    tap(s, { confirm: true });
+    expect(s.state.item.submode).toBe(4); // Aufklappfenster
+    tap(s, { cancel: true });
     tap(s, { right: true });
-    // Letzte Seite erreicht: der nächste Schritt wechselt die Ansicht.
-    expect(s.state.view).not.toBe('items');
+    expect(s.state.item.tab).toBe(2); // Schlüssel
+    tap(s, { confirm: true });
+    expect(s.state.item.submode).toBe(3);
+    // Umlauf: der Reitercursor des Originals läuft um.
+    tap(s, { cancel: true });
+    tap(s, { right: true });
+    expect(s.state.item.tab).toBe(0);
   });
 
   it('schließt über Abbrechen', () => {

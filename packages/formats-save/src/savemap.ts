@@ -255,6 +255,26 @@ export const PARTY_MATERIA_OFFSET = 0x077c;
 export const PARTY_MATERIA_ENTRIES = 200;
 
 /**
+ * Schlüsselgegenstände — eine **Bitmaske**, kein Inventar.
+ *
+ * 🟢 **Beleg (eigene EXE-Analyse, ADR-028).** Der Item-Bildschirm baut seine
+ * Schlüsselliste in `0x00714FA3` auf: eine Schleife über die Bits 0…63 des
+ * Bytefeldes bei `0x00DC091C`, die jede gesetzte Kennung verdichtet ablegt und
+ * den Rest mit 0xFF auffüllt. Die Savemap-Basis dieses Builds ist
+ * `0x00DBFD38` — belegt daran, dass `0x00DC0234` (das Inventar) genau auf
+ * unseren bereits gemessenen {@link INVENTORY_OFFSET} 0x04FC fällt. Damit
+ * liegt die Maske bei 0x0BE4.
+ *
+ * 🟢 **Kontrollniveau.** 64 Bits gegen die Namensliste der Schlüsselgegenstände
+ * im `KERNEL.BIN`, die **ebenfalls 64** Einträge trägt (`KERNEL_LIST_LENGTHS`
+ * in `@webmidgar/formats-kernel`, dort unabhängig am Bestand gemessen). Zwei
+ * getrennt erhobene Quellen, dieselbe Zahl — bei einer geratenen Lage wäre das
+ * ein Zufall unter vielen möglichen Feldlängen.
+ */
+export const KEY_ITEMS_OFFSET = 0x0be4;
+export const KEY_ITEM_COUNT = 64;
+
+/**
  * Menüsteuerung und Einstellungen. 🟡 Sämtlich unbelegt in dem Sinn, dass die
  * Bitbedeutungen nicht gemessen sind; gelesen werden sie **roh**, damit die
  * Konfigurationsansicht zeigen kann, was dasteht, statt es zu erfinden.
@@ -415,6 +435,12 @@ export interface Savemap {
   /** Drei Plätze; `null` steht für einen unbesetzten Platz (Sentinel 0xFF). */
   party: Array<number | null>;
   inventory: InventoryEntry[];
+  /**
+   * 🟢 Kennungen der besessenen Schlüsselgegenstände, aufsteigend. Siehe
+   * {@link KEY_ITEMS_OFFSET} — sie stehen als Bitmaske im Stand, nicht als
+   * Inventarplätze, und haben deshalb weder Menge noch Reihenfolgewahl.
+   */
+  keyItems: number[];
   /** Materiavorrat der Gruppe (nicht ausgerüstet). 🟡 Lage nicht abgegrenzt. */
   partyMateria: MateriaSlot[];
   gil: number;
@@ -580,6 +606,24 @@ export function readInventory(slot: Uint8Array): InventoryEntry[] {
  * Seiteneffekt: S21 ist ausdrücklich eine Anzeigesession, es gibt keinen
  * Schreibpfad in die Savemap.
  */
+/**
+ * Die besessenen Schlüsselgegenstände als **aufsteigende Kennungsliste**.
+ *
+ * Das Original verdichtet an derselben Stelle ebenso (`0x00714FA3` schreibt die
+ * gesetzten Bits lückenlos hintereinander) — die Reihenfolge der Liste ist also
+ * die Reihenfolge, in der die Schlüsselansicht sie zeigt, und keine Erfindung
+ * dieses Lesers.
+ */
+export function readKeyItems(slot: Uint8Array): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < KEY_ITEM_COUNT; i++) {
+    const byte = slot[KEY_ITEMS_OFFSET + (i >> 3)];
+    if (byte === undefined) break;
+    if (((byte >> (i & 7)) & 1) === 1) out.push(i);
+  }
+  return out;
+}
+
 export function readSavemap(slot: Uint8Array): Savemap | null {
   if (slot.length < SAVEMAP_SLOT_LEN) return null;
   const view = new DataView(slot.buffer, slot.byteOffset, slot.byteLength);
@@ -623,6 +667,7 @@ export function readSavemap(slot: Uint8Array): Savemap | null {
     characters,
     party,
     inventory: readInventory(slot),
+    keyItems: readKeyItems(slot),
     partyMateria: readPartyMateria(slot),
     gil,
     playtimeSeconds,

@@ -31,6 +31,8 @@ const LOCATION_AT = 0x0f0c;
 const LOCATION_LEN = 24;
 const PARTY_MATERIA_AT = 0x077c;
 const PARTY_MATERIA_ENTRIES = 200;
+const KEY_ITEMS_AT = 0x0be4;
+const KEY_ITEM_COUNT = 64;
 const MENU_VISIBLE_AT = 0x0bc0;
 const MENU_LOCKED_AT = 0x0bc2;
 const PHS_ALLOWED_AT = 0x10a4;
@@ -77,7 +79,12 @@ export interface FixtureSavemap {
   characters: readonly FixtureCharacter[];
   /** Bis zu drei Figurenkennungen; `null` lässt den Platz frei. */
   party: ReadonlyArray<number | null>;
-  inventory: ReadonlyArray<{ itemId: number; count: number }>;
+  /**
+   * Inventarplätze in ihrer Reihenfolge. `null` lässt einen Platz **leer** —
+   * das Original verdichtet nicht, sondern hinterlässt Lücken, und ein
+   * Fixture ohne Lücken könnte den Fall gar nicht prüfen.
+   */
+  inventory: ReadonlyArray<{ itemId: number; count: number } | null>;
   gil: number;
   playtimeSeconds: number;
   /**
@@ -94,6 +101,8 @@ export interface FixtureSavemap {
   previewLocation?: string | undefined;
   /** Materiavorrat der Gruppe. */
   partyMateria?: ReadonlyArray<{ id: number; ap: number }> | undefined;
+  /** Kennungen der besessenen Schlüsselgegenstände (0…63), als Bitmaske abgelegt. */
+  keyItems?: readonly number[] | undefined;
   menuVisible?: number | undefined;
   menuLocked?: number | undefined;
   phsAllowed?: number | undefined;
@@ -186,6 +195,11 @@ export function composeSavemapSlot(spec: FixtureSavemap): Uint8Array {
     slot[at + 1] = ap & 0xff;
     slot[at + 2] = (ap >> 8) & 0xff;
     slot[at + 3] = (ap >> 16) & 0xff;
+  }
+
+  for (const id of spec.keyItems ?? []) {
+    if (id < 0 || id >= KEY_ITEM_COUNT) continue;
+    slot[KEY_ITEMS_AT + (id >> 3)] = (slot[KEY_ITEMS_AT + (id >> 3)] ?? 0) | (1 << (id & 7));
   }
 
   view.setUint16(MENU_VISIBLE_AT, (spec.menuVisible ?? 0xffff) & 0xffff, true);

@@ -97,6 +97,15 @@ export type HudBoxKind =
   | 'floater'
   | 'badge'
   | 'portrait'
+  /**
+   * Spur und Daumen einer Bildlaufleiste. Bewusst **nicht** `barFrame`
+   * zweckentfremdet: Der bringt die dreilagige Bordüre der Wertebalken mit,
+   * die eine Bildlaufleiste im Original nicht hat.
+   */
+  | 'scrollTrack'
+  | 'scrollThumb'
+  /** Platz eines Symbols, dessen Grafik im Baum nicht vorliegt. */
+  | 'icon'
   | 'diagnostic';
 
 export interface HudBox {
@@ -110,6 +119,12 @@ export interface HudBox {
   /** Für `barFill`: der Verlauf; für `badge`: die Füllfarbe. */
   background?: string;
   opacity?: number;
+  /**
+   * Palettenzeile des Fontblatts. Das Original schaltet Textfarben über die
+   * Palette, nicht über einen RGB-Wert; wer aus der Spielschrift zeichnet,
+   * wechselt damit das Blatt statt die Farbe.
+   */
+  palette?: number;
 }
 
 /** 🟡 Vier Kommandozeilen — so viele zeigt das Original im Grundzustand. */

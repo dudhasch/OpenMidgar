@@ -1113,3 +1113,137 @@ das Bild nicht zur Deckung bringen würde.
 | `kampfkamera-tafel.rdtest.ts` | FOV-Tafel + Radialitäts-Invariante |
 | `battle-sheet.ts` (neu) | gemeinsame Renderkette der Kampf-Bildproben, ausgelagert aus `battle-vollbild` |
 
+
+---
+
+## F24-C — Der Gegenstands-Bildschirm ist vermessen (2026-08-16)
+
+F24-B endete mit einem ausdrücklichen Eingeständnis: „**Die Hauptmenü-Aufteilung
+ist NICHT belegt** — unter den 18 Referenzbildern ist keine Menüaufnahme." Das
+galt für das Menü als Ganzes und damit auch für den Gegenstands-Bildschirm.
+
+**Für diesen einen Bildschirm gilt es nicht mehr.** Seine Geometrie steht als
+Datentabelle und als unmittelbare Operanden im PC-Abbild `ff7_en.exe` und ist
+dort ablesbar (ADR-028 gibt die eigene Codeanalyse frei). Gelesen wurde am
+laufenden GhidraMCP-Bestand, nicht aus einem Dossier-Fließtext.
+
+### Was gemessen ist
+
+`Menu_ItemScreenInit` (`0x00714EF2`) hängt einen Zeiger auf eine Tabelle von
+vier `int16 x,y,w,h`; für 640×480 ist das `0x00921C78`. Alles Weitere sind
+Operanden der Zeichenschleifen in `Menu_ItemScreenFrame` (`0x00715105`).
+
+| Fenster | Rechteck | Fundstelle |
+|---|---|---|
+| Reiterzeile (bildschirmbreit) | `(0, 0, 640, 51)` | Tabelle +0x00 |
+| Beschreibungszeile | `(0, 51, 640, 51)` | Tabelle +0x08 |
+| Großes Listenfenster (bildschirmbreit) | `(0, 94, 640, 386)` | Tabelle +0x10 |
+| Sortier-Aufklappfenster | `(220, 26, 145, 227)` | Tabelle +0x18, nur Untermodus 4 |
+| Figurenspalte | `(0, 96, 300, 384)` | `0x007155E7`, per `SetRectShorts` gebaut |
+| Titelfenster „Gegenstand" | `(476, 0, 164, 51)` | `Menu_DrawCommandWindow2x`, `0x0071511E` |
+
+Die Zeile: Zeilenraster **37 px** (`IMUL …,0x25` an vier Stellen), Typsymbol bei
+x=343 (32×32), Name bei x=373, Trennzeichen **fest** bei x=548, Mengenfeld
+dreistellig ab x=550 mit 12 px Stellenabstand, Zeiger bei x=298 (48×26).
+Bildlaufleiste `(618, 102, 17, 372)`, sichtbar 10 von 320 Zeilen.
+
+Die Reiter sind drei — `Use`, `Arrange`, `Key Items` (`0x00921168`, Schrittweite
+0xC) —, das Aufklappfenster hat acht Zeilen (Indizes 3…10 derselben Tabelle).
+
+### Zwei Gegenproben, die aufgehen
+
+1. **Beschnitt gegen Zeilenraster.** Der Bildlaufdeskriptor (`0x0071570E`) und
+   das Schnittrechteck (`0x00715654`) stammen aus verschiedenen Stellen. Zehn
+   Zeilen zu 37 px sind 370 px und passen genau in die 372 px des Beschnitts;
+   elf Zeilen täten es nicht.
+2. **Gesamtzeilen gegen den Spielstandsleser.** Die 320 aus dem Deskriptor sind
+   zeichengleich mit `INVENTORY_ENTRIES` in `@webmidgar/formats-save`, das
+   unabhängig davon an Spielständen gemessen wurde.
+
+Dazu eine dritte, die eine ältere Messung stützt: Die Graufärbung hängt an
+`farbe = (beschraenkung & 4) ? 0 : 7` (`0x007157F5`). Dasselbe Bit dekodiert
+`@webmidgar/formats-kernel` seit S13 als `canBeUsedInMenu` (`RESTRICTION_MENU
+= 4`, bitinvertiert gelesen). Zwei getrennt erhobene Lesungen derselben Stelle,
+die sich decken — und die Farbindizes 0/5/6/7 des Originals treffen ohne
+Umrechnung auf die an `WINDOW.BIN` vermessenen Palettenzeilen (Index 0 =
+`#6A6A6A` = `106,106,106`).
+
+### Was die Online-Recherche beigetragen hat — und wo sie irrte
+
+Aus Original-Aufnahmen (Fandom-Wiki, gameuidatabase) wurde unabhängig gemessen.
+**Sie hat einen echten Fund geliefert**, den die Abbildlesung übersah: das
+Titelfenster oben rechts. Es steht in keiner der vier Rechtecke, sondern wird
+von `Menu_DrawCommandWindow2x` gezeichnet — dem eingeklappten Kommandofenster
+des Hauptmenüs, das jeder Unterbildschirm mitzeichnet.
+
+**Sie irrte in allen Absolutwerten.** Die Vorlagenbilder sind vertikal gestaucht
+(y_gemessen ≈ 0,056 + 0,883 · y_wahr), woraus ein Zeilenraster von 32 statt 37
+und ein Popup-Raster von 24 statt 26 folgte. Ebenso irrte sie in zwei
+Fensterkanten: Was bei x≈486 und x≈293 wie eine geteilte Rahmenkante aussieht,
+ist die Bordkante des davorliegenden Titel- bzw. Figurenfensters — Reiterzeile
+und Listenfenster laufen dahinter durch und sind bildschirmbreit.
+
+⚠️ **Nicht skalieren.** Es gibt eine zweite Fassung für 320×240 (`0x00921C98`).
+Ihre Rechtecke sind die aufgerundeten Hälften, ihre Zeichenkonstanten aber
+nicht: 37 gegen 19, 36 gegen 18, 373 gegen 186.
+
+### Was sich im Baum geändert hat
+
+- `packages/menu/src/item-layout.ts` — die Geometrie als Daten, jede Zahl mit
+  ihrer Fundstelle.
+- `packages/menu/src/item-screen.ts` — `buildItemScreen`; sechs Fenster,
+  absolute Anker, eigenes Zeilenraster. `buildViewScreen` bleibt für die
+  übrigen Ansichten unverändert.
+- **Seiten sind durch Bildlauf ersetzt.** `buildItemsView(data, scrollTop)`
+  liefert ein Fenster von zehn Plätzen über alle 320 — mit ihren **Lücken**.
+  Dass es Lücken gibt, ist gemessen: `SavemapRemoveItem` (`0x006CBE5F`) schreibt
+  beim Aufbrauchen `0xFFFF` an Ort und Stelle und schiebt nichts nach. Genau
+  deshalb hat das Original überhaupt einen Sortierbefehl.
+- **Schlüsselgegenstände** sind neu: Bitmaske bei Savemap `+0x0BE4`, 64 Bits
+  (`0x00714FA3`) gegen die 64 Einträge der Kernel-Namensliste als Kontrollmaß.
+- Farbwechsel gehen über **Palettenblätter** statt über eine Tönung — der
+  Zeichenkontext hält je gebrauchter Palettenzeile ein Blatt.
+
+### Was offen bleibt (🔴 und 🟡, ausdrücklich)
+
+- 🔴 **Die Typsymbole.** Ihre Kacheln liegen in `menu_us.lgp`, das der Baum
+  nicht lädt. Ihr Platz wird reserviert und bleibt sichtbar leer; ein gemalter
+  Ersatz wäre eine stille Erfindung.
+- 🔴 **Die Figurenporträts**, aus demselben Grund.
+- 🔴 **Drei Untermodi des Originals fehlen**, weil sie schreiben: Gegenstand
+  benutzen (2), Sortieren (4 bestätigt) und Plätze von Hand tauschen (5). Das
+  Aufklappfenster zeigt seine acht Zeilen, führt sie aber nicht aus, und die
+  Ansicht sagt es.
+- 🟡 **Die Daumenformel der Bildlaufleiste** stammt aus dem Fließtext des
+  eigenen Decomp-Bestands, nicht aus einer selbst gelesenen Rechenstelle.
+- 🟡 **Die Bordüre.** Das Original setzt 8-px-Eckkacheln und rückt die Füllung
+  6 px ein; unsere Schale hat eine an Referenzbildern vermessene 5-px-Bordüre.
+  Kein Widerspruch (von der Kachel ist ein Teil durchsichtig), aber der
+  Bildschirm rechnet deshalb **absolut** und benutzt weder `contentRect` noch
+  `lineHeight` der Schale.
+- 🟡 **Die Spur unter den HP-/MP-Balken** ist an Aufnahmen sichtbar, ihr Ton
+  aber geschätzt — `0x006F638C` ist nicht gelesen.
+- ⚠️ **Die feste Trennzeichenspalte trifft auf deutsche Namen.** x=548 ist für
+  englische Namen bemessen. Die Spalte bleibt, wo sie im Original steht; ein
+  Überlauf wird über `notes` gemeldet statt durch Verschieben verdeckt.
+- ⚠️ **Ein Nebenbefund, der nicht hierher gehört, aber hier auffiel:** Die
+  Beschreibungen der Schlüsselgegenstände kommen teils verstümmelt an („Dilk"
+  statt „Dress made of silk"). Der Kernel-Textdekoder führt `0xF8`/`0xF9` als
+  einbytige Steuersequenzen — eine ausdrücklich als 🟡 markierte Hypothese
+  (`packages/formats-kernel/src/text.ts`). Das Muster passt zu einem
+  Rückverweis auf früheren Text. Das betrifft **alle** Kernel-Beschreibungen,
+  nicht nur dieses Menü, und ist eine eigene Messung.
+
+### Abnahme
+
+`packages/menu/src/menu-item-screen.test.ts` prüft die Geometrie gegen die
+gemessenen Zahlen — ausdrücklich auch die **letzte** Fensterzeile (ein falsches
+Zeilenraster fällt erst dort auf) und die Unabhängigkeit der Trennzeichenspalte
+von der Namenslänge. Ein Pixelvergleich steht weiterhin nicht zur Verfügung:
+`apps/demo/.shots/ref/` enthält keine Menüaufnahme.
+
+Live gegengeprüft an der Installation des Nutzers (`gameDebug.menueAnsicht`,
+neuer Haken `gameDebug.menueTaste`): Fenster auf ihren Rechtecken, Zeiger bei
+(298, 109), Symbolplatz bei (343, 105), Trennzeichen bei 548, Ziffern bei
+562/574, Bildlaufleiste (618, 102, 17, 372) mit 12 px Daumen, am Listenende bei
+y = 462.
