@@ -17,11 +17,16 @@ import {
 } from '@webmidgar/formats-field';
 import {
   indexKernelSections,
+  INVENTORY_RANGES,
   inventoryDescriptionLookup,
   inventoryNameLookup,
   listNameLookup,
   parseKernelContainer,
+  readAccessoryRecords,
+  readArmorRecords,
+  readItemRecords,
   readMateriaRecords,
+  readWeaponRecords,
   resolveKernelDataSections,
   resolveKernelNameLists,
   parseWindowBin,
@@ -118,6 +123,16 @@ export interface GameData {
    * Bereichskodierung wie `itemName` — beide kommen aus derselben Auflösung.
    */
   itemDescription: InventoryNameLookup;
+  /** Namen der Schlüsselgegenstände (Kennung = Listenindex, 64 Einträge). */
+  keyItemName: InventoryNameLookup;
+  /** Beschreibungen der Schlüsselgegenstände. */
+  keyItemDescription: InventoryNameLookup;
+  /**
+   * Ist die Inventarkennung im Menü benutzbar? `null` = nicht entscheidbar.
+   * Speist die Graufärbung des Gegenstands-Bildschirms; ohne Recordtabellen
+   * bleibt sie durchgehend `null` und es wird nichts gegraut.
+   */
+  itemUsableInMenu: (id: number) => boolean | null;
   /** Materianamen (Kennung = Listenindex). */
   materiaName: InventoryNameLookup;
   /** Zaubernamen (Kennung = Listenindex). */
@@ -255,6 +270,9 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
   // F18: Die Rollenbestimmung löst alle vier Bereiche auf, nicht eine Liste.
   let itemName: InventoryNameLookup = () => null;
   let itemDescription: InventoryNameLookup = () => null;
+  let keyItemName: InventoryNameLookup = () => null;
+  let keyItemDescription: InventoryNameLookup = () => null;
+  let itemUsableInMenu: (id: number) => boolean | null = () => null;
   let materiaName: InventoryNameLookup = () => null;
   let magicName: InventoryNameLookup = () => null;
   let materiaRecords: readonly MateriaRecord[] = [];
@@ -270,12 +288,45 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
       // F24-B: Beschreibungen und die beiden Zusatzlisten kommen aus DERSELBEN
       // Auflösung — eine zweite Zuordnungslogik wäre genau der Fehler von F18.
       itemDescription = inventoryDescriptionLookup(listen);
+      keyItemName = listNameLookup(listen.keyItems);
+      keyItemDescription = listNameLookup(listen.descriptions.keyItems);
       materiaName = listNameLookup(listen.materia);
       magicName = listNameLookup(listen.magic);
       try {
-        materiaRecords = readMateriaRecords(container, resolveKernelDataSections(container));
+        const sektionen = resolveKernelDataSections(container);
+        materiaRecords = readMateriaRecords(container, sektionen);
+        /**
+         * Die Graufärbung des Gegenstands-Bildschirms hängt an **einem** Bit,
+         * und es steht in vier verschiedenen Recordtabellen — je eine pro
+         * Bereich der Inventarkennung. Deshalb werden hier alle vier gelesen
+         * und über dieselbe Bereichsaufteilung zusammengeführt, die schon die
+         * Namen auflöst (F18). Eine einzige Tabelle hätte für alles ab
+         * Kennung 128 stumm gelogen.
+         */
+        const nutzbar = [
+          readItemRecords(container, sektionen).map((r) => r.restrictions.canBeUsedInMenu),
+          readWeaponRecords(container, sektionen).map((r) => r.restrictions.canBeUsedInMenu),
+          readArmorRecords(container, sektionen).map((r) => r.restrictions.canBeUsedInMenu),
+          readAccessoryRecords(container, sektionen).map((r) => r.restrictions.canBeUsedInMenu),
+        ] as const;
+        itemUsableInMenu = (id: number): boolean | null => {
+          const [bereich, index] =
+            id <= INVENTORY_RANGES.itemMax
+              ? [0, id]
+              : id < INVENTORY_RANGES.armorBase
+                ? [1, id - INVENTORY_RANGES.weaponBase]
+                : id < INVENTORY_RANGES.accessoryBase
+                  ? [2, id - INVENTORY_RANGES.armorBase]
+                  : id <= INVENTORY_RANGES.max
+                    ? [3, id - INVENTORY_RANGES.accessoryBase]
+                    : [-1, -1];
+          if (bereich < 0) return null;
+          return nutzbar[bereich]![index] ?? null;
+        };
       } catch {
-        materiaRecords = []; // Datensektionen nicht auflösbar ⇒ Materiaansicht sagt es selbst
+        // Datensektionen nicht auflösbar ⇒ die Ansichten sagen es selbst
+        materiaRecords = [];
+        itemUsableInMenu = () => null;
       }
       // Der Grund MUSS sichtbar sein: eine stillschweigend leere Zuordnung hat
       // F18 so lange verdeckt (das Menü zeigte einfach Zaubernamen).
@@ -476,6 +527,9 @@ export async function bootGameData(status: (msg: string) => void): Promise<GameD
     musicNames,
     itemName,
     itemDescription,
+    keyItemName,
+    keyItemDescription,
+    itemUsableInMenu,
     materiaName,
     magicName,
     materiaRecords,

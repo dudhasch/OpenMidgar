@@ -1,5 +1,11 @@
-import type { CharacterRecord, Savemap } from '@webmidgar/formats-save';
-import type { FfSpacing, InventoryNameLookup, MateriaRecord } from '@webmidgar/formats-kernel';
+import { INVENTORY_ENTRIES, type CharacterRecord, type InventoryEntry, type Savemap } from '@webmidgar/formats-save';
+import {
+  inventoryCategory,
+  type FfSpacing,
+  type InventoryCategory,
+  type InventoryNameLookup,
+  type MateriaRecord,
+} from '@webmidgar/formats-kernel';
 import { barFill, formatDuration, formatNumber, formatRatio } from './format.js';
 
 /**
@@ -52,6 +58,27 @@ export interface MenuData {
    * Gegenstandsansicht keine Beschreibung — statt einer erfundenen.
    */
   itemDescription?: InventoryNameLookup | undefined;
+  /**
+   * Namen der Schlüsselgegenstände (64 Einträge, Kennung = Index) — im
+   * `KERNEL.BIN` eine **eigene** Liste, nicht Teil des Inventarbereichs.
+   */
+  keyItemName?: InventoryNameLookup | undefined;
+  /** Beschreibungen der Schlüsselgegenstände. */
+  keyItemDescription?: InventoryNameLookup | undefined;
+  /**
+   * Ist die Inventarkennung **im Menü** benutzbar? `null` heißt „nicht
+   * entscheidbar" (keine Recordtabelle geladen) — und dann wird auch nichts
+   * ausgegraut, statt eine Vermutung zu zeichnen.
+   *
+   * 🟢 **Warum das genau die richtige Frage ist.** Der Item-Bildschirm färbt
+   * eine Zeile grau, wenn Bit 2 der Nutzungsbeschränkung gesetzt ist
+   * (`0x007157F5`…`0x00715801`: `farbe = (b & 4) ? 0 : 7`). Dasselbe Bit
+   * dekodiert `@webmidgar/formats-kernel` seit S13 als `canBeUsedInMenu` —
+   * dort bitinvertiert gelesen (`RESTRICTION_MENU = 4`), also gesetztes
+   * Rohbit ⇔ `canBeUsedInMenu === false`. Zwei unabhängig erhobene Lesungen
+   * derselben Stelle, die sich decken.
+   */
+  itemUsableInMenu?: ((id: number) => boolean | null) | undefined;
   /** Materianamen (96 Einträge, Kennung = Index). */
   materiaName?: InventoryNameLookup | undefined;
   /** Zaubernamen (256 Einträge, Kennung = Index). */
@@ -72,6 +99,8 @@ export type MenuViewId =
   | 'status'
   | 'party'
   | 'items'
+  /** Schlüsselgegenstände — der dritte Reiter des Gegenstands-Bildschirms. */
+  | 'keyItems'
   | 'time'
   | 'equip'
   | 'materia'
@@ -100,6 +129,24 @@ export interface MenuRow {
    * Fehlt, wenn keine Beschreibung auflösbar ist — nie ein Ersatztext.
    */
   description?: string;
+
+  // --- nur die Gegenstandsliste: Felder, die der Bildschirm einzeln setzt ---
+
+  /** Inventarplatz 0…319 (auch für leere Plätze gesetzt). */
+  slot?: number;
+  /** Inventarkennung; fehlt bei einem leeren Platz. */
+  itemId?: number;
+  /** Menge als **Zahl** — der Bildschirm zerlegt sie in feste Ziffernstellen. */
+  count?: number;
+  /** Bereich der Kennung; bestimmt die Symbolkachel. */
+  iconCategory?: InventoryCategory;
+  /**
+   * `false` ⇒ die Zeile wird grau gezeichnet (Original: Farbindex 0 statt 7).
+   * Fehlt das Feld, ist die Benutzbarkeit unbekannt und es wird nicht gegraut.
+   */
+  usable?: boolean;
+  /** Der Platz ist leer — sichtbar leer, nicht ausgelassen. */
+  empty?: boolean;
 }
 
 export interface MenuViewModel {
@@ -236,44 +283,146 @@ export function buildPartyView(data: MenuData): MenuViewModel {
   return { view: 'party', title: 'Gruppe', rows, selectable };
 }
 
-export const ITEMS_PER_PAGE = 10;
+/**
+ * 🟢 Sichtbare Zeilen der Gegenstandsliste. Gemessen an zwei voneinander
+ * unabhängigen Stellen des Abbilds: `Menu_ItemScreenInit` (`0x00714EF2`) setzt
+ * den Listenzeiger auf 1 Spalte × **10** sichtbare Zeilen, und der
+ * Bildlaufdeskriptor (`0x0071570E`) trägt dieselbe 10.
+ */
+export const VISIBLE_ITEM_ROWS = 10;
+
+/** 🟢 Gesamtzahl der Inventarplätze — 320, wie `INVENTORY_ENTRIES`. */
+export const INVENTORY_SLOT_COUNT = INVENTORY_ENTRIES;
 
 /**
- * Gegenstandsliste, seitenweise. Eine Kennung ohne Namen wird als solche
- * angezeigt (`?<Kennung>`) und **nicht ausgelassen**: Eine stillschweigend
- * verkürzte Liste würde die Lücke verstecken, statt sie meldbar zu machen.
+ * Die 320 Inventarplätze **mit ihren Lücken**.
+ *
+ * 🟢 **Warum Lücken und nicht eine verdichtete Liste.** Das Original verdichtet
+ * nicht: `SavemapRemoveItem` (`0x006CBE5F`) schreibt beim Aufbrauchen `0xFFFF`
+ * an Ort und Stelle und schiebt nichts nach. Genau deshalb gibt es überhaupt
+ * einen Sortierbefehl im Menü. Ein verdichtetes Modell hätte diese Lücken
+ * versteckt — und mit ihnen den Grund für die halbe Bedienoberfläche.
+ *
+ * Der Leser in `@webmidgar/formats-save` bleibt unangetastet: Er liefert die
+ * belegten Einträge samt ihrem Originalplatz, und diese Funktion legt sie
+ * zurück an ihre Stelle. So bleibt ein rein lesender, vielfach benutzter
+ * Parser frei von einer Darstellungsfrage.
+ */
+export function inventorySlots(data: MenuData): Array<InventoryEntry | null> {
+  const plaetze: Array<InventoryEntry | null> = new Array(INVENTORY_SLOT_COUNT).fill(null);
+  for (const e of data.savemap.inventory) {
+    if (e.slot >= 0 && e.slot < INVENTORY_SLOT_COUNT) plaetze[e.slot] = e;
+  }
+  return plaetze;
+}
+
+/** Höchster zulässiger Bildlaufstand der Gegenstandsliste. */
+export const MAX_ITEM_SCROLL = INVENTORY_SLOT_COUNT - VISIBLE_ITEM_ROWS;
+
+/**
+ * Gegenstandsliste — ein **Fenster von zehn Plätzen** über die 320, nicht mehr
+ * eine Seite über die belegten Einträge.
+ *
+ * 🟢 Das ist die Bauform des Originals: Der Listenzeiger läuft über alle 320
+ * Plätze bei zehn sichtbaren Zeilen (`Menu_ItemScreenInit`, `0x00714EF2`), und
+ * die Bildlaufleiste rechts zeigt genau diesen Stand. Die vorherige
+ * Seitenaufteilung über die belegten Einträge war eine eigene Erfindung: Sie
+ * ließ leere Plätze verschwinden, wechselte die Seitenzahl bei jedem
+ * Verbrauch und hatte im Original keine Entsprechung.
+ *
+ * Eine Kennung ohne Namen wird weiterhin als solche angezeigt (`?<Kennung>`)
+ * und **nicht ausgelassen**: Eine stillschweigend verkürzte Liste würde die
+ * Lücke verstecken, statt sie meldbar zu machen.
  *
  * ✅ Realdaten nach F18/F24-A: Über die vier Spielstände der Installation
  * (79 Inventarzeilen) löst mit `inventoryNameLookup` **jede** Zeile auf —
  * 0 Platzhalter. Unter der alten einlistigen Lesung blieben 14 Platzhalter,
  * und die übrigen 65 Zeilen trugen den falschen Namen.
  */
-export function buildItemsView(data: MenuData, page = 0): MenuViewModel {
-  const entries = data.savemap.inventory;
-  const pages = Math.max(1, Math.ceil(entries.length / ITEMS_PER_PAGE));
-  const clamped = Math.max(0, Math.min(pages - 1, page));
-  const from = clamped * ITEMS_PER_PAGE;
+export function buildItemsView(data: MenuData, scrollTop = 0): MenuViewModel {
+  const plaetze = inventorySlots(data);
+  const oben = Math.max(0, Math.min(MAX_ITEM_SCROLL, Math.trunc(scrollTop)));
   const rows: MenuRow[] = [];
   const selectable: number[] = [];
-  for (const e of entries.slice(from, from + ITEMS_PER_PAGE)) {
-    selectable.push(rows.length);
+  let unbekannteBenutzbarkeit = false;
+
+  for (let i = 0; i < VISIBLE_ITEM_ROWS; i++) {
+    const platz = oben + i;
+    const e = plaetze[platz] ?? null;
+    if (!e) {
+      // Ein leerer Platz bleibt eine Zeile — er ist anspringbar, denn das
+      // Original lässt den Zeiger über ihn laufen (der Listenzeiger kennt nur
+      // 320 Zeilen, keine Belegung).
+      selectable.push(rows.length);
+      rows.push({ key: `i${platz}`, label: '', value: '', slot: platz, empty: true });
+      continue;
+    }
     // F24-B Teil 4: Die Beschreibung wurde bisher weggeworfen. Fehlt sie,
     // bleibt das Feld weg — ein Ersatztext wäre eine Erfindung.
     const beschreibung = data.itemDescription?.(e.itemId) ?? null;
+    const bereich = inventoryCategory(e.itemId);
+    const benutzbar = data.itemUsableInMenu?.(e.itemId) ?? null;
+    if (benutzbar === null) unbekannteBenutzbarkeit = true;
+    selectable.push(rows.length);
     rows.push({
-      key: `i${e.slot}`,
+      key: `i${platz}`,
       label: data.itemName(e.itemId) ?? `?${e.itemId}`,
       value: `×${formatNumber(e.count)}`,
+      slot: platz,
+      itemId: e.itemId,
+      count: e.count,
+      ...(bereich ? { iconCategory: bereich.category } : {}),
+      ...(benutzbar === null ? {} : { usable: benutzbar }),
       ...(beschreibung ? { description: beschreibung } : {}),
     });
   }
-  if (rows.length === 0) rows.push({ key: 'leer', label: '', value: 'Keine Gegenstände', static: true });
-  const notes = data.itemDescription ? [] : ['Keine Beschreibungsliste geladen — Gegenstandstexte fehlen'];
-  return { view: 'items', title: `Gegenstände (${clamped + 1}/${pages})`, rows, selectable, notes };
+
+  const notes: string[] = [];
+  if (!data.itemDescription) notes.push('Keine Beschreibungsliste geladen — Gegenstandstexte fehlen');
+  if (unbekannteBenutzbarkeit) {
+    notes.push(
+      'Keine Gegenstands-Recordtabelle geladen — nichts wird ausgegraut; das Original graut, was im Menü gesperrt ist',
+    );
+  }
+  return { view: 'items', title: 'Gegenstände', rows, selectable, notes };
 }
 
-export function itemPageCount(data: MenuData): number {
-  return Math.max(1, Math.ceil(data.savemap.inventory.length / ITEMS_PER_PAGE));
+/**
+ * Schlüsselgegenstände: zwei Spalten, zeilenweise gefüllt, ohne Menge.
+ *
+ * 🟢 Die Füllrichtung ist gelesen, nicht gewählt: Die Zeichenschleife
+ * (`0x007159FD`…`0x00715A2B`) und der Zeigerindex (`0x007153CC`) rechnen beide
+ * `Index = Spalte + 2·(Oberkante + Zeile)` — also links, rechts, nächste Zeile.
+ * Diese Ansicht ist im Original **reine Anzeige**: ihr Untermodus hat keinen
+ * Bestätigen-Zweig (`0x007173AE` liest ausschließlich Abbrechen).
+ */
+export function buildKeyItemsView(data: MenuData, scrollTop = 0): MenuViewModel {
+  const besessen = data.savemap.keyItems;
+  const zeilen = Math.ceil(besessen.length / 2);
+  const oben = Math.max(0, Math.min(Math.max(0, zeilen - VISIBLE_ITEM_ROWS), Math.trunc(scrollTop)));
+  const rows: MenuRow[] = [];
+  const selectable: number[] = [];
+  for (let i = 0; i < VISIBLE_ITEM_ROWS * 2; i++) {
+    const index = oben * 2 + i;
+    const id = besessen[index];
+    if (id === undefined) {
+      rows.push({ key: `k${index}`, label: '', value: '', slot: index, empty: true, static: true });
+      continue;
+    }
+    const beschreibung = data.keyItemDescription?.(id) ?? null;
+    selectable.push(rows.length);
+    rows.push({
+      key: `k${index}`,
+      label: data.keyItemName?.(id) ?? `?${id}`,
+      value: '',
+      slot: index,
+      itemId: id,
+      ...(beschreibung ? { description: beschreibung } : {}),
+    });
+  }
+  const notes: string[] = [];
+  if (!data.keyItemName) notes.push('Keine Schlüsselgegenstands-Namensliste geladen — Kennungen statt Namen');
+  return { view: 'keyItems', title: 'Schlüsselgegenstände', rows, selectable, notes };
 }
 
 /** Gil, Spielzeit und Ort — die Kopfzeile des Originalmenüs als eigene Ansicht. */

@@ -44,6 +44,18 @@ export interface FontContext {
   /** Vorschubtabelle aus `WINDOW.BIN`; null = Zellenbreite. */
   widths: Uint8Array | null;
   scale?: number;
+  /**
+   * Weitere Blätter, je Palettenzeile — `atlasUrl` ist die Vorgabezeile.
+   *
+   * 🔵 **Warum mehrere Blätter und nicht eine Einfärbung.** Das Original
+   * wechselt Textfarben über die CLUT des Blattes, nicht über eine Tönung: Ein
+   * gesperrter Gegenstand, eine cyanfarbene Beschriftung und ein knapper
+   * HP-Wert sind derselbe Glyphensatz in einer anderen Palettenzeile. Ein
+   * CSS-Filter über ein weißes Blatt träfe weder die Farbe noch den im Blatt
+   * enthaltenen Schatten. Die Blätter sind klein; sie einmal je gebrauchter
+   * Zeile zu bauen ist billiger als jede Nachbildung.
+   */
+  palettes?: Readonly<Record<number, string>>;
 }
 
 export interface GlyphPaintOptions {
@@ -52,6 +64,8 @@ export interface GlyphPaintOptions {
   /** Überschreibt den Maßstab des Kontexts. */
   scale?: number;
   skin?: WindowSkin;
+  /** Palettenzeile; ohne Angabe die Vorgabezeile des Kontexts. */
+  palette?: number;
 }
 
 const px = (n: number): string => `${n}px`;
@@ -82,6 +96,9 @@ export function paintGlyphText(
   const skin = opts.skin ?? FF7_WINDOW_SKIN;
   const scale = opts.scale ?? font.scale ?? FONT_SCALE;
   const lineHeight = opts.lineHeight ?? skin.lineHeight;
+  // Fehlt das Blatt der verlangten Zeile, wird die Vorgabezeile gezeichnet —
+  // sichtbar in falscher Farbe statt gar nicht.
+  const atlasUrl = (opts.palette === undefined ? undefined : font.palettes?.[opts.palette]) ?? font.atlasUrl;
 
   // Der im Blatt enthaltene Schatten ersetzt den CSS-Schatten; sonst doppelt.
   el.style.setProperty('text-shadow', 'none');
@@ -125,7 +142,7 @@ export function paintGlyphText(
         const ds = (span as unknown as { dataset?: Record<string, string> }).dataset;
         if (ds) ds['fehlend'] = g.ch;
       } else {
-        s.setProperty('background-image', `url(${font.atlasUrl})`);
+        s.setProperty('background-image', `url(${atlasUrl})`);
         s.setProperty(
           'background-size',
           `${px(font.atlasWidth * scale)} ${px(font.atlasHeight * scale)}`,

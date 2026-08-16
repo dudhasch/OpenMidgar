@@ -89,8 +89,19 @@ export function paintBoxes(
         s.setProperty('background', box.background ?? '#fff');
         break;
       case 'portrait':
-        s.setProperty('background', box.background ?? 'rgba(0,0,0,0.35)');
-        s.setProperty('border', '1px solid rgba(255,255,255,0.25)');
+      case 'icon':
+        // Reservierter Platz, keine Grafik: Die Kacheln und Porträts liegen in
+        // `menu_us.lgp`, das der Baum nicht lädt. Der Kasten bleibt als leerer
+        // Umriss erkennbar — ein gemalter Ersatz wäre eine stille Erfindung.
+        s.setProperty('background', box.background ?? 'rgba(0,0,0,0.25)');
+        s.setProperty('border', '1px dashed rgba(255,255,255,0.22)');
+        break;
+      case 'scrollTrack':
+        s.setProperty('background', box.background ?? 'rgba(0,0,0,0.45)');
+        s.setProperty('border', '1px solid rgba(255,255,255,0.18)');
+        break;
+      case 'scrollThumb':
+        s.setProperty('background', box.background ?? 'rgba(198,196,197,0.9)');
         break;
       default: {
         s.setProperty('font-family', FF7_WINDOW_SKIN.fontFamily);
@@ -117,6 +128,7 @@ export function paintBoxes(
           // Einzeiler sitzen mittig im Kasten (der ist auf den Pixel gesetzt);
           // mehrzeilige Kästen nehmen die Zeilenhöhe der Schale.
           lineHeight: box.text.includes('\n') ? FF7_WINDOW_SKIN.lineHeight : box.rect.h,
+          ...(box.palette === undefined ? {} : { palette: box.palette }),
         });
       } else {
         el.textContent = box.text;

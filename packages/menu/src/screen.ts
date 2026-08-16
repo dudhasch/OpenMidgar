@@ -41,6 +41,14 @@ import { menuItemStates } from './views.js';
  * `notes`, der in der Ansicht landet.
  */
 
+/**
+ * Farbe eines Textlaufs als **Palettenzeile des Fontblatts**, nicht als
+ * CSS-Wert. Das Original schaltet Textfarben genauso: Es wählt eine CLUT, kein
+ * RGB. Die acht Zeilen sind in `@webmidgar/ui-window` als `FontPalette`
+ * gemessen; hier steht nur die Zahl, damit dieses Paket keine Farbe kennt.
+ */
+export type MenuPaletteRow = number;
+
 export interface MenuTextRun {
   text: string;
   /** Ankerposition in Pixeln, relativ zur Textfläche des Fensters. */
@@ -51,6 +59,30 @@ export interface MenuTextRun {
   dim?: boolean;
   /** Gemessene Breite in Pixeln — die Demo braucht sie nicht neu zu rechnen. */
   width: number;
+  /**
+   * Palettenzeile, wenn die Zeile nicht in der Vorgabefarbe steht. Ohne Angabe
+   * gilt Weiß — dieselbe Vorgabe wie im Original (Farbindex 7).
+   */
+  palette?: MenuPaletteRow;
+  /**
+   * Kein Text, sondern ein **Feld**: `icon` ist das Typsymbol der
+   * Gegenstandszeile, `portrait` das Figurenbild. Beide Grafiken liegen in
+   * `menu_us.lgp` und sind im Baum nicht vorhanden (🔴) — der Bildschirm
+   * reserviert deshalb nur ihren Platz und sagt in `notes`, dass er es tut.
+   * Ein gezeichneter Ersatz wäre eine stille Erfindung.
+   */
+  kind?: 'text' | 'icon' | 'portrait';
+  /** Kantenlänge für `icon`/`portrait`. */
+  size?: number;
+  /** Für `icon`: der Inventarbereich, dessen Kachel gemeint ist. */
+  iconCategory?: 'item' | 'weapon' | 'armor' | 'accessory';
+  /**
+   * Feinversatz gegen die Oberkante der Zeile. Das Original setzt die
+   * Elemente einer Gegenstandszeile auf **eine** optische Mittellinie und
+   * gleicht dafür ihre verschiedenen Höhen (32/24/16) über den y-Wert aus —
+   * genau dieser Ausgleich steht hier.
+   */
+  dy?: number;
 }
 
 export type BarTone = 'hp' | 'mp' | 'limit' | 'exp';
@@ -61,11 +93,19 @@ export interface MenuBar {
   /** Füllanteil 0…1. */
   fill: number;
   tone: BarTone;
+  /**
+   * Oberkante, wenn der Balken nicht auf der Zeilenmitte sitzt. Im
+   * Gegenstands-Bildschirm ist das der Regelfall: Die HP-/MP-Balken der
+   * Figurenspalte stehen dort **unter** ihrer Zahlenzeile.
+   */
+  y?: number;
+  /** Höhe, wenn nicht die Vorgabe des Malers gelten soll. */
+  height?: number;
 }
 
 export interface MenuScreenLine {
   key: string;
-  /** Oberkante der Zeile, relativ zur Textfläche. */
+  /** Oberkante der Zeile, relativ zur Textfläche (bzw. absolut, s. `MenuPanel.absolute`). */
   y: number;
   runs: MenuTextRun[];
   bars: MenuBar[];
@@ -73,6 +113,19 @@ export interface MenuScreenLine {
   selectable: boolean;
   /** Der Zeiger steht hier. */
   cursor: boolean;
+  /** Höhe der Textkästen dieser Zeile; ohne Angabe die Zeilenhöhe der Schale. */
+  height?: number;
+  /** Lage des Zeigers, wenn er nicht am linken Fensterrand steht. */
+  cursorRect?: MenuRect;
+}
+
+/** Bildlaufleiste eines Fensters — Maße und Stand, nicht der Daumen selbst. */
+export interface MenuScrollBar {
+  /** Rechteck der Leiste in Bildschirmkoordinaten. */
+  rect: MenuRect;
+  visible: number;
+  total: number;
+  first: number;
 }
 
 export interface MenuPanel {
@@ -83,6 +136,17 @@ export interface MenuPanel {
   content: MenuRect;
   mode: WindowDisplayMode;
   lines: MenuScreenLine[];
+  /**
+   * `true` heißt: Zeilen-`y` und Lauf-`x` sind **Bildschirmkoordinaten**, nicht
+   * Versätze in der Textfläche. Nötig für den Gegenstands-Bildschirm, dessen
+   * Anker im Original absolut gesetzt sind und dessen Zeilenraster (37 px)
+   * nicht die Zeilenhöhe der Schale ist.
+   */
+  absolute?: boolean;
+  /** Fenster zeigt eine Bildlaufleiste. */
+  scroll?: MenuScrollBar;
+  /** Zeichenbereich, außerhalb dessen Zeilen nicht erscheinen. */
+  clip?: MenuRect;
 }
 
 export interface MenuScreen {
